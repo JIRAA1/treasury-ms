@@ -21,6 +21,9 @@ const sarabun = Sarabun({
 export const metadata: Metadata = {
   title: "TreasuryMS - ระบบจัดการการเงินสาขา",
   description: "ระบบจัดการการเงินสาขาคอมพิวเตอร์",
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({

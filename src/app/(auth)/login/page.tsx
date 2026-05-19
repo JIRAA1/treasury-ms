@@ -21,8 +21,8 @@ export default function LoginPage() {
         <div className="bg-background-secondary border border-border rounded-2xl p-8 shadow-sm">
           {/* Logo */}
           <div className="flex items-center gap-3 mb-8">
-            <div className="w-9 h-9 bg-brand rounded-lg flex items-center justify-center">
-              <span className="text-white text-[15px] font-bold">T</span>
+            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center p-1.5 shadow-sm border border-border">
+              <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
             <div>
               <div className="text-[15px] font-semibold text-text-primary">Treasury MS</div>
