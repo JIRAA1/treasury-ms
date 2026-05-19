@@ -1,0 +1,172 @@
+import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import Topbar from '@/components/layout/Topbar'
+import { formatDate } from '@/lib/utils'
+import { formatDistanceToNow } from 'date-fns'
+import { th } from 'date-fns/locale'
+import { cn } from '@/lib/utils'
+import { redirect } from 'next/navigation'
+import { Download, Shield, User, Activity as ActivityIcon } from 'lucide-react'
+
+export const metadata = { title: 'ตรวจสอบ — TreasuryMS Admin' }
+
+const actionCategory = (action: string) => {
+  if (action.startsWith('payment')) return 'blue'
+  if (action.startsWith('expense')) return 'amber'
+  if (action.startsWith('notification')) return 'gray'
+  if (action.startsWith('system')) return 'red'
+  return 'gray'
+}
+
+const actionLabel: Record<string, string> = {
+  payment_uploaded: 'อัปโหลดสลิป',
+  payment_approved: 'อนุมัติการชำระ',
+  payment_rejected: 'ปฏิเสธสลิป',
+  expense_created: 'เพิ่มค่าใช้จ่าย',
+  expense_approved: 'อนุมัติค่าใช้จ่าย',
+  expense_deleted: 'ลบค่าใช้จ่าย',
+  notification_sent: 'ส่งแจ้งเตือน',
+  student_binding_reset: 'รีเซ็ต LINE',
+  user_role_changed: 'เปลี่ยน Role',
+  'system_reset': 'รีเซ็ตระบบ',
+  'clear_payments': 'ล้างประวัติการโอน'
+}
+
+const categoryBadge: Record<string, string> = {
+  blue: 'bg-blue-50 text-blue-700 border-blue-100',
+  amber: 'bg-amber-50 text-amber-700 border-amber-100',
+  gray: 'bg-background-muted text-text-secondary border-border',
+  red: 'bg-red-50 text-red-700 border-red-100',
+}
+
+export default async function AdminAuditPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const adminClient = createAdminClient()
+  
+  // Use adminClient to ensure we see all logs regardless of RLS
+  const { data: logs } = await adminClient
+    .from('audit_logs')
+    .select('*, actor:actor_id(fullname, student_id)')
+    .order('created_at', { ascending: false })
+    .limit(100)
+
+  return (
+    <div>
+      <Topbar 
+        title="ตรวจสอบระบบ" 
+        subtitle="Audit Logs — ประวัติการดำเนินการทั้งหมด" 
+        actions={
+          <a
+            href="/api/reports/export?type=audit"
+            className="flex items-center gap-1.5 border border-border bg-background text-[12.5px] font-bold px-3 py-1.5 rounded-lg hover:bg-background-tertiary transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            ส่งออกข้อมูล (.xlsx)
+          </a>
+        }
+      />
+
+      <div className="p-6">
+        <div className="bg-background-secondary border border-border rounded-2xl overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead className="bg-background-tertiary/50 border-b border-border">
+                <tr>
+                  <th className="px-6 py-4 text-left font-bold text-text-muted text-[10px] uppercase tracking-widest">เวลา</th>
+                  <th className="px-6 py-4 text-left font-bold text-text-muted text-[10px] uppercase tracking-widest">ผู้ดำเนินการ</th>
+                  <th className="px-6 py-4 text-left font-bold text-text-muted text-[10px] uppercase tracking-widest">กิจกรรม</th>
+                  <th className="px-6 py-4 text-left font-bold text-text-muted text-[10px] uppercase tracking-widest">เป้าหมาย (ID)</th>
+                  <th className="px-6 py-4 text-left font-bold text-text-muted text-[10px] uppercase tracking-widest">รายละเอียดการเปลี่ยน</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {logs?.map((log) => {
+                  const actor = log.actor as { fullname: string; student_id: string } | null
+                  const cat = actionCategory(log.action)
+                  
+                  // Smarter change detection for display
+                  let changeDisplay = '—'
+                  if (log.new_value && !log.old_value) {
+                    changeDisplay = `เพิ่มข้อมูลใหม่: ${JSON.stringify(log.new_value).slice(0, 50)}...`
+                  } else if (log.old_value && log.new_value) {
+                    const keys = Object.keys(log.new_value)
+                    const diffs = keys.filter(k => JSON.stringify(log.old_value[k]) !== JSON.stringify(log.new_value[k]))
+                    if (diffs.length > 0) {
+                      changeDisplay = diffs.map(k => `${k}: ${JSON.stringify(log.old_value[k])} → ${JSON.stringify(log.new_value[k])}`).join(', ')
+                    }
+                  }
+
+                  return (
+                    <tr key={log.id} className="hover:bg-background-tertiary/30 transition-colors group">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-[12.5px] font-bold text-text-primary">
+                          {formatDistanceToNow(new Date(log.created_at), { locale: th, addSuffix: true })}
+                        </div>
+                        <div className="text-[10px] text-text-disabled font-medium uppercase tracking-tight">
+                          {new Date(log.created_at).toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {actor ? (
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-lg bg-brand/5 flex items-center justify-center border border-brand/10">
+                              <User className="w-4 h-4 text-brand" />
+                            </div>
+                            <div>
+                              <div className="font-bold text-text-primary text-[13px]">{actor.fullname}</div>
+                              <div className="text-[10.5px] text-text-muted font-mono tracking-tighter">{actor.student_id}</div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-lg bg-background-tertiary flex items-center justify-center border border-border">
+                              <Shield className="w-4 h-4 text-text-disabled" />
+                            </div>
+                            <span className="text-text-disabled font-bold italic text-[12px]">ระบบอัตโนมัติ</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={cn(
+                          'text-[10.5px] font-black border px-2.5 py-1 rounded-full uppercase tracking-wider',
+                          categoryBadge[cat]
+                        )}>
+                          {actionLabel[log.action] ?? log.action}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="font-mono text-[10.5px] text-text-disabled bg-background-tertiary/50 px-2 py-1 rounded border border-border/50 inline-block truncate max-w-[120px]">
+                          {log.target_id || 'N/A'}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div 
+                          className="text-[11.5px] text-text-secondary leading-relaxed max-w-[300px] line-clamp-2 hover:line-clamp-none cursor-default transition-all"
+                          title={changeDisplay}
+                        >
+                          {changeDisplay}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {!logs?.length && (
+            <div className="py-24 text-center space-y-3">
+              <div className="w-16 h-16 bg-background-tertiary rounded-full flex items-center justify-center mx-auto">
+                <ActivityIcon className="w-8 h-8 text-text-disabled" />
+              </div>
+              <p className="text-[14px] text-text-muted font-medium italic">ยังไม่มีบันทึกกิจกรรมในขณะนี้</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

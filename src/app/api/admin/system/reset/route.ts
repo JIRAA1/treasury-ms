@@ -1,0 +1,48 @@
+import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { NextRequest, NextResponse } from 'next/server'
+
+export async function POST(request: NextRequest) {
+  const supabase = await createClient()
+  const { data: { user: authUser } } = await supabase.auth.getUser()
+  if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const adminClient = createAdminClient()
+  const { data: profile } = await adminClient.from('users').select('role').eq('id', authUser.id).single()
+  if (profile?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const { action } = await request.json()
+
+  try {
+    if (action === 'clear_payments') {
+      // 1. Delete all payments
+      const { error: pError } = await adminClient.from('payments').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      if (pError) throw pError
+
+      // 2. Clean up storage files (slips folder)
+      // Note: We list and delete in chunks to avoid timeouts
+      const { data: files } = await adminClient.storage.from('slips').list()
+      if (files && files.length > 0) {
+        // We delete files from the root of slips. 
+        // For nested folders (user-id/), you might need a more recursive approach
+        const filesToDelete = files.map(f => f.name)
+        await adminClient.storage.from('slips').remove(filesToDelete)
+      }
+
+      return NextResponse.json({ success: true, message: 'ล้างข้อมูลการชำระเงินเรียบร้อยแล้ว' })
+    }
+
+    if (action === 'reset_all') {
+      // Clear payments, expenses, and audit logs
+      await adminClient.from('payments').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      await adminClient.from('expenses').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      await adminClient.from('audit_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      
+      return NextResponse.json({ success: true, message: 'รีเซ็ตระบบการเงินทั้งหมดเรียบร้อยแล้ว' })
+    }
+
+    return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+}

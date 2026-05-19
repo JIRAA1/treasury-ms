@@ -1,0 +1,58 @@
+import { createClient } from '@/lib/supabase/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { logAction } from '@/lib/audit'
+
+export async function GET() {
+  const supabase = await createClient()
+  const { data: expenses } = await supabase
+    .from('expenses')
+    .select('*, creator:created_by(fullname), approver:approved_by(fullname)')
+    .order('created_at', { ascending: false })
+  return NextResponse.json({ expenses: expenses ?? [] })
+}
+
+export async function POST(request: NextRequest) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { data: profile } = await supabase.from('users').select('role').eq('id', user.id).single()
+  if (!['admin', 'treasurer'].includes(profile?.role ?? ''))
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const formData = await request.formData()
+  const title = formData.get('title') as string
+  const description = formData.get('description') as string
+  const amount = parseFloat(formData.get('amount') as string)
+  const category = formData.get('category') as string
+  const receipt = formData.get('receipt') as File | null
+
+  if (!title || !amount || isNaN(amount))
+    return NextResponse.json({ error: 'Invalid data' }, { status: 400 })
+
+  let receipt_url: string | null = null
+
+  if (receipt && receipt.size > 0) {
+    const ext = receipt.type === 'application/pdf' ? 'pdf' : receipt.type.split('/')[1]
+    const filename = `receipts/${user.id}-${Date.now()}.${ext}`
+    const bytes = await receipt.arrayBuffer()
+    const { error: uploadErr } = await supabase.storage
+      .from('receipts').upload(filename, bytes, { contentType: receipt.type, upsert: true })
+    if (!uploadErr) {
+      const { data: { publicUrl } } = supabase.storage.from('receipts').getPublicUrl(filename)
+      receipt_url = publicUrl
+    }
+  }
+
+  const { data: expense, error } = await supabase
+    .from('expenses')
+    .insert({ title, description: description || null, amount, created_by: user.id, receipt_url })
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: 'Failed to create expense' }, { status: 500 })
+
+  await logAction({ actorId: user.id, action: 'expense_created', targetId: expense.id, newValue: { title, amount, category } })
+
+  return NextResponse.json({ expense }, { status: 201 })
+}
