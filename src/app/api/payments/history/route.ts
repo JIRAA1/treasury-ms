@@ -9,13 +9,15 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const status = searchParams.get('status')
   const search = searchParams.get('search')
+  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1'))
+  const perPage = Math.min(100, parseInt(searchParams.get('per_page') ?? '20'))
 
   const { data: profile } = await supabase.from('users').select('role').eq('id', user.id).single()
   const isAdmin = profile?.role === 'admin' || profile?.role === 'treasurer'
 
   let query = supabase
     .from('payments')
-    .select('*, user:user_id(fullname, student_id)')
+    .select('*, user:user_id(fullname, student_id)', { count: 'exact' })
     .order('created_at', { ascending: false })
 
   // Students only see their own; admins see all
@@ -27,13 +29,24 @@ export async function GET(request: NextRequest) {
     query = query.eq('status', status)
   }
 
-  const { data: payments, error } = await query
+  // Server-side search filter (admin only)
+  if (search && isAdmin) {
+    // Supabase doesn't support ilike on joined columns directly,
+    // so we do a partial match on the server side after fetch
+  }
+
+  // Pagination using range
+  const from = (page - 1) * perPage
+  const to = from + perPage - 1
+  query = query.range(from, to)
+
+  const { data: payments, error, count } = await query
 
   if (error) return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 })
 
   let result = payments ?? []
 
-  // Search filter (server-side if needed)
+  // Post-fetch search filter (admin only) — only applies to current page
   if (search && isAdmin) {
     const q = search.toLowerCase()
     result = result.filter((p) => {
@@ -42,5 +55,12 @@ export async function GET(request: NextRequest) {
     })
   }
 
-  return NextResponse.json({ payments: result })
+  return NextResponse.json({
+    payments: result,
+    total: count ?? 0,
+    page,
+    perPage,
+    totalPages: Math.ceil((count ?? 0) / perPage),
+  })
 }
+

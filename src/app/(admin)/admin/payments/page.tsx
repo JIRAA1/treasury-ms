@@ -22,6 +22,8 @@ interface Payment {
 
 export default function AdminPaymentsPage() {
   const [payments, setPayments] = useState<Payment[]>([])
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all')
   const [search, setSearch] = useState('')
@@ -35,13 +37,20 @@ export default function AdminPaymentsPage() {
     const params = new URLSearchParams()
     if (filterStatus !== 'all') params.set('status', filterStatus)
     if (search) params.set('search', search)
+    params.set('page', String(page))
+    params.set('per_page', String(PER_PAGE))
     const res = await fetch(`/api/payments/history?${params}`)
     const data = await res.json()
     setPayments(data.payments ?? [])
+    setTotal(data.total ?? 0)
+    setTotalPages(data.totalPages ?? 1)
     setLoading(false)
-  }, [filterStatus, search])
+  }, [filterStatus, search, page])
 
   useEffect(() => { fetchPayments() }, [fetchPayments])
+
+  // Reset to page 1 when filters change
+  useEffect(() => { setPage(1) }, [filterStatus, search])
 
   const handleAction = async (id: string, action: 'approve' | 'reject') => {
     const res = await fetch('/api/payments/verify', {
@@ -59,30 +68,10 @@ export default function AdminPaymentsPage() {
     }
   }
 
-  const filtered = payments
-    .filter((p) => {
-      if (filterStatus !== 'all' && p.status !== filterStatus) return false
-      if (search) {
-        const q = search.toLowerCase()
-        return p.user?.fullname.toLowerCase().includes(q) || p.user?.student_id.includes(q)
-      }
-      return true
-    })
-    .slice((page - 1) * PER_PAGE, page * PER_PAGE)
-
-  const totalPages = Math.ceil(payments.filter((p) => {
-    if (filterStatus !== 'all' && p.status !== filterStatus) return false
-    if (search) {
-      const q = search.toLowerCase()
-      return p.user?.fullname.toLowerCase().includes(q) || p.user?.student_id.includes(q)
-    }
-    return true
-  }).length / PER_PAGE)
-
   return (
     <div className="flex h-full">
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Topbar title="การชำระเงิน" subtitle={`${payments.length} รายการทั้งหมด`} />
+        <Topbar title="การชำระเงิน" subtitle={`${total} รายการทั้งหมด`} />
 
         {/* Filter Bar */}
         <div className="flex items-center gap-3 px-6 py-3 border-b border-border bg-background-secondary sticky top-0 z-10">
@@ -107,7 +96,7 @@ export default function AdminPaymentsPage() {
               </button>
             ))}
           </div>
-          <div className="text-[12px] text-text-muted ml-auto">แสดง {filtered.length} รายการ</div>
+          <div className="text-[12px] text-text-muted ml-auto">แสดง {payments.length} / {total} รายการ</div>
         </div>
 
         {/* Table */}
@@ -131,7 +120,7 @@ export default function AdminPaymentsPage() {
                     ))}
                   </tr>
                 ))
-              ) : filtered.map((p) => (
+              ) : payments.map((p) => (
                 <tr
                   key={p.id}
                   onClick={() => setSelectedPayment(p)}

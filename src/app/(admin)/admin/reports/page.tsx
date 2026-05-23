@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import Topbar from '@/components/layout/Topbar'
 import KpiCard from '@/components/shared/KpiCard'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, cn } from '@/lib/utils'
 import { FileText, Download, Users, CreditCard, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 
@@ -116,6 +116,4 @@ export default async function AdminReportsPage() {
   )
 }
 
-function cn(...classes: any[]) {
-  return classes.filter(Boolean).join(' ')
-}
+

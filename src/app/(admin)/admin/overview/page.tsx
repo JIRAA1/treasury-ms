@@ -33,8 +33,14 @@ export default async function AdminOverviewPage() {
     supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student'),
   ])
 
-  // Weekly chart data (last 5 weeks)
-  const currentWeek = 12
+  // Weekly chart data (last 5 weeks) — dynamic from week_settings
+  const { data: latestWeekSetting } = await supabase
+    .from('week_settings')
+    .select('week')
+    .order('week', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  const currentWeek = latestWeekSetting?.week ?? 1
   const weeklyRates = await Promise.all(
     [currentWeek - 4, currentWeek - 3, currentWeek - 2, currentWeek - 1, currentWeek].map(async (w) => {
       if (w < 1) return { week: w, rate: 0 }

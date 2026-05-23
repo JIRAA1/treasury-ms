@@ -10,6 +10,8 @@ type AuditAction =
   | 'notification_sent'
   | 'student_binding_reset'
   | 'user_role_changed'
+  | 'system_reset'
+  | 'clear_payments'
 
 export async function logAction(params: {
   actorId: string

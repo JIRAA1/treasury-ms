@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Topbar from '@/components/layout/Topbar'
 import KpiCard from '@/components/shared/KpiCard'
@@ -24,34 +24,35 @@ export default function AdminStudentsPage() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'paid' | 'unpaid' | 'pending'>('all')
   const [totalCycles, setTotalCycles] = useState(0)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
+
+  const fetchData = useCallback(async () => {
+    try {
+      const { data: settings } = await supabase.from('week_settings').select('week')
+      const tCycles = settings?.length || 0
+      setTotalCycles(tCycles)
+
+      const { data: users } = await supabase.from('users').select('id, fullname, student_id').eq('role', 'student')
+      const { data: payments } = await supabase.from('payments').select('user_id, status')
+
+      const studentData = (users || []).map((u) => {
+        const userPayments = payments?.filter((p) => p.user_id === u.id) || []
+        return {
+          ...u,
+          weeksPaid: userPayments.filter((p) => p.status === 'approved').length,
+          weeksPending: userPayments.filter((p) => p.status === 'pending').length,
+        }
+      })
+
+      setStudents(studentData)
+    } finally {
+      setLoading(false)
+    }
+  }, [supabase])
 
   useEffect(() => {
-    async function fetchData() {
-      try {
-        const { data: settings } = await supabase.from('week_settings').select('week')
-        const tCycles = settings?.length || 0
-        setTotalCycles(tCycles)
-
-        const { data: users } = await supabase.from('users').select('id, fullname, student_id').eq('role', 'student')
-        const { data: payments } = await supabase.from('payments').select('user_id, status')
-
-        const studentData = (users || []).map((u) => {
-          const userPayments = payments?.filter((p) => p.user_id === u.id) || []
-          return {
-            ...u,
-            weeksPaid: userPayments.filter((p) => p.status === 'approved').length,
-            weeksPending: userPayments.filter((p) => p.status === 'pending').length,
-          }
-        })
-
-        setStudents(studentData)
-      } finally {
-        setLoading(false)
-      }
-    }
     fetchData()
-  }, [supabase, isAddModalOpen]) // Refresh list when modal closes/opens
+  }, [fetchData]) // supabase is stable due to useMemo
 
   const filtered = students.filter((s) => {
     const matchesSearch = s.fullname.toLowerCase().includes(search.toLowerCase()) || s.student_id.includes(search)
@@ -181,7 +182,7 @@ export default function AdminStudentsPage() {
 
       <AddStudentModal 
         isOpen={isAddModalOpen} 
-        onClose={() => setIsAddModalOpen(false)} 
+        onClose={() => { setIsAddModalOpen(false); fetchData() }} 
       />
     </div>
   )

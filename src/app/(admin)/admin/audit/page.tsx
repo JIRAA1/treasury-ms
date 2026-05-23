@@ -1,12 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import Topbar from '@/components/layout/Topbar'
-import { formatDate } from '@/lib/utils'
+import { formatDate, cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { th } from 'date-fns/locale'
-import { cn } from '@/lib/utils'
 import { redirect } from 'next/navigation'
-import { Download, Shield, User, Activity as ActivityIcon } from 'lucide-react'
+import { Download, Shield, User, Activity as ActivityIcon, ChevronLeft, ChevronRight } from 'lucide-react'
+import Link from 'next/link'
 
 export const metadata = { title: 'ตรวจสอบ — TreasuryMS Admin' }
 
@@ -39,7 +39,17 @@ const categoryBadge: Record<string, string> = {
   red: 'bg-red-50 text-red-700 border-red-100',
 }
 
-export default async function AdminAuditPage() {
+export default async function AdminAuditPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>
+}) {
+  const { page: pageParam } = await searchParams
+  const PER_PAGE = 30
+  const page = Math.max(1, parseInt(pageParam ?? '1'))
+  const from = (page - 1) * PER_PAGE
+  const to = from + PER_PAGE - 1
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -47,17 +57,19 @@ export default async function AdminAuditPage() {
   const adminClient = createAdminClient()
   
   // Use adminClient to ensure we see all logs regardless of RLS
-  const { data: logs } = await adminClient
+  const { data: logs, count: totalLogs } = await adminClient
     .from('audit_logs')
-    .select('*, actor:actor_id(fullname, student_id)')
+    .select('*, actor:actor_id(fullname, student_id)', { count: 'exact' })
     .order('created_at', { ascending: false })
-    .limit(100)
+    .range(from, to)
+
+  const totalPages = Math.ceil((totalLogs ?? 0) / PER_PAGE)
 
   return (
     <div>
       <Topbar 
         title="ตรวจสอบระบบ" 
-        subtitle="Audit Logs — ประวัติการดำเนินการทั้งหมด" 
+        subtitle={`Audit Logs — ทั้งหมด ${totalLogs ?? 0} รายการ · หน้า ${page}/${totalPages}`} 
         actions={
           <a
             href="/api/reports/export?type=audit"
@@ -163,6 +175,53 @@ export default async function AdminAuditPage() {
                 <ActivityIcon className="w-8 h-8 text-text-disabled" />
               </div>
               <p className="text-[14px] text-text-muted font-medium italic">ยังไม่มีบันทึกกิจกรรมในขณะนี้</p>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-background-secondary/50">
+              <div className="text-[12px] text-text-muted">
+                แสดง {from + 1}–{Math.min(to + 1, totalLogs ?? 0)} จาก {totalLogs ?? 0} รายการ
+              </div>
+              <div className="flex items-center gap-1">
+                {page > 1 && (
+                  <Link
+                    href={`?page=${page - 1}`}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:bg-background-tertiary transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-text-secondary" />
+                  </Link>
+                )}
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(p => Math.abs(p - page) <= 2 || p === 1 || p === totalPages)
+                  .map((p, idx, arr) => (
+                    <>
+                      {idx > 0 && arr[idx - 1] !== p - 1 && (
+                        <span key={`ellipsis-${p}`} className="px-1 text-text-disabled text-[12px]">...</span>
+                      )}
+                      <Link
+                        key={p}
+                        href={`?page=${p}`}
+                        className={`w-8 h-8 flex items-center justify-center rounded-lg text-[12.5px] font-medium transition-colors ${
+                          p === page
+                            ? 'bg-brand text-white'
+                            : 'text-text-secondary hover:bg-background-secondary border border-border'
+                        }`}
+                      >
+                        {p}
+                      </Link>
+                    </>
+                  ))}
+                {page < totalPages && (
+                  <Link
+                    href={`?page=${page + 1}`}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg border border-border hover:bg-background-tertiary transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4 text-text-secondary" />
+                  </Link>
+                )}
+              </div>
             </div>
           )}
         </div>

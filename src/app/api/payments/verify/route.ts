@@ -14,21 +14,27 @@ export async function POST(request: NextRequest) {
   if (!profile || !['admin', 'treasurer'].includes(profile.role))
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  let body: any = {}
+  interface VerifyBody {
+    id: string
+    action: 'approve' | 'reject' | 'notify_only'
+    status?: string
+    type?: 'cash_success' | 'manual_change'
+    reason?: string
+  }
+  let body: VerifyBody = { id: '', action: 'approve' }
   const contentType = request.headers.get('content-type') || ''
   if (contentType.includes('application/json')) {
     body = await request.json()
   } else {
     const formData = await request.formData()
-    body = Object.fromEntries(formData.entries())
+    body = Object.fromEntries(formData.entries()) as unknown as VerifyBody
   }
 
-  const { id, action, status, type } = body as { 
-    id: string; 
-    action: 'approve' | 'reject' | 'notify_only'; 
-    status?: string;
-    type?: 'cash_success' | 'manual_change'
+  if (!body.id || !body.action) {
+    return NextResponse.json({ error: 'Missing required fields: id, action' }, { status: 400 })
   }
+
+  const { id, action, status, type } = body
 
   // 1. Fetch Payment, User, and Cycle Info
   const { data: payment } = await adminClient

@@ -16,6 +16,16 @@ export async function POST(request: NextRequest) {
   const week = parseInt(formData.get('week') as string)
 
   if (!file || !week) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+
+  // Server-side validation (prevent bypass of client-side checks)
+  const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+  const MAX_SIZE = 5 * 1024 * 1024 // 5MB
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    return NextResponse.json({ error: 'ประเภทไฟล์ไม่รองรับ รองรับเฉพาะ JPG, PNG, WEBP' }, { status: 415 })
+  }
+  if (file.size > MAX_SIZE) {
+    return NextResponse.json({ error: 'ไฟล์มีขนาดใหญ่เกิน 5MB' }, { status: 413 })
+  }
   const adminClient = createAdminClient()
   
   const { data: profile } = await adminClient.from('users').select('*').eq('id', user.id).single()
@@ -59,12 +69,13 @@ export async function POST(request: NextRequest) {
     }, { status: 400 })
   }
 
-  // 3. Receiver Validation
+  // 3. Receiver Validation — use system_settings only (no hardcoded fallback)
   const receiverName = ocrResult.raw?.data?.rawSlip?.receiver?.account?.name?.en || 
-                       ocrResult.raw?.data?.rawSlip?.receiver?.account?.name?.th || "";
-  
-  const isValidReceiver = receiverName.toLowerCase().includes(expectedName.toLowerCase()) || 
-                          (receiverName.includes("CHANON S") || receiverName.includes("ชานน ศ"))
+                       ocrResult.raw?.data?.rawSlip?.receiver?.account?.name?.th || ""
+
+  const isValidReceiver = expectedName
+    ? receiverName.toLowerCase().includes(expectedName.toLowerCase())
+    : true // If no config set, skip receiver check
 
   if (!isValidReceiver) {
     await notifyAdmins('Receiver Mismatch', [
