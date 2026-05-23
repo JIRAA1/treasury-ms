@@ -2,11 +2,11 @@ import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import Topbar from '@/components/layout/Topbar'
-import StatusPill from '@/components/payments/StatusPill'
-import { formatCurrency, formatDate, getWeekLabel } from '@/lib/utils'
-import { ArrowLeft, User, Calendar, CreditCard, MessageSquare } from 'lucide-react'
+import { formatCurrency, formatDate } from '@/lib/utils'
+import { ArrowLeft, User, Calendar, MessageSquare, CreditCard } from 'lucide-react'
 import Link from 'next/link'
 import type { WeekStatus } from '@/types'
+import StudentDetailClient from './StudentDetailClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +55,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
   const pendingCount = payments?.filter(p => p.status === 'pending').length ?? 0
   const rejectedCount = payments?.filter(p => p.status === 'rejected').length ?? 0
   const totalPaid = payments?.filter(p => p.status === 'approved').reduce((s, p) => s + p.amount, 0) ?? 0
+  const completionPct = totalCycles > 0 ? Math.round((paidCount / totalCycles) * 100) : 0
 
   // Build week status array
   const weekStatuses: (WeekStatus & { title?: string; deadline?: string })[] = (weekSettings ?? []).map(ws => {
@@ -71,8 +72,6 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
       payment,
     }
   })
-
-  const completionPct = totalCycles > 0 ? Math.round((paidCount / totalCycles) * 100) : 0
 
   return (
     <div>
@@ -106,24 +105,41 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
             </div>
 
             <div className="space-y-2 text-[12.5px]">
-              {[
-                { icon: User, label: 'บทบาท', value: student.role },
-                { icon: Calendar, label: 'เข้าร่วม', value: formatDate(student.created_at) },
-                { icon: MessageSquare, label: 'LINE', value: student.line_user_id ? 'เชื่อมแล้ว ✓' : 'ยังไม่เชื่อม' },
-              ].map(({ icon: Icon, label, value }) => (
-                <div key={label} className="flex items-center gap-2.5 text-text-secondary">
-                  <Icon className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
-                  <span className="text-text-muted">{label}:</span>
-                  <span className="font-medium text-text-primary">{value}</span>
-                </div>
-              ))}
+              <div className="flex items-center gap-2.5 text-text-secondary">
+                <User className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
+                <span className="text-text-muted">บทบาท:</span>
+                <span className="font-medium text-text-primary">{student.role}</span>
+              </div>
+              <div className="flex items-center gap-2.5 text-text-secondary">
+                <Calendar className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
+                <span className="text-text-muted">เข้าร่วม:</span>
+                <span className="font-medium text-text-primary">{formatDate(student.created_at)}</span>
+              </div>
+              <div className="flex items-center gap-2.5 text-text-secondary">
+                <MessageSquare className="w-3.5 h-3.5 text-text-muted flex-shrink-0" />
+                <span className="text-text-muted">LINE:</span>
+                {student.line_user_id
+                  ? <span className="font-semibold text-emerald-600">เชื่อมแล้ว ✓</span>
+                  : <span className="font-semibold text-amber-600">ยังไม่เชื่อม</span>
+                }
+              </div>
+            </div>
+
+            {/* Admin action buttons — rendered as client component */}
+            <div className="pt-2 border-t border-border">
+              <StudentDetailClient
+                student={student}
+                weekStatuses={[]}
+                actorRole={actorProfile.role}
+                profileActionsOnly
+              />
             </div>
           </div>
 
           {/* Stats Cards */}
           <div className="col-span-2 grid grid-cols-2 gap-4">
             {[
-              { label: 'ชำระแล้ว', value: `${paidCount}/${totalCycles}`, sub: `${completionPct}% ของทั้งหมด`, variant: paidCount === totalCycles ? 'positive' : 'neutral' },
+              { label: 'ชำระแล้ว', value: `${paidCount}/${totalCycles}`, sub: `${completionPct}% ของทั้งหมด`, variant: paidCount === totalCycles && totalCycles > 0 ? 'positive' : 'neutral' },
               { label: 'ยอดที่ชำระ', value: formatCurrency(totalPaid), sub: 'ที่อนุมัติแล้ว', variant: 'positive' },
               { label: 'รอตรวจสอบ', value: pendingCount, sub: 'รายการ', variant: pendingCount > 0 ? 'warning' : 'neutral' },
               { label: 'ถูกปฏิเสธ', value: rejectedCount, sub: 'รายการ', variant: rejectedCount > 0 ? 'danger' : 'neutral' },
@@ -159,64 +175,23 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
           <div className="text-[11px] text-text-muted mt-1.5">{completionPct}% สำเร็จ</div>
         </div>
 
-        {/* Payment History Table */}
+        {/* Payment rows — interactive, rendered by client component */}
         <div className="bg-background-secondary border border-border rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-border flex items-center gap-2">
-            <CreditCard className="w-4 h-4 text-text-muted" />
-            <span className="text-[13.5px] font-semibold text-text-primary">ประวัติการชำระรายงวด</span>
+          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-text-muted" />
+              <span className="text-[13.5px] font-semibold text-text-primary">ประวัติการชำระรายงวด</span>
+            </div>
+            <div className="text-[11px] text-text-muted">
+              กดปุ่ม <span className="font-semibold text-emerald-600">เงินสด</span> เพื่อบันทึกการรับเงินสด
+            </div>
           </div>
 
-          <div className="divide-y divide-border">
-            {weekStatuses.map((ws) => (
-              <div key={ws.week} className="flex items-center justify-between px-5 py-3.5 hover:bg-background-tertiary/30 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-background-tertiary flex items-center justify-center">
-                    <span className="text-[11px] font-bold text-text-secondary">{getWeekLabel(ws.week)}</span>
-                  </div>
-                  <div>
-                    <div className="text-[12.5px] font-medium text-text-primary">
-                      {ws.title || `งวดที่ ${ws.week}`}
-                    </div>
-                    {ws.deadline && (
-                      <div className="text-[10.5px] text-text-muted">
-                        ครบกำหนด: {formatDate(ws.deadline)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-6">
-                  {ws.payment ? (
-                    <>
-                      <div className="text-right">
-                        <div className="text-[12.5px] font-semibold text-text-primary">{formatCurrency(ws.payment.amount)}</div>
-                        <div className="text-[10.5px] text-text-muted">{formatDate(ws.payment.created_at)}</div>
-                      </div>
-                      {ws.payment.slip_url && (
-                        <a
-                          href={ws.payment.slip_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[11px] text-text-muted hover:text-text-primary underline underline-offset-2 transition-colors"
-                        >
-                          ดูสลิป
-                        </a>
-                      )}
-                    </>
-                  ) : (
-                    <div className="text-[12px] text-text-muted">{formatCurrency(ws.amount)}</div>
-                  )}
-                  <StatusPill status={ws.status === 'paid' ? 'paid' : ws.status === 'pending' ? 'pending' : ws.status === 'rejected' ? 'rejected' : 'unpaid'} />
-                </div>
-              </div>
-            ))}
-
-            {weekStatuses.length === 0 && (
-              <div className="py-12 text-center text-[13px] text-text-muted italic">
-                ยังไม่มีข้อมูลงวดการชำระ
-              </div>
-            )}
-          </div>
+          <StudentDetailClient
+            student={student}
+            weekStatuses={weekStatuses}
+            actorRole={actorProfile.role}
+          />
         </div>
       </div>
     </div>
