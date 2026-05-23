@@ -103,9 +103,43 @@ export async function POST(request: NextRequest) {
 
   // 4. Update Database if not notify_only
   if (action !== 'notify_only') {
+    const updateData: any = {
+      status: finalStatus,
+      verified_at: finalStatus === 'approved' ? new Date().toISOString() : null
+    }
+
+    if (finalStatus === 'rejected') {
+      updateData.slip_url = null
+
+      if (payment.slip_url) {
+        const getStoragePathFromUrl = (url: string, bucketName: string = 'slips'): string | null => {
+          try {
+            const marker = `/storage/v1/object/public/${bucketName}/`
+            const index = url.indexOf(marker)
+            if (index === -1) return null
+            return url.substring(index + marker.length)
+          } catch {
+            return null
+          }
+        }
+
+        const storagePath = getStoragePathFromUrl(payment.slip_url, 'slips')
+        if (storagePath) {
+          try {
+            const { error: deleteError } = await adminClient.storage.from('slips').remove([storagePath])
+            if (deleteError) {
+              console.error('Failed to delete rejected slip from storage:', deleteError)
+            }
+          } catch (e) {
+            console.error('Error deleting rejected slip from storage:', e)
+          }
+        }
+      }
+    }
+
     const { error } = await adminClient
       .from('payments')
-      .update({ status: finalStatus, verified_at: finalStatus === 'approved' ? new Date().toISOString() : null })
+      .update(updateData)
       .eq('id', id)
     
     if (error) return NextResponse.json({ error: 'Update failed' }, { status: 500 })
@@ -114,7 +148,7 @@ export async function POST(request: NextRequest) {
       actorId: user.id,
       action: action === 'approve' ? 'payment_approved' : 'payment_rejected',
       targetId: id,
-      newValue: { status: finalStatus }
+      newValue: { status: finalStatus, slip_url: updateData.slip_url || null }
     })
   }
 

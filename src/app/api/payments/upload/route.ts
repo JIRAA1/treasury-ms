@@ -5,6 +5,7 @@ import { verifySlip } from '@/lib/thunder'
 import { logAction } from '@/lib/audit'
 import { extractQRCode } from '@/lib/qr'
 import { sendLineMessage, sendAdminAlert } from '@/lib/line'
+import { parseSlipQR } from '@/lib/slip-qr'
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
@@ -48,13 +49,47 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'คุณได้ส่งสลิปของสัปดาห์นี้ไปแล้ว' }, { status: 409 })
   }
 
-  // 2. OCR Verify
-  const ocrResult = await verifySlip(file)
-
   const { data: nameSetting } = await adminClient.from('system_settings').select('value').eq('key', 'promptpay_name').maybeSingle()
   const expectedName = nameSetting?.value || "ชานน ศ."
   const { data: weekSetting } = await adminClient.from('week_settings').select('title, amount').eq('week', week).maybeSingle()
   const cycleTitle = weekSetting?.title || `งวดที่ ${week}`
+
+  const bytes = await file.arrayBuffer()
+  const buffer = Buffer.from(bytes)
+
+  // 2. Server-Side QR & Duplicate Check (Pre-check)
+  const qrData = await extractQRCode(buffer)
+  if (qrData) {
+    const parsed = parseSlipQR(qrData)
+    if (parsed.isValid && parsed.transRef) {
+      // Query database to see if this transaction reference was already used
+      const { data: dupPayment } = await adminClient
+        .from('payments')
+        .select('id, user_id, status')
+        .eq('trans_ref', parsed.transRef)
+        .neq('status', 'rejected')
+        .maybeSingle()
+
+      if (dupPayment) {
+        const isOwnSlip = dupPayment.user_id === user.id
+        await notifyAdmins('Duplicate Slip Blocked', [
+          `ผู้ส่ง: ${profile?.fullname || user.id}`,
+          `งวด: ${cycleTitle}`,
+          `เหตุผล: สลิปนี้ซ้ำในระบบ (Ref: ${parsed.transRef})`
+        ], 'warning')
+
+        return NextResponse.json({
+          error: isOwnSlip 
+            ? 'คุณเคยส่งสลิปรายการโอนนี้ในระบบแล้ว' 
+            : 'สลิปนี้ถูกใช้ชำระเงินโดยนักศึกษาคนอื่นในระบบแล้ว',
+          code: 'DUPLICATE_SLIP'
+        }, { status: 409 })
+      }
+    }
+  }
+
+  // 3. OCR Verify (external API call)
+  const ocrResult = await verifySlip(file)
 
   if (!ocrResult.is_valid) {
     await notifyAdmins('Invalid Slip Attempt', [
@@ -69,7 +104,7 @@ export async function POST(request: NextRequest) {
     }, { status: 400 })
   }
 
-  // 3. Receiver Validation — use system_settings only (no hardcoded fallback)
+  // 4. Receiver Validation — use system_settings only (no hardcoded fallback)
   const receiverName = ocrResult.raw?.data?.rawSlip?.receiver?.account?.name?.en || 
                        ocrResult.raw?.data?.rawSlip?.receiver?.account?.name?.th || ""
 
@@ -91,11 +126,10 @@ export async function POST(request: NextRequest) {
     }, { status: 400 })
   }
 
-  // 4. Storage & DB
+  // 5. Storage & DB (Upload image only after all validations pass!)
   const ext = file.type.split('/')[1]
   const filename = `${user.id}/week-${week}-${Date.now()}.${ext}`
-  const bytes = await file.arrayBuffer()
-  const { error: uploadError } = await adminClient.storage.from('slips').upload(filename, bytes, { contentType: file.type, upsert: true })
+  const { error: uploadError } = await adminClient.storage.from('slips').upload(filename, buffer, { contentType: file.type, upsert: true })
   if (uploadError) return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
   const { data: { publicUrl } } = supabase.storage.from('slips').getPublicUrl(filename)
 
@@ -112,11 +146,15 @@ export async function POST(request: NextRequest) {
     ? await supabase.from('payments').update(paymentData).eq('id', existing.id).select().single()
     : await supabase.from('payments').insert(paymentData).select().single()
 
-  if (paymentError) return NextResponse.json({ error: 'Failed to save' }, { status: 500 })
+  if (paymentError) {
+    // Clean up uploaded file if DB save fails
+    await adminClient.storage.from('slips').remove([filename])
+    return NextResponse.json({ error: 'Failed to save payment record' }, { status: 500 })
+  }
 
   await logAction({ actorId: user.id, action: 'payment_uploaded', targetId: payment.id, newValue: paymentData })
 
-  // 5. Notify Success
+  // 6. Notify Success
   await notifyAdmins('New Slip Received', [
     `จาก: ${profile?.fullname}`,
     `รหัสนักศึกษา: ${profile?.student_id}`,

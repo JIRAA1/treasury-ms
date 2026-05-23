@@ -144,6 +144,8 @@ export default function UploadPage() {
                 </div>
                 <SlipUploader
                   week={selectedWeek}
+                  unpaidCycles={unpaidCycles}
+                  onWeekChange={setSelectedWeek}
                   onSuccess={() => {
                     setTimeout(() => router.push('/student/dashboard'), 2500)
                   }}
