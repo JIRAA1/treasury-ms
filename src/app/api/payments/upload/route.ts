@@ -126,7 +126,22 @@ export async function POST(request: NextRequest) {
     }, { status: 400 })
   }
 
-  // 5. Storage & DB (Upload image only after all validations pass!)
+  // 5. Amount Validation
+  if (ocrResult.amount !== null && weekSetting && ocrResult.amount !== weekSetting.amount) {
+    await notifyAdmins('Amount Mismatch Blocked', [
+      `ผู้ส่ง: ${profile?.fullname || user.id}`,
+      `งวด: ${cycleTitle}`,
+      `ยอดเงินในสลิป: ฿${ocrResult.amount}`,
+      `ยอดเงินที่ต้องการ: ฿${weekSetting.amount}`
+    ], 'warning')
+
+    return NextResponse.json({ 
+      error: `ยอดเงินในสลิป (฿${ocrResult.amount}) ไม่ตรงกับยอดชำระที่กำหนดของงวดนี้ (฿${weekSetting.amount})`, 
+      code: 'AMOUNT_MISMATCH' 
+    }, { status: 400 })
+  }
+
+  // 6. Storage & DB (Upload image only after all validations pass!)
   const ext = file.type.split('/')[1]
   const filename = `${user.id}/week-${week}-${Date.now()}.${ext}`
   const { error: uploadError } = await adminClient.storage.from('slips').upload(filename, buffer, { contentType: file.type, upsert: true })
@@ -154,7 +169,7 @@ export async function POST(request: NextRequest) {
 
   await logAction({ actorId: user.id, action: 'payment_uploaded', targetId: payment.id, newValue: paymentData })
 
-  // 6. Notify Success
+  // 7. Notify Success
   await notifyAdmins('New Slip Received', [
     `จาก: ${profile?.fullname}`,
     `รหัสนักศึกษา: ${profile?.student_id}`,
