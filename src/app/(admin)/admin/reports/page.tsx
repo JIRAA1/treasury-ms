@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import Topbar from '@/components/layout/Topbar'
 import KpiCard from '@/components/shared/KpiCard'
 import { formatCurrency, cn } from '@/lib/utils'
-import { FileText, Download, Users, CreditCard, ArrowRight } from 'lucide-react'
+import { FileText, Download, Users, CreditCard, ArrowRight, TrendingUp, Receipt } from 'lucide-react'
 import Link from 'next/link'
 
 export const metadata = { title: 'รายงาน — TreasuryMS' }
@@ -14,9 +14,12 @@ export default async function AdminReportsPage() {
   const { data: students } = await adminClient.from('users').select('id, fullname, student_id').eq('role', 'student')
   const { data: payments } = await adminClient.from('payments').select('*')
   const { data: expenses } = await adminClient.from('expenses').select('*')
+  const { data: incomes } = await adminClient.from('incomes').select('*')
   const { data: settings } = await adminClient.from('week_settings').select('*').order('week', { ascending: true })
 
-  const totalIncome = payments?.filter(p => p.status === 'approved').reduce((s, p) => s + p.amount, 0) || 0
+  const totalPayments = payments?.filter(p => p.status === 'approved').reduce((s, p) => s + p.amount, 0) || 0
+  const totalOtherIncomes = incomes?.filter(i => i.approved_by).reduce((s, i) => s + i.amount, 0) || 0
+  const totalIncome = totalPayments + totalOtherIncomes
   const totalExpense = expenses?.filter(e => e.approved_by).reduce((s, e) => s + e.amount, 0) || 0
   const balance = totalIncome - totalExpense
 
@@ -26,6 +29,9 @@ export default async function AdminReportsPage() {
     const paidCount = cyclePayments.length
     return { ...s, collected, paidCount }
   }) || []
+
+  const approvedOtherIncomes = incomes?.filter(i => i.approved_by).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) || []
+  const approvedExpenses = expenses?.filter(e => e.approved_by).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) || []
 
   return (
     <div>
@@ -49,7 +55,7 @@ export default async function AdminReportsPage() {
       <div className="p-6 space-y-6">
         {/* KPI Row */}
         <div className="grid grid-cols-3 gap-4">
-          <KpiCard label="รายรับทั้งหมด" value={formatCurrency(totalIncome)} sub="ยอดอนุมัติแล้วทั้งหมด" subVariant="positive" />
+          <KpiCard label="รายรับทั้งหมด" value={formatCurrency(totalIncome)} sub={`จากนักเรียน: ${formatCurrency(totalPayments)} · แหล่งอื่น: ${formatCurrency(totalOtherIncomes)}`} subVariant="positive" />
           <KpiCard label="รายจ่ายทั้งหมด" value={formatCurrency(totalExpense)} sub="ยอดที่จ่ายออกจริง" subVariant="danger" />
           <KpiCard label="ยอดคงเหลือ" value={formatCurrency(balance)} sub={balance >= 0 ? 'งบประมาณปัจจุบัน' : 'งบประมาณติดลบ'} subVariant={balance >= 0 ? 'positive' : 'danger'} />
         </div>
@@ -108,6 +114,67 @@ export default async function AdminReportsPage() {
                   </div>
                 )
               })}
+            </div>
+          </div>
+        </div>
+
+        {/* Other Incomes and Expenses Summary List */}
+        <div className="grid grid-cols-2 gap-6">
+          {/* Other Incomes summary card */}
+          <div className="bg-background-secondary border border-border rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-[14px] font-bold text-text-primary flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-emerald-600" />
+                รายรับอื่น ๆ (ที่อนุมัติแล้ว)
+              </div>
+              <Link href="/admin/incomes" className="text-[11.5px] text-brand hover:underline flex items-center gap-1">
+                จัดการรายรับ <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {approvedOtherIncomes.slice(0, 5).map((i) => (
+                <div key={i.id} className="flex items-center justify-between p-3 bg-background border border-border rounded-lg">
+                  <div>
+                    <div className="text-[13px] font-semibold text-text-primary">{i.title}</div>
+                    <div className="text-[11px] text-text-muted">{i.source || 'ไม่ระบุแหล่งที่มา'} · {new Date(i.created_at).toLocaleDateString('th-TH')}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[13px] font-bold text-emerald-600">{formatCurrency(i.amount)}</div>
+                  </div>
+                </div>
+              ))}
+              {approvedOtherIncomes.length === 0 && (
+                <div className="text-center py-8 text-text-muted italic text-[12.5px]">ยังไม่มีข้อมูลรายรับอื่น ๆ</div>
+              )}
+            </div>
+          </div>
+
+          {/* Expenses summary card */}
+          <div className="bg-background-secondary border border-border rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-[14px] font-bold text-text-primary flex items-center gap-2">
+                <Receipt className="w-4 h-4 text-red-600" />
+                รายจ่ายล่าสุด (ที่อนุมัติแล้ว)
+              </div>
+              <Link href="/admin/expenses" className="text-[11.5px] text-brand hover:underline flex items-center gap-1">
+                จัดการรายจ่าย <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {approvedExpenses.slice(0, 5).map((e) => (
+                <div key={e.id} className="flex items-center justify-between p-3 bg-background border border-border rounded-lg">
+                  <div>
+                    <div className="text-[13px] font-semibold text-text-primary">{e.title}</div>
+                    <div className="text-[11px] text-text-muted">{new Date(e.created_at).toLocaleDateString('th-TH')}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[13px] font-bold text-red-600">{formatCurrency(e.amount)}</div>
+                  </div>
+                </div>
+              ))}
+              {approvedExpenses.length === 0 && (
+                <div className="text-center py-8 text-text-muted italic text-[12.5px]">ยังไม่มีข้อมูลรายจ่าย</div>
+              )}
             </div>
           </div>
         </div>

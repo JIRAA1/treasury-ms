@@ -22,20 +22,46 @@ export async function GET(request: NextRequest) {
 
   if (type === 'income') {
     const { data: payments } = await adminClient.from('payments').select('*, user:user_id(fullname, student_id)').eq('status', 'approved')
+    const { data: incomes } = await adminClient.from('incomes').select('*, approver:approved_by(fullname)').not('approved_by', 'is', null)
     const { data: settings } = await adminClient.from('week_settings').select('*').order('week', { ascending: true })
     
-    const data = (payments || []).map((p) => {
+    const combinedList: any[] = []
+    
+    payments?.forEach((p) => {
       const u = p.user as any
       const s = settings?.find(x => x.week === p.week)
-      return {
-        'วันที่ชำระ': new Date(p.created_at).toLocaleString('th-TH'),
-        'รายการ': s?.title || `งวดที่ ${p.week}`,
-        'รหัสนักศึกษา': u?.student_id,
-        'ชื่อ-นามสกุล': u?.fullname,
-        'จำนวนเงิน': p.amount,
-        'เลขที่อ้างอิง': p.trans_ref,
-      }
+      combinedList.push({
+        created_at: new Date(p.created_at),
+        type: 'เงินค่าห้องนักศึกษา',
+        title: s?.title || `งวดที่ ${p.week}`,
+        payer: u ? `${u.fullname} (${u.student_id})` : 'ไม่ระบุตัวตน',
+        amount: p.amount,
+        ref: p.trans_ref || 'ชำระด้วยเงินสด'
+      })
     })
+
+    incomes?.forEach((i) => {
+      combinedList.push({
+        created_at: new Date(i.created_at),
+        type: 'รายรับจากแหล่งอื่น',
+        title: i.title,
+        payer: i.source || 'ไม่ระบุแหล่งที่มา',
+        amount: i.amount,
+        ref: i.description || '—'
+      })
+    })
+
+    combinedList.sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
+
+    const data = combinedList.map((item) => ({
+      'วัน-เวลาที่รับเงิน': item.created_at.toLocaleString('th-TH'),
+      'ประเภทรายรับ': item.type,
+      'รายการ': item.title,
+      'ผู้ชำระ / แหล่งที่มา': item.payer,
+      'จำนวนเงิน (บาท)': item.amount,
+      'เลขที่อ้างอิง / รายละเอียด': item.ref
+    }))
+
     const worksheet = XLSX.utils.json_to_sheet(data)
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Incomes')
