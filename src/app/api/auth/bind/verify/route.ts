@@ -100,9 +100,9 @@ export async function POST(request: NextRequest) {
     // signInWithPassword correctly and sets session cookies via @supabase/ssr.
     return NextResponse.json({ success: true, email, password })
 
-  } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : 'Internal Server Error'
-    console.error('[OTP Verify Error]', msg)
+  } catch (error: any) {
+    const msg = error.message || error.details || JSON.stringify(error) || 'Internal Server Error'
+    console.error('[OTP Verify Error]', msg, error)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
