@@ -13,7 +13,7 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const adminClient = createAdminClient()
-  const { data: profile } = await adminClient.from('users').select('role').eq('id', user.id).single()
+  const { data: profile } = await createAdminClient().from('users').select('role').eq('student_id', user.user_metadata?.student_id || user.email?.split('@')[0]).single()
   if (profile?.role !== 'admin' && profile?.role !== 'treasurer') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { data: target } = await adminClient.from('users').select('student_id, fullname, line_user_id').eq('id', id).single()

@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
 
   const adminClient = createAdminClient()
   
-  const { data: profile } = await adminClient.from('users').select('*').eq('id', user.id).single()
+  const { data: profile } = await createAdminClient().from('users').select('*').eq('student_id', user.user_metadata?.student_id || user.email?.split('@')[0]).single()
   const { data: admins } = await adminClient.from('users').select('fullname, line_user_id').in('role', ['admin', 'treasurer'])
 
   const notifyAdmins = async (title: string, details: string[], type: 'info' | 'warning' | 'error') => {

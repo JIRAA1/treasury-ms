@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const adminClient = createAdminClient()
-  const { data: profile } = await adminClient.from('users').select('role').eq('id', user.id).single()
+  const { data: profile } = await createAdminClient().from('users').select('role').eq('student_id', user.user_metadata?.student_id || user.email?.split('@')[0]).single()
   const isAdmin = profile?.role === 'admin' || profile?.role === 'treasurer'
 
   const { data: settings } = await adminClient.from('week_settings').select('week')

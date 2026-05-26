@@ -9,7 +9,7 @@ export async function GET() {
 
   // Check role
   const adminClient = createAdminClient()
-  const { data: profile } = await adminClient.from('users').select('role').eq('id', user.id).single()
+  const { data: profile } = await createAdminClient().from('users').select('role').eq('student_id', user.user_metadata?.student_id || user.email?.split('@')[0]).single()
   if (!profile || (profile.role !== 'admin' && profile.role !== 'treasurer')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

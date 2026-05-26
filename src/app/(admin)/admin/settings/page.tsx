@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import Topbar from '@/components/layout/Topbar'
 import WeekSettingsForm from '@/components/admin/WeekSettingsForm'
@@ -12,7 +13,7 @@ export default async function AdminSettingsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase.from('users').select('role').eq('id', user.id).single()
+  const { data: profile } = await createAdminClient().from('users').select('role').eq('student_id', user.user_metadata?.student_id || user.email?.split('@')[0]).single()
   if (profile?.role !== 'admin' && profile?.role !== 'treasurer') redirect('/student/dashboard')
 
   const { data: weekSettings } = await supabase
