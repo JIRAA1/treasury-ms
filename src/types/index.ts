@@ -4,7 +4,6 @@ export interface User {
   fullname: string
   email: string | null
   line_user_id: string | null
-  line_picture_url: string | null
   role: 'student' | 'treasurer' | 'admin'
   verified: boolean
   created_at: string

@@ -72,8 +72,8 @@ export default function Sidebar({
     ? user.fullname.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
     : 'U'
 
-  // Show profile picture only for student view
-  const showProfilePic = !isViewingAdmin && user?.line_picture_url
+  // Show profile picture only for student view (if we had it, but we don't in db anymore)
+  const showProfilePic = false
 
   return (
     <aside className="w-full h-full bg-brand flex flex-col shadow-2xl overflow-hidden border-r border-white/5">
@@ -149,11 +149,7 @@ export default function Sidebar({
         <div className="bg-white/5 rounded-[1.5rem] p-4 border border-white/5 backdrop-blur-md">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-white/20 to-white/5 flex items-center justify-center border border-white/10 overflow-hidden shadow-inner">
-              {showProfilePic ? (
-                <img src={user.line_picture_url!} alt="Profile" className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-white text-[13px] font-black">{initials}</span>
-              )}
+              <span className="text-white text-[13px] font-black">{initials}</span>
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-[13.5px] font-black text-white truncate tracking-tight">{user?.fullname}</div>

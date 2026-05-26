@@ -40,12 +40,6 @@ export async function GET(request: NextRequest) {
       const email = `${existingUser.student_id}@treasury.local`
       const password = `line_${lineProfile.userId}`
 
-      // Update custom user record with latest profile picture
-      await admin
-        .from('users')
-        .update({ line_picture_url: lineProfile.pictureUrl || null })
-        .eq('id', existingUser.id)
-
       // Sync Auth user password and metadata
       const { data: { users: authUsers } } = await admin.auth.admin.listUsers()
       const authUser = authUsers.find(u => u.email === email)
@@ -77,7 +71,6 @@ export async function GET(request: NextRequest) {
     } else {
       response.cookies.set('line_user_id', lineProfile.userId, { httpOnly: true, maxAge: 600, path: '/' })
       response.cookies.set('line_display_name', lineProfile.displayName, { httpOnly: true, maxAge: 600, path: '/' })
-      response.cookies.set('line_picture_url', lineProfile.pictureUrl ?? '', { httpOnly: true, maxAge: 600, path: '/' })
       console.log('[LINE Callback] Setting bind cookies and redirecting to /bind')
     }
 

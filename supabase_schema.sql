@@ -20,7 +20,6 @@ CREATE TABLE users (
   fullname TEXT NOT NULL,
   email TEXT,
   line_user_id TEXT UNIQUE,
-  line_picture_url TEXT,
   role TEXT NOT NULL DEFAULT 'student' CHECK (role IN ('student', 'treasurer', 'admin')),
   verified BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW()

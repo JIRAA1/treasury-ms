@@ -8,7 +8,6 @@ export async function POST(request: NextRequest) {
   const cookieStore = await cookies()
   const lineUserId = cookieStore.get('line_user_id')?.value
   const displayName = cookieStore.get('line_display_name')?.value ?? 'นักศึกษา'
-  const linePictureUrl = cookieStore.get('line_picture_url')?.value
   const storedOtp = cookieStore.get('bind_otp')?.value
 
   if (!lineUserId) {
@@ -45,7 +44,6 @@ export async function POST(request: NextRequest) {
     if (existingUser) {
       const { error: updateError } = await admin.from('users').update({ 
         line_user_id: lineUserId, 
-        line_picture_url: linePictureUrl,
         verified: true 
       }).eq('id', existingUser.id)
       
@@ -61,7 +59,6 @@ export async function POST(request: NextRequest) {
           student_id, 
           fullname: displayName, 
           line_user_id: lineUserId, 
-          line_picture_url: linePictureUrl,
           role: 'student', 
           verified: true 
         })
@@ -82,8 +79,7 @@ export async function POST(request: NextRequest) {
       user_metadata: { 
         fullname: displayName, 
         student_id, 
-        treasury_user_id: userId,
-        avatar_url: linePictureUrl
+        treasury_user_id: userId
       },
     })
     // If it already exists, the error is ignored
@@ -92,7 +88,6 @@ export async function POST(request: NextRequest) {
     cookieStore.delete('bind_otp')
     cookieStore.delete('line_user_id')
     cookieStore.delete('line_display_name')
-    cookieStore.delete('line_picture_url')
 
     // ── 4. Return credentials for client-side signInWithPassword ──────────
     // generateLink uses implicit flow (tokens in URL hash) which server-side

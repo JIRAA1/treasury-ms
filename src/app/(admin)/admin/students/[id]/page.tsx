@@ -95,13 +95,9 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
           {/* Profile Card */}
           <div className="col-span-1 bg-background-secondary border border-border rounded-xl p-5 space-y-4">
             <div className="flex items-center gap-3">
-              {student.line_picture_url ? (
-                <img src={student.line_picture_url} alt="" referrerPolicy="no-referrer" className="w-12 h-12 rounded-full object-cover border-2 border-brand/20 shadow-sm" />
-              ) : (
-                <div className="w-12 h-12 rounded-full bg-brand flex items-center justify-center flex-shrink-0">
-                  <span className="text-white text-lg font-bold">{student.fullname?.[0] ?? 'U'}</span>
-                </div>
-              )}
+              <div className="w-12 h-12 rounded-full bg-brand flex items-center justify-center flex-shrink-0">
+                <span className="text-white text-lg font-bold">{student.fullname?.[0] ?? 'U'}</span>
+              </div>
               <div>
                 <div className="text-[14px] font-bold text-text-primary">{student.fullname}</div>
                 <div className="text-[11.5px] text-text-muted font-mono">{student.student_id}</div>
