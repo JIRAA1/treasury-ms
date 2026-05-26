@@ -102,14 +102,14 @@ export default function StudentDetailClient({ student, weekStatuses, actorRole, 
     }
   }
 
-  // ---- Reset LINE binding ----
+  // ---- Reset LINE binding / Auth user ----
   const handleResetBinding = async () => {
-    if (!confirm(`รีเซ็ตการเชื่อม LINE ของ "${student.fullname as string}" ใช่หรือไม่? นักศึกษาจะต้องเข้าสู่ระบบใหม่`)) return
+    if (!confirm(`ล้างข้อมูลผูกบัญชีของ "${student.fullname as string}" ใช่หรือไม่? นักศึกษาจะต้องทำการผูกบัญชี (Login ด้วย LINE) ใหม่อีกครั้ง`)) return
     setLoadingId('binding')
     try {
       const res = await fetch(`/api/students/${student.id}/binding`, { method: 'DELETE' })
       if (!res.ok) throw new Error((await res.json()).error)
-      toast.success('รีเซ็ต LINE binding เรียบร้อยแล้ว')
+      toast.success('ล้างข้อมูลผูกบัญชีเรียบร้อยแล้ว')
       router.refresh()
     } catch (e: unknown) {
       toast.error('เกิดข้อผิดพลาด: ' + (e instanceof Error ? e.message : String(e)))
@@ -148,21 +148,14 @@ export default function StudentDetailClient({ student, weekStatuses, actorRole, 
               แก้ไขข้อมูล
             </button>
 
-            {student.line_user_id ? (
-              <button
-                onClick={handleResetBinding}
-                disabled={loadingId === 'binding'}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 text-[12px] font-medium rounded-lg border border-amber-100 hover:bg-amber-100 transition-colors w-full justify-center disabled:opacity-50"
-              >
-                {loadingId === 'binding' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2Off className="w-3.5 h-3.5" />}
-                รีเซ็ต LINE Binding
-              </button>
-            ) : (
-              <span className="flex items-center gap-1.5 px-3 py-1.5 text-[11.5px] text-text-muted border border-dashed border-border rounded-lg justify-center">
-                <Link2Off className="w-3.5 h-3.5" />
-                ยังไม่ได้เชื่อม LINE
-              </span>
-            )}
+            <button
+              onClick={handleResetBinding}
+              disabled={loadingId === 'binding'}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 text-[12px] font-medium rounded-lg border border-amber-100 hover:bg-amber-100 transition-colors w-full justify-center disabled:opacity-50"
+            >
+              {loadingId === 'binding' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Link2Off className="w-3.5 h-3.5" />}
+              ล้างข้อมูลการเข้าสู่ระบบ
+            </button>
 
             <button
               onClick={handleDelete}
