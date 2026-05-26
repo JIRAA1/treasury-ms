@@ -55,6 +55,8 @@ export interface WeekStatus {
   payment?: Payment
   deadline?: string | null
   title?: string | null
+  payment_open_at?: string | null
+  payment_close_at?: string | null
 }
 
 export interface DashboardStats {

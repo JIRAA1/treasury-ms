@@ -10,10 +10,21 @@ import ExpenseRow from '@/components/expenses/ExpenseRow'
 import EmptyState from '@/components/shared/EmptyState'
 import QrModal from '@/components/payments/QrModal'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { FileText, Upload, ArrowRight, AlertCircle, Clock, QrCode, Sparkles } from 'lucide-react'
+import { FileText, Upload, ArrowRight, AlertCircle, Clock, QrCode, Sparkles, Lock, Calendar } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { WeekStatus } from '@/types'
+
+function getWindowStatus(w: WeekStatus) {
+  const now = new Date()
+  const openAt = w.payment_open_at ? new Date(w.payment_open_at) : null
+  const closeAt = w.payment_close_at ? new Date(w.payment_close_at) : null
+
+  if (!openAt && !closeAt) return 'open'
+  if (openAt && now < openAt) return 'upcoming'
+  if (closeAt && now > closeAt) return 'closed'
+  return 'open'
+}
 
 export default function StudentDashboard({ 
   profile, 
@@ -41,7 +52,9 @@ export default function StudentDashboard({
       amount: setting.amount || 100,
       payment,
       deadline: setting.deadline || null,
-      title: setting.title
+      title: setting.title,
+      payment_open_at: setting.payment_open_at,
+      payment_close_at: setting.payment_close_at
     }
   })
 
@@ -49,6 +62,19 @@ export default function StudentDashboard({
   const currentWeek = currentWeekStatus?.week || 0
   const currentDeadline = currentWeekStatus?.deadline ? new Date(currentWeekStatus.deadline) : null
   const isOverdue = currentDeadline ? new Date() > currentDeadline : false
+  
+  const windowStatus = currentWeekStatus ? getWindowStatus(currentWeekStatus) : 'open'
+  const isLocked = windowStatus === 'upcoming' || windowStatus === 'closed'
+
+  const formatThaiDate = (date: Date) => {
+    return date.toLocaleDateString('th-TH', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
 
   const paidCount = weekStatuses.filter((w) => w.status === 'paid').length
   const pendingCount = weekStatuses.filter((w) => w.status === 'pending').length
@@ -62,7 +88,7 @@ export default function StudentDashboard({
         title={`สวัสดี, ${profile?.fullname ?? 'นักศึกษา'}`}
         subtitle="ภาพรวมระบบการเงินสาขา"
         actions={
-          currentWeekStatus && currentWeekStatus.status !== 'paid' && currentWeekStatus.status !== 'pending' ? (
+          currentWeekStatus && currentWeekStatus.status !== 'paid' && currentWeekStatus.status !== 'pending' && !isLocked ? (
             <Link href="/student/upload" className="flex items-center gap-2 bg-brand text-white text-[12px] font-bold px-4 py-2 rounded-xl hover:bg-brand-hover transition-all shadow-lg shadow-brand/10 active:scale-95">
               <Upload className="w-4 h-4" />
               <span className="hidden sm:inline">ส่งสลิป</span>
@@ -83,12 +109,24 @@ export default function StudentDashboard({
               </div>
               <div className="bg-white m-[1px] rounded-[1.9rem] p-6 md:p-10 flex flex-col md:flex-row md:items-center gap-6 md:gap-8 relative z-10">
                 <div className="flex-1 space-y-3">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted bg-background-muted px-2.5 py-1 rounded-lg border border-border">งวดปัจจุบัน</span>
                     {isOverdue && currentWeekStatus.status !== 'paid' && (
                       <span className="flex items-center gap-1 text-[10px] bg-red-50 text-red-600 px-2.5 py-1 rounded-lg border border-red-100 font-bold uppercase">
                         <AlertCircle className="w-3 h-3" />
                         เกินกำหนด
+                      </span>
+                    )}
+                    {windowStatus === 'upcoming' && (
+                      <span className="flex items-center gap-1 text-[10px] bg-amber-50 text-amber-600 px-2.5 py-1 rounded-lg border border-amber-100 font-bold uppercase">
+                        <Calendar className="w-3 h-3" />
+                        จะเปิดรับในวันที่ {currentWeekStatus.payment_open_at ? formatThaiDate(new Date(currentWeekStatus.payment_open_at)) : ''}
+                      </span>
+                    )}
+                    {windowStatus === 'closed' && (
+                      <span className="flex items-center gap-1 text-[10px] bg-red-50 text-red-600 px-2.5 py-1 rounded-lg border border-red-100 font-bold uppercase">
+                        <Lock className="w-3 h-3" />
+                        ปิดรับสลิปแล้ว
                       </span>
                     )}
                   </div>
@@ -125,20 +163,29 @@ export default function StudentDashboard({
                   <div className="flex items-center gap-2 w-full md:w-auto">
                     {currentWeekStatus.status !== 'paid' && currentWeekStatus.status !== 'pending' && (
                       <>
-                        <button
-                          onClick={() => setIsQrModalOpen(true)}
-                          className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 bg-background border border-border text-text-primary text-[12px] font-bold px-4 py-2.5 rounded-xl hover:bg-background-tertiary transition-all active:scale-95 shadow-sm"
-                        >
-                          <QrCode className="w-4 h-4" />
-                          ดู QR
-                        </button>
-                        <Link
-                          href="/student/upload"
-                          className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 bg-brand text-white text-[12px] font-bold px-6 py-2.5 rounded-xl hover:bg-brand-hover transition-all active:scale-95 shadow-lg shadow-brand/20"
-                        >
-                          <Upload className="w-4 h-4" />
-                          {currentWeekStatus.status === 'rejected' ? 'ส่งใหม่' : 'ส่งสลิป'}
-                        </Link>
+                        {!isLocked ? (
+                          <>
+                            <button
+                              onClick={() => setIsQrModalOpen(true)}
+                              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 bg-background border border-border text-text-primary text-[12px] font-bold px-4 py-2.5 rounded-xl hover:bg-background-tertiary transition-all active:scale-95 shadow-sm"
+                            >
+                              <QrCode className="w-4 h-4" />
+                              ดู QR
+                            </button>
+                            <Link
+                              href="/student/upload"
+                              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 bg-brand text-white text-[12px] font-bold px-6 py-2.5 rounded-xl hover:bg-brand-hover transition-all active:scale-95 shadow-lg shadow-brand/20"
+                            >
+                              <Upload className="w-4 h-4" />
+                              {currentWeekStatus.status === 'rejected' ? 'ส่งใหม่' : 'ส่งสลิป'}
+                            </Link>
+                          </>
+                        ) : (
+                          <div className="flex items-center gap-2 py-2 px-4 bg-background-tertiary rounded-xl border border-border text-[13px] font-bold text-text-muted">
+                            <Lock className="w-4 h-4" />
+                            {windowStatus === 'upcoming' ? 'รอเปิดรับสลิป' : 'ปิดรับสลิปแล้ว'}
+                          </div>
+                        )}
                       </>
                     )}
                     {currentWeekStatus.status === 'pending' && (
