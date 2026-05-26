@@ -28,7 +28,10 @@ CREATE TABLE week_settings (
   title TEXT NOT NULL,
   deadline TIMESTAMPTZ NOT NULL,
   amount NUMERIC(10,2) DEFAULT 100.00,
-  start_date TIMESTAMPTZ DEFAULT NOW()
+  start_date TIMESTAMPTZ DEFAULT NOW(),
+  qr_url TEXT,
+  payment_open_at TIMESTAMPTZ,
+  payment_close_at TIMESTAMPTZ
 );
 
 CREATE TABLE payments (
@@ -42,6 +45,7 @@ CREATE TABLE payments (
   note TEXT,
   verified_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
+  verified_by_api BOOLEAN DEFAULT true,
   UNIQUE(user_id, week)
 );
 
@@ -116,8 +120,4 @@ CREATE OR REPLACE FUNCTION get_treasury_balance() RETURNS NUMERIC AS $$
          COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.approved_by IS NOT NULL), 0)
   FROM payments p
 $$ LANGUAGE SQL SECURITY DEFINER;
-ALTER TABLE week_settings ADD COLUMN IF NOT EXISTS qr_url TEXT;
-ALTER TABLE week_settings ADD COLUMN IF NOT EXISTS qr_url TEXT;
-CREATE TABLE notifications (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL, message TEXT NOT NULL, type TEXT DEFAULT 'info', is_read BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT NOW()); ALTER TABLE notifications ENABLE ROW LEVEL SECURITY; CREATE POLICY \"Users can view own notifications\" ON notifications FOR SELECT USING (user_id = auth.uid()); CREATE POLICY \"System/Admin can manage notifications\" ON notifications FOR ALL USING ((auth.jwt() ->> 'email')::text LIKE '%@treasury.local');
-CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value TEXT); INSERT INTO system_settings (key, value) VALUES ('promptpay_id', '0934589920'), ('promptpay_name', 'ชานน ศ.');
-ALTER TABLE users ADD COLUMN IF NOT EXISTS line_picture_url TEXT;
+

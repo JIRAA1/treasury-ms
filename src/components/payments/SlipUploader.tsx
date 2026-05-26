@@ -42,6 +42,13 @@ const BANK_NAMES: Record<string, string> = {
   '034': 'ธนาคารเพื่อการเกษตรและสหกรณ์การเกษตร (BAAC)',
 }
 
+interface StepResult {
+  payment: any
+  ocr: any
+  quota_exceeded?: boolean
+  message?: string
+}
+
 export default function SlipUploader({ week, unpaidCycles, onWeekChange, onSuccess, onError }: SlipUploaderProps) {
   const dialog = useDialog()
   const [file, setFile] = useState<File | null>(null)
@@ -49,6 +56,7 @@ export default function SlipUploader({ week, unpaidCycles, onWeekChange, onSucce
   const [step, setStep] = useState<Step>('upload')
   const [dragOver, setDragOver] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
+  const [successData, setSuccessData] = useState<StepResult | null>(null)
   const [verifySteps, setVerifySteps] = useState<VerifyStep[]>([
     { label: 'กำลังเตรียมส่งข้อมูล...', done: false, active: false },
     { label: 'กำลังส่งข้อมูลเข้าสู่ระบบ...', done: false, active: false },
@@ -271,12 +279,20 @@ export default function SlipUploader({ week, unpaidCycles, onWeekChange, onSucce
         return
       }
 
-      setOcrResult({
-        'ยอดโอน': data.ocr?.amount ? `฿${data.ocr.amount.toLocaleString()}` : 'ไม่ระบุ',
-        'ธนาคารผู้โอน': data.ocr?.bank ? (BANK_NAMES[data.ocr.bank] || data.ocr.bank) : 'ไม่ระบุ',
-        'รหัสอ้างอิง': data.ocr?.trans_ref || 'ไม่ระบุ',
-        'วันที่โอน': data.ocr?.date || 'ไม่ระบุ',
-      })
+      setSuccessData(data)
+      if (data.quota_exceeded) {
+        setOcrResult({
+          'สถานะการตรวจ': 'รอเหรัญญิกตรวจสอบมือ (API Quota หมด)',
+          'เลขอ้างอิง': 'จะระบุภายหลัง',
+        })
+      } else {
+        setOcrResult({
+          'ยอดโอน': data.ocr?.amount ? `฿${data.ocr.amount.toLocaleString()}` : 'ไม่ระบุ',
+          'ธนาคารผู้โอน': data.ocr?.bank ? (BANK_NAMES[data.ocr.bank] || data.ocr.bank) : 'ไม่ระบุ',
+          'รหัสอ้างอิง': data.ocr?.trans_ref || 'ไม่ระบุ',
+          'วันที่โอน': data.ocr?.date || 'ไม่ระบุ',
+        })
+      }
       setStep('success')
       onSuccess?.()
     } catch {
@@ -334,7 +350,9 @@ export default function SlipUploader({ week, unpaidCycles, onWeekChange, onSucce
           <CheckCircle className="w-6 h-6 text-emerald-600" />
         </div>
         <div className="text-[15px] font-bold text-text-primary mb-1">ส่งสลิปชำระเงินสำเร็จ</div>
-        <div className="text-[12.5px] text-text-muted mb-5">ระบบได้บันทึกการส่งสลิปของงวดที่ {week} เรียบร้อยแล้ว</div>
+        <div className="text-[12.5px] text-text-muted mb-5">
+          {successData?.message || `ระบบได้บันทึกการส่งสลิปของงวดที่ ${week} เรียบร้อยแล้ว`}
+        </div>
         
         {ocrResult && (
           <div className="bg-background-muted border border-border-strong rounded-xl p-4 text-left mb-5 space-y-2.5">

@@ -10,6 +10,7 @@ import {
   CreditCard,
   Receipt,
   Users,
+  Users2,
   BarChart3,
   Shield,
   Settings,
@@ -31,6 +32,7 @@ const studentNav: NavItem[] = [
   { label: 'แดชบอร์ด', href: '/student/dashboard', icon: LayoutDashboard },
   { label: 'ส่งสลิป', href: '/student/upload', icon: Upload },
   { label: 'ประวัติการเงิน', href: '/student/history', icon: Clock },
+  { label: 'รายชื่อในชั้น', href: '/student/classmates', icon: Users2 },
   { label: 'ความโปร่งใส', href: '/student/transparency', icon: Eye },
 ]
 

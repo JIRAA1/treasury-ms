@@ -6,7 +6,7 @@ import StatusPill from '@/components/payments/StatusPill'
 import { formatCurrency, formatDate, getWeekLabel } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { th } from 'date-fns/locale'
-import { Search, ExternalLink, CheckCircle, XCircle } from 'lucide-react'
+import { Search, ExternalLink, CheckCircle, XCircle, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface Payment {
@@ -17,6 +17,7 @@ interface Payment {
   slip_url: string | null
   status: 'pending' | 'approved' | 'rejected'
   created_at: string
+  verified_by_api?: boolean | null
   user: { fullname: string; student_id: string } | null
 }
 
@@ -190,6 +191,16 @@ export default function AdminPaymentsPage() {
             {/* Slip */}
             {selectedPayment.slip_url && (
               <img src={selectedPayment.slip_url} alt="slip" className="w-full rounded-xl border border-border object-contain max-h-72" />
+            )}
+            {/* Manual review badge */}
+            {selectedPayment.verified_by_api === false && (
+              <div className="flex items-start gap-2.5 p-3 bg-amber-50 border border-amber-200 rounded-xl text-[12px]">
+                <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-bold text-amber-800">ต้องตรวจสอบด้วยตนเอง</div>
+                  <div className="text-amber-700 mt-0.5">สลิปนี้ผ่านเข้ามาโดยไม่ผ่าน OCR API เนื่องจาก quota หมด กรุณาเปิดดูสลิปและตรวจยอดเงินก่อนอนุมัติ</div>
+                </div>
+              </div>
             )}
             {/* Info */}
             <div className="space-y-2">

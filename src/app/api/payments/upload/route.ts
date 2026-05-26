@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
   if (file.size > MAX_SIZE) {
     return NextResponse.json({ error: 'ไฟล์มีขนาดใหญ่เกิน 5MB' }, { status: 413 })
   }
+
   const adminClient = createAdminClient()
   
   const { data: profile } = await adminClient.from('users').select('*').eq('id', user.id).single()
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // 1. Quick Check
+  // 1. Quick Check — prevent double-submit
   const { data: existing } = await supabase
     .from('payments').select('id, status').eq('user_id', user.id).eq('week', week).maybeSingle()
 
@@ -51,18 +52,42 @@ export async function POST(request: NextRequest) {
 
   const { data: nameSetting } = await adminClient.from('system_settings').select('value').eq('key', 'promptpay_name').maybeSingle()
   const expectedName = nameSetting?.value || "ชานน ศ."
-  const { data: weekSetting } = await adminClient.from('week_settings').select('title, amount').eq('week', week).maybeSingle()
+  const { data: weekSetting } = await adminClient
+    .from('week_settings')
+    .select('title, amount, payment_open_at, payment_close_at')
+    .eq('week', week)
+    .maybeSingle()
   const cycleTitle = weekSetting?.title || `งวดที่ ${week}`
+
+  // 2. Payment Window Check — lock if admin has configured open/close times
+  if (weekSetting?.payment_open_at || weekSetting?.payment_close_at) {
+    const now = new Date()
+    const openAt = weekSetting.payment_open_at ? new Date(weekSetting.payment_open_at) : null
+    const closeAt = weekSetting.payment_close_at ? new Date(weekSetting.payment_close_at) : null
+
+    if (openAt && now < openAt) {
+      return NextResponse.json({
+        error: `ยังไม่ถึงเวลาเปิดรับสลิปของ${cycleTitle} (เปิดวันที่ ${openAt.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })})`,
+        code: 'WINDOW_NOT_OPEN'
+      }, { status: 403 })
+    }
+
+    if (closeAt && now > closeAt) {
+      return NextResponse.json({
+        error: `หมดเวลารับสลิปของ${cycleTitle} แล้ว (ปิดรับเมื่อวันที่ ${closeAt.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })})`,
+        code: 'WINDOW_CLOSED'
+      }, { status: 403 })
+    }
+  }
 
   const bytes = await file.arrayBuffer()
   const buffer = Buffer.from(bytes)
 
-  // 2. Server-Side QR & Duplicate Check (Pre-check)
+  // 3. Server-Side QR & Duplicate Check (Pre-check)
   const qrData = await extractQRCode(buffer)
   if (qrData) {
     const parsed = parseSlipQR(qrData)
     if (parsed.isValid && parsed.transRef) {
-      // Query database to see if this transaction reference was already used
       const { data: dupPayment } = await adminClient
         .from('payments')
         .select('id, user_id, status')
@@ -88,9 +113,58 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // 3. OCR Verify (external API call)
+  // 4. OCR Verify (external API call)
   const ocrResult = await verifySlip(file)
 
+  // --- QUOTA EXCEEDED PATH ---
+  // When Thunder API quota is exhausted, skip OCR validation and save slip for manual review
+  if (ocrResult.quota_exceeded) {
+    console.warn('[Upload] Thunder quota exceeded — saving slip for manual review')
+    await notifyAdmins('🔔 สลิปรอตรวจมือ (API Quota หมด)', [
+      `ผู้ส่ง: ${profile?.fullname}`,
+      `รหัสนักศึกษา: ${profile?.student_id}`,
+      `รายการ: ${cycleTitle}`,
+      `เหตุผล: Thunder API quota หมดแล้ว กรุณาตรวจสลิปด้วยตนเอง`
+    ], 'warning')
+
+    // Upload file first
+    const ext = file.type.split('/')[1]
+    const filename = `${user.id}/week-${week}-${Date.now()}.${ext}`
+    const { error: uploadError } = await adminClient.storage.from('slips').upload(filename, buffer, { contentType: file.type, upsert: true })
+    if (uploadError) return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
+    const { data: { publicUrl } } = supabase.storage.from('slips').getPublicUrl(filename)
+
+    const paymentData = {
+      user_id: user.id,
+      week,
+      amount: 0,           // Unknown until manual review
+      trans_ref: null,
+      slip_url: publicUrl,
+      status: 'pending' as const,
+      verified_by_api: false,
+    }
+
+    const { data: payment, error: paymentError } = existing
+      ? await supabase.from('payments').update(paymentData).eq('id', existing.id).select().single()
+      : await supabase.from('payments').insert(paymentData).select().single()
+
+    if (paymentError) {
+      await adminClient.storage.from('slips').remove([filename])
+      return NextResponse.json({ error: 'Failed to save payment record' }, { status: 500 })
+    }
+
+    await logAction({ actorId: user.id, action: 'payment_uploaded', targetId: payment.id, newValue: { ...paymentData, note: 'quota_exceeded' } })
+
+    return NextResponse.json({ 
+      success: true, 
+      payment, 
+      ocr: null,
+      quota_exceeded: true,
+      message: 'ส่งสลิปสำเร็จ — เหรัญญิกจะตรวจสอบยอดเงินด้วยตนเองเนื่องจาก API หมด quota'
+    })
+  }
+
+  // --- NORMAL PATH ---
   if (!ocrResult.is_valid) {
     await notifyAdmins('Invalid Slip Attempt', [
       `ผู้ส่ง: ${profile?.fullname || user.id}`,
@@ -104,13 +178,13 @@ export async function POST(request: NextRequest) {
     }, { status: 400 })
   }
 
-  // 4. Receiver Validation — use system_settings only (no hardcoded fallback)
+  // 5. Receiver Validation
   const receiverName = ocrResult.raw?.data?.rawSlip?.receiver?.account?.name?.en || 
                        ocrResult.raw?.data?.rawSlip?.receiver?.account?.name?.th || ""
 
   const isValidReceiver = expectedName
     ? receiverName.toLowerCase().includes(expectedName.toLowerCase())
-    : true // If no config set, skip receiver check
+    : true
 
   if (!isValidReceiver) {
     await notifyAdmins('Receiver Mismatch', [
@@ -126,7 +200,7 @@ export async function POST(request: NextRequest) {
     }, { status: 400 })
   }
 
-  // 5. Amount Validation
+  // 6. Amount Validation — server-side comparison AFTER OCR
   if (ocrResult.amount !== null && weekSetting && ocrResult.amount !== weekSetting.amount) {
     await notifyAdmins('Amount Mismatch Blocked', [
       `ผู้ส่ง: ${profile?.fullname || user.id}`,
@@ -141,7 +215,7 @@ export async function POST(request: NextRequest) {
     }, { status: 400 })
   }
 
-  // 6. Storage & DB (Upload image only after all validations pass!)
+  // 7. Storage & DB (Upload image only after all validations pass!)
   const ext = file.type.split('/')[1]
   const filename = `${user.id}/week-${week}-${Date.now()}.${ext}`
   const { error: uploadError } = await adminClient.storage.from('slips').upload(filename, buffer, { contentType: file.type, upsert: true })
@@ -154,7 +228,8 @@ export async function POST(request: NextRequest) {
     amount: ocrResult.amount || 0,
     trans_ref: ocrResult.trans_ref,
     slip_url: publicUrl,
-    status: 'pending',
+    status: 'pending' as const,
+    verified_by_api: true,
   }
 
   const { data: payment, error: paymentError } = existing
@@ -162,14 +237,13 @@ export async function POST(request: NextRequest) {
     : await supabase.from('payments').insert(paymentData).select().single()
 
   if (paymentError) {
-    // Clean up uploaded file if DB save fails
     await adminClient.storage.from('slips').remove([filename])
     return NextResponse.json({ error: 'Failed to save payment record' }, { status: 500 })
   }
 
   await logAction({ actorId: user.id, action: 'payment_uploaded', targetId: payment.id, newValue: paymentData })
 
-  // 7. Notify Success
+  // 8. Notify Success
   await notifyAdmins('New Slip Received', [
     `จาก: ${profile?.fullname}`,
     `รหัสนักศึกษา: ${profile?.student_id}`,

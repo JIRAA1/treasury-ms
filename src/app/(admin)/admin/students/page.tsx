@@ -5,9 +5,10 @@ import { createClient } from '@/lib/supabase/client'
 import Topbar from '@/components/layout/Topbar'
 import KpiCard from '@/components/shared/KpiCard'
 import { formatCurrency } from '@/lib/utils'
-import { Search, Filter, Mail, Users, ChevronRight, Loader2, UserPlus } from 'lucide-react'
+import { Search, Filter, Mail, Users, ChevronRight, Loader2, UserPlus, Download } from 'lucide-react'
 import Link from 'next/link'
 import AddStudentModal from '@/components/admin/AddStudentModal'
+import { toast } from 'sonner'
 
 interface Student {
   id: string
@@ -21,6 +22,7 @@ export default function AdminStudentsPage() {
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'paid' | 'unpaid' | 'pending'>('all')
   const [totalCycles, setTotalCycles] = useState(0)
@@ -54,6 +56,33 @@ export default function AdminStudentsPage() {
     fetchData()
   }, [fetchData]) // supabase is stable due to useMemo
 
+  const handleExportCSV = async () => {
+    setExporting(true)
+    try {
+      const res = await fetch('/api/admin/export/csv')
+      if (!res.ok) {
+        toast.error('ไม่สามารถ Export CSV ได้')
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const disposition = res.headers.get('Content-Disposition') ?? ''
+      const match = disposition.match(/filename="([^"]+)"/) 
+      a.download = match?.[1] ?? 'payments_export.csv'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      toast.success('Export CSV สำเร็จ')
+    } catch {
+      toast.error('เกิดข้อผิดพลาดระหว่าง Export')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const filtered = students.filter((s) => {
     const matchesSearch = s.fullname.toLowerCase().includes(search.toLowerCase()) || s.student_id.includes(search)
     if (!matchesSearch) return false
@@ -72,13 +101,23 @@ export default function AdminStudentsPage() {
         title="จัดการนักศึกษา" 
         subtitle="รายชื่อนักศึกษาและสถานะการชำระเงินรายคน" 
         actions={
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-2 bg-brand text-white text-[12px] font-black uppercase tracking-widest px-4 py-2 rounded-xl hover:bg-brand-hover transition-all shadow-lg shadow-brand/20 active:scale-95"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span className="hidden sm:inline">เพิ่มรายชื่อ</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportCSV}
+              disabled={exporting}
+              className="flex items-center gap-2 bg-background border border-border text-text-secondary text-[12px] font-black uppercase tracking-widest px-4 py-2 rounded-xl hover:bg-background-secondary transition-all shadow-sm active:scale-95 disabled:opacity-50"
+            >
+              {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              <span className="hidden sm:inline">Export CSV</span>
+            </button>
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="flex items-center gap-2 bg-brand text-white text-[12px] font-black uppercase tracking-widest px-4 py-2 rounded-xl hover:bg-brand-hover transition-all shadow-lg shadow-brand/20 active:scale-95"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span className="hidden sm:inline">เพิ่มรายชื่อ</span>
+            </button>
+          </div>
         }
       />
 
