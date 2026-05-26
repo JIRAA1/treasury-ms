@@ -24,7 +24,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: actorProfile } = await createAdminClient().from('users').select('role').eq('student_id', user.user_metadata?.student_id || user.email?.split('@')[0]).single()
+  const { data: actorProfile } = await createAdminClient().from('users').select('role').or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`).maybeSingle()
   if (!actorProfile || !['admin', 'treasurer'].includes(actorProfile.role)) {
     redirect('/student/dashboard')
   }

@@ -17,9 +17,13 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: profile } = await createAdminClient().from('users').select('role').eq('student_id', user.user_metadata?.student_id || user.email?.split('@')[0]).single()
+  const { data: profile } = await createAdminClient()
+    .from('users')
+    .select('id, role')
+    .or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`)
+    .maybeSingle()
   if (!['admin', 'treasurer'].includes(profile?.role ?? ''))
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    return NextResponse.json({ error: 'Forbidden', debug: { email: user.email, metadata: user.user_metadata, profile } }, { status: 403 })
 
   const { title, description, amount, source } = await request.json()
 
@@ -28,13 +32,13 @@ export async function POST(request: NextRequest) {
 
   const { data: income, error } = await supabase
     .from('incomes')
-    .insert({ title, description: description || null, amount, source: source || null, created_by: user.id })
+    .insert({ title, description: description || null, amount, source: source || null, created_by: profile?.id })
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: 'Failed to create income' }, { status: 500 })
+  if (error) return NextResponse.json({ error: error.message || 'Failed to create income' }, { status: 500 })
 
-  await logAction({ actorId: user.id, action: 'income_created', targetId: income.id, newValue: { title, amount, source } })
+  await logAction({ actorId: profile?.id, action: 'income_created', targetId: income.id, newValue: { title, amount, source } })
 
   return NextResponse.json({ income }, { status: 201 })
 }
