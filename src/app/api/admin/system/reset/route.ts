@@ -41,6 +41,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: 'รีเซ็ตระบบการเงินทั้งหมดเรียบร้อยแล้ว' })
     }
 
+    if (action === 'reset_all_bindings') {
+      // 1. Clear line_user_id and verified status for all students in custom table
+      await adminClient.from('users').update({ 
+        line_user_id: null,
+        verified: false
+      }).eq('role', 'student')
+
+      // 2. Delete student users from Supabase Auth
+      try {
+        const { data: { users: authUsers } } = await adminClient.auth.admin.listUsers()
+        // Delete only student auth accounts (those ending with @treasury.local)
+        // Ensure we don't accidentally delete admins, though admins should also be careful
+        for (const authUser of authUsers) {
+          if (authUser.email?.endsWith('@treasury.local')) {
+            await adminClient.auth.admin.deleteUser(authUser.id)
+          }
+        }
+      } catch (err) {
+        console.error('Failed to delete auth users during bulk reset:', err)
+        // We still proceed even if auth deletion fails partially
+      }
+
+      return NextResponse.json({ success: true, message: 'ล้างข้อมูลการเข้าสู่ระบบของนักศึกษาทุกคนเรียบร้อยแล้ว' })
+    }
+
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
