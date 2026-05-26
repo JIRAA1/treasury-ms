@@ -8,8 +8,12 @@ export async function POST(request: NextRequest) {
   if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const adminClient = createAdminClient()
-  const { data: profile } = await adminClient.from('users').select('role').eq('id', authUser.id).single()
-  if (profile?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const { data: profile } = await adminClient
+    .from('users')
+    .select('role')
+    .or(`id.eq.${authUser.id},id.eq.${authUser.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${authUser.user_metadata?.student_id || authUser.email?.split('@')[0] || 'NONE'}`)
+    .maybeSingle()
+  if (profile?.role !== 'admin' && profile?.role !== 'treasurer') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { action } = await request.json()
 
