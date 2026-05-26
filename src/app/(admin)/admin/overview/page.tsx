@@ -60,7 +60,10 @@ export default async function AdminOverviewPage() {
       payment_uploaded: { type: 'uploaded', title: `อัปโหลดสลิปใหม่` },
       expense_created: { type: 'expense', title: `${actorName} เพิ่มค่าใช้จ่าย` },
       expense_approved: { type: 'approved', title: `${actorName} อนุมัติค่าใช้จ่าย` },
+      income_created: { type: 'uploaded', title: `${actorName} เพิ่มรายรับใหม่` },
+      income_approved: { type: 'approved', title: `${actorName} อนุมัติรายรับใหม่` },
       notification_sent: { type: 'notification', title: `${actorName} ส่งแจ้งเตือน` },
+
     }
     const mapped = actionMap[log.action] ?? { type: 'uploaded' as const, title: log.action }
     return {

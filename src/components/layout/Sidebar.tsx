@@ -16,6 +16,7 @@ import {
   Settings,
   ChevronLeft,
   MessageSquare,
+  TrendingUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { User } from '@/types'
@@ -40,6 +41,7 @@ const studentNav: NavItem[] = [
 const adminNav = (pendingCount: number): NavItem[] => [
   { label: 'ภาพรวมระบบ', href: '/admin/overview', icon: LayoutDashboard },
   { label: 'จัดการการชำระ', href: '/admin/payments', icon: CreditCard, badge: pendingCount > 0 ? pendingCount : undefined },
+  { label: 'รายรับ (แหล่งอื่น)', href: '/admin/incomes', icon: TrendingUp },
   { label: 'บัญชีรายจ่าย', href: '/admin/expenses', icon: Receipt },
   { label: 'ส่งข่าวสาร (Broadcast)', href: '/admin/broadcast', icon: MessageSquare },
   { label: 'รายชื่อนักศึกษา', href: '/admin/students', icon: Users },

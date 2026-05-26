@@ -31,6 +31,12 @@ export default async function TransparencyPage() {
     .select('amount, status, week')
     .eq('status', 'approved')
 
+  const { data: incomes } = await adminClient
+    .from('incomes')
+    .select('*')
+    .not('approved_by', 'is', null)
+    .order('created_at', { ascending: false })
+
   const { data: expenses } = await adminClient
     .from('expenses')
     .select('*')
@@ -47,7 +53,9 @@ export default async function TransparencyPage() {
     .select('*')
     .order('week', { ascending: true })
 
-  const totalIncome = payments?.reduce((s, p) => s + p.amount, 0) || 0
+  const totalStudentIncome = payments?.reduce((s, p) => s + p.amount, 0) || 0
+  const totalOtherIncome = incomes?.reduce((s, i) => s + i.amount, 0) || 0
+  const totalIncome = totalStudentIncome + totalOtherIncome
   const totalExpense = expenses?.reduce((s, e) => s + e.amount, 0) || 0
   const balance = totalIncome - totalExpense
 
@@ -98,8 +106,8 @@ export default async function TransparencyPage() {
         {/* Income by Cycle */}
         <div className="bg-background-secondary border border-border rounded-[2rem] overflow-hidden shadow-sm">
           <div className="px-6 py-4 border-b border-border bg-background-tertiary/50 flex justify-between items-center">
-            <h2 className="font-bold text-text-primary text-[15px]">รายละเอียดรายรับตามงวด</h2>
-            <div className="text-[12px] text-text-muted">รวม: {formatCurrency(totalIncome)}</div>
+            <h2 className="font-bold text-text-primary text-[15px]">รายรับจากนักศึกษา (ตามงวด)</h2>
+            <div className="text-[12px] text-text-muted">รวม: {formatCurrency(totalStudentIncome)}</div>
           </div>
           <div className="divide-y divide-border">
             {cycleData.map((c) => (
@@ -121,6 +129,34 @@ export default async function TransparencyPage() {
             ))}
             {cycleData.length === 0 && (
               <div className="p-12 text-center text-text-muted italic">ยังไม่มีข้อมูลรายรับ</div>
+            )}
+          </div>
+        </div>
+
+        {/* Other Incomes */}
+        <div className="bg-background-secondary border border-border rounded-[2rem] overflow-hidden shadow-sm">
+          <div className="px-6 py-4 border-b border-border bg-background-tertiary/50 flex justify-between items-center">
+            <h2 className="font-bold text-text-primary text-[15px]">รายรับอื่นๆ (เงินสนับสนุน/กิจกรรม)</h2>
+            <div className="text-[12px] text-text-muted">รวม: {formatCurrency(totalOtherIncome)}</div>
+          </div>
+          <div className="divide-y divide-border">
+            {incomes?.map((i) => (
+              <div key={i.id} className="px-6 py-5 hover:bg-background-tertiary/30 transition-colors">
+                <div className="flex justify-between items-start mb-1">
+                  <div>
+                    <div className="font-bold text-text-primary text-[14px]">{i.title}</div>
+                    <div className="text-[11px] text-text-muted uppercase tracking-wider font-medium mt-0.5">ที่มา: {i.source || 'ไม่ระบุ'}</div>
+                  </div>
+                  <div className="font-bold text-emerald-600 text-[14px]">+{formatCurrency(i.amount)}</div>
+                </div>
+                {i.description && <div className="text-[12.5px] text-text-muted mb-2 leading-relaxed">{i.description}</div>}
+                <div className="text-[11px] text-text-disabled font-medium">
+                  {new Date(i.created_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </div>
+              </div>
+            ))}
+            {incomes?.length === 0 && (
+              <div className="p-12 text-center text-text-muted italic">ยังไม่มีรายรับอื่นๆ</div>
             )}
           </div>
         </div>

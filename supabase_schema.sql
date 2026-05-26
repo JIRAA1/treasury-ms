@@ -60,6 +60,17 @@ CREATE TABLE expenses (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE incomes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  description TEXT,
+  amount NUMERIC(10,2) NOT NULL,
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  approved_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  source TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE audit_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   actor_id UUID REFERENCES users(id) ON DELETE SET NULL,
@@ -76,6 +87,7 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE week_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE incomes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- นโยบายสำหรับผู้ใช้ทั่วไป
@@ -98,6 +110,10 @@ CREATE POLICY "Admins manage all payments" ON payments FOR ALL USING (
 CREATE POLICY "Admins manage all expenses" ON expenses FOR ALL USING (
   (auth.jwt() ->> 'email')::text LIKE '%@treasury.local'
 );
+CREATE POLICY "Admins manage all incomes" ON incomes FOR ALL USING (
+  (auth.jwt() ->> 'email')::text LIKE '%@treasury.local'
+);
+CREATE POLICY "Everyone view all incomes" ON incomes FOR SELECT USING (true);
 
 -- 4. SAMPLE TEST DATA
 INSERT INTO week_settings (week, title, deadline, amount) VALUES
@@ -116,8 +132,10 @@ INSERT INTO users (student_id, fullname, role, verified) VALUES
 
 -- 5. FUNCTIONS
 CREATE OR REPLACE FUNCTION get_treasury_balance() RETURNS NUMERIC AS $$
-  SELECT COALESCE(SUM(CASE WHEN p.status = 'approved' THEN p.amount ELSE 0 END), 0) -
-         COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.approved_by IS NOT NULL), 0)
+  SELECT 
+    (COALESCE(SUM(CASE WHEN p.status = 'approved' THEN p.amount ELSE 0 END), 0) +
+     COALESCE((SELECT SUM(amount) FROM incomes WHERE approved_by IS NOT NULL), 0)) -
+    COALESCE((SELECT SUM(amount) FROM expenses WHERE approved_by IS NOT NULL), 0)
   FROM payments p
 $$ LANGUAGE SQL SECURITY DEFINER;
 
