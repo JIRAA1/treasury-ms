@@ -43,11 +43,16 @@ export async function POST(request: NextRequest) {
 
     let userId: string
     if (existingUser) {
-      await admin.from('users').update({ 
+      const { error: updateError } = await admin.from('users').update({ 
         line_user_id: lineUserId, 
         line_picture_url: linePictureUrl,
         verified: true 
       }).eq('id', existingUser.id)
+      
+      if (updateError) {
+        console.error('[OTP Verify Error] Update failed:', updateError)
+        throw updateError
+      }
       userId = existingUser.id
     } else {
       const { data: newUser, error: insertError } = await admin

@@ -20,6 +20,18 @@ export async function POST(request: NextRequest) {
   // Use admin client to bypass RLS
   const admin = createAdminClient()
 
+  // 0. Check if this LINE ID is already bound to another student
+  const { data: lineOwner } = await admin
+    .from('users')
+    .select('student_id')
+    .eq('line_user_id', lineUserId)
+    .neq('student_id', student_id)
+    .maybeSingle()
+    
+  if (lineOwner) {
+    return NextResponse.json({ error: `LINE บัญชีนี้ถูกผูกกับรหัสนักศึกษา ${lineOwner.student_id} แล้ว กรุณาแจ้งแอดมินเพื่อรีเซ็ต` }, { status: 409 })
+  }
+
   // 1. Check if student ID exists in our database
   const { data: userProfile, error: profileError } = await admin
     .from('users').select('id, line_user_id').eq('student_id', student_id).maybeSingle()
