@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import Topbar from '@/components/layout/Topbar'
 import KpiCard from '@/components/shared/KpiCard'
 import { formatCurrency } from '@/lib/utils'
-import { Search, Filter, Mail, Users, ChevronRight, Loader2, UserPlus, Download } from 'lucide-react'
+import { Search, Filter, Mail, Users, ChevronRight, Loader2, UserPlus, Download, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 import AddStudentModal from '@/components/admin/AddStudentModal'
 import { toast } from 'sonner'
@@ -14,6 +14,7 @@ interface Student {
   id: string
   fullname: string
   student_id: string
+  line_user_id: string | null
   weeksPaid: number
   weeksPending: number
 }
@@ -34,7 +35,7 @@ export default function AdminStudentsPage() {
       const tCycles = settings?.length || 0
       setTotalCycles(tCycles)
 
-      const { data: users } = await supabase.from('users').select('id, fullname, student_id').eq('role', 'student')
+      const { data: users } = await supabase.from('users').select('id, fullname, student_id, line_user_id').eq('role', 'student')
       const { data: payments } = await supabase.from('payments').select('user_id, status')
 
       const studentData = (users || []).map((u) => {
@@ -180,7 +181,18 @@ export default function AdminStudentsPage() {
                 ) : filtered.map((s) => (
                   <tr key={s.id} className="hover:bg-background-tertiary/30 transition-colors group relative">
                     <td className="px-6 py-4">
-                      <div className="font-bold text-text-primary">{s.fullname}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="font-bold text-text-primary">{s.fullname}</div>
+                        {s.line_user_id ? (
+                          <div className="w-3.5 h-3.5 bg-emerald-500 rounded-full flex items-center justify-center shadow-sm shadow-emerald-200" title="เชื่อมต่อ LINE แล้ว">
+                            <CheckCircle className="w-2.5 h-2.5 text-white" />
+                          </div>
+                        ) : (
+                          <div className="w-3.5 h-3.5 bg-background-muted rounded-full flex items-center justify-center border border-border" title="ยังไม่ได้เชื่อมต่อ LINE">
+                            <div className="w-1.5 h-1.5 bg-text-muted/20 rounded-full" />
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-text-secondary font-mono font-bold tracking-tighter">{s.student_id}</td>
                     <td className="px-6 py-4">
