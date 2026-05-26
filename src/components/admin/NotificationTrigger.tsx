@@ -30,7 +30,15 @@ export default function NotificationTrigger() {
           const data = await res.json()
           if (!res.ok) throw new Error(data.error || 'ส่งแจ้งเตือนไม่สำเร็จ')
 
-          toast.success(`ส่งแจ้งเตือนเรียบร้อยแล้ว: สำเร็จ ${data.sent} คน, ล้มเหลว ${data.failed} คน`)
+          if (data.sent === 0 && data.failed > 0) {
+            toast.error(`ส่งแจ้งเตือนไม่สำเร็จ: ล้มเหลวทั้งหมด ${data.failed} คน (โปรดตรวจสอบการเชื่อมต่อ LINE หรือโควตาข้อความ)`)
+          } else if (data.failed > 0) {
+            toast.warning(`ส่งแจ้งเตือนสำเร็จบางส่วน: สำเร็จ ${data.sent} คน, ล้มเหลว ${data.failed} คน`)
+          } else if (data.sent === 0 && data.failed === 0) {
+            toast.info('ไม่มีนักศึกษาที่ค้างชำระ หรือดำเนินการเสร็จสิ้นแล้ว')
+          } else {
+            toast.success(`ส่งแจ้งเตือนเรียบร้อยแล้ว: สำเร็จ ${data.sent} คน`)
+          }
           dialog.hide()
         } catch (error: any) {
           toast.error('เกิดข้อผิดพลาด: ' + error.message)

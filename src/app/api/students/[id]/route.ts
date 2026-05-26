@@ -11,7 +11,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!authUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const adminClient = createAdminClient()
-  const { data: actor } = await adminClient.from('users').select('role').or(`id.eq.${authUser.id},id.eq.${authUser.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${authUser.user_metadata?.student_id || authUser.email?.split('@')[0] || 'NONE'}`).maybeSingle()
+  const { data: actor } = await adminClient.from('users').select('id, role').or(`id.eq.${authUser.id},id.eq.${authUser.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${authUser.user_metadata?.student_id || authUser.email?.split('@')[0] || 'NONE'}`).maybeSingle()
   if (!actor || !['admin', 'treasurer'].includes(actor.role)) {
     return NextResponse.json({ error: 'Forbidden — admin/treasurer only' }, { status: 403 })
   }
@@ -58,7 +58,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     newValue[key] = updates[key]
   }
   await logAction({
-    actorId: authUser.id,
+    actorId: actor?.id || authUser.id,
     action: 'user_role_changed', // reuse closest action type
     targetId: id,
     oldValue,

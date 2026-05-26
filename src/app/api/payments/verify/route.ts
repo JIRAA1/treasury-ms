@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const adminClient = createAdminClient()
-  const { data: profile } = await createAdminClient().from('users').select('role').or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`).maybeSingle()
+  const { data: profile } = await createAdminClient().from('users').select('id, role').or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`).maybeSingle()
   if (!profile || !['admin', 'treasurer'].includes(profile.role))
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
     if (error) return NextResponse.json({ error: 'Update failed' }, { status: 500 })
 
     await logAction({
-      actorId: user.id,
+      actorId: profile?.id || user.id,
       action: action === 'approve' ? 'payment_approved' : 'payment_rejected',
       targetId: id,
       newValue: { status: finalStatus, slip_url: updateData.slip_url || null }

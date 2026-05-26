@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: profile } = await createAdminClient().from('users').select('role').or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`).maybeSingle()
+  const { data: profile } = await createAdminClient().from('users').select('id, role').or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`).maybeSingle()
   if (!['admin', 'treasurer'].includes(profile?.role ?? ''))
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
@@ -47,13 +47,13 @@ export async function POST(request: NextRequest) {
 
   const { data: expense, error } = await supabase
     .from('expenses')
-    .insert({ title, description: description || null, amount, created_by: user.id, receipt_url })
+    .insert({ title, description: description || null, amount, created_by: profile?.id, receipt_url })
     .select()
     .single()
 
   if (error) return NextResponse.json({ error: 'Failed to create expense' }, { status: 500 })
 
-  await logAction({ actorId: user.id, action: 'expense_created', targetId: expense.id, newValue: { title, amount, category } })
+  await logAction({ actorId: profile?.id || user.id, action: 'expense_created', targetId: expense.id, newValue: { title, amount, category } })
 
   return NextResponse.json({ expense }, { status: 201 })
 }

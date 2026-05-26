@@ -82,7 +82,22 @@ export default function BroadcastClient({ weekSettings }: { weekSettings: WeekSe
           const data = await res.json()
           if (!res.ok) throw new Error(data.error)
 
-          toast.success(`ส่งประกาศสำเร็จ! ถึงนักศึกษาทั้งหมด ${data.count} คน`)
+          const hasLineErrors = data.results?.errors && data.results.errors.length > 0
+          if (hasLineErrors) {
+            if (data.results.line > 0 || data.results.inApp > 0) {
+              toast.warning(`ส่งประกาศบางส่วนสำเร็จ (สำเร็จ: LINE ${data.results.line} คน, In-App ${data.results.inApp} คน | ล้มเหลว ${data.results.errors.length} รายการ)`)
+            } else {
+              toast.error(`ส่งประกาศไม่สำเร็จ: ${data.results.errors.join(', ')}`)
+            }
+          } else {
+            const lineSent = data.results?.line || 0
+            const inAppSent = data.results?.inApp || 0
+            if (lineSent === 0 && inAppSent === 0) {
+              toast.info(`ส่งประกาศแล้ว (ไม่มีเป้าหมายที่ตรงเงื่อนไข หรือผู้ใช้เชื่อม LINE)`)
+            } else {
+              toast.success(`ส่งประกาศสำเร็จ! (LINE: ${lineSent} คน, In-App: ${inAppSent} คน)`)
+            }
+          }
           setTitle('')
           setMessage('')
           dialog.hide()
