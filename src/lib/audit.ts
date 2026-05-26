@@ -8,6 +8,7 @@ type AuditAction =
   | 'expense_approved'
   | 'expense_deleted'
   | 'notification_sent'
+  | 'broadcast_sent'
   | 'student_binding_reset'
   | 'user_role_changed'
   | 'system_reset'

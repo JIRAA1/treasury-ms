@@ -156,7 +156,7 @@ export default function ClassmatesClient({ currentUserId, students, payments, we
                         key={student.id}
                         className={`transition-colors ${
                           isMe
-                            ? 'bg-brand/5 border-l-4 border-l-brand hover:bg-brand/8'
+                            ? 'bg-brand/5 border-l-4 border-l-brand hover:bg-brand/10'
                             : 'hover:bg-background-tertiary/30'
                         }`}
                       >

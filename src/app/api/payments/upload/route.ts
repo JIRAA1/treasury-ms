@@ -141,7 +141,6 @@ export async function POST(request: NextRequest) {
       trans_ref: null,
       slip_url: publicUrl,
       status: 'pending' as const,
-      verified_by_api: false,
     }
 
     const { data: payment, error: paymentError } = existing
@@ -153,11 +152,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to save payment record' }, { status: 500 })
     }
 
+    // Try to set verified_by_api flag (column may not exist if migration not run yet)
+    try {
+      await adminClient.from('payments').update({ verified_by_api: false }).eq('id', payment.id)
+    } catch (_) {
+      // Column not yet migrated — safe to ignore
+    }
+
     await logAction({ actorId: user.id, action: 'payment_uploaded', targetId: payment.id, newValue: { ...paymentData, note: 'quota_exceeded' } })
 
     return NextResponse.json({ 
       success: true, 
-      payment, 
+      payment: { ...payment, verified_by_api: false }, 
       ocr: null,
       quota_exceeded: true,
       message: 'ส่งสลิปสำเร็จ — เหรัญญิกจะตรวจสอบยอดเงินด้วยตนเองเนื่องจาก API หมด quota'
@@ -229,7 +235,6 @@ export async function POST(request: NextRequest) {
     trans_ref: ocrResult.trans_ref,
     slip_url: publicUrl,
     status: 'pending' as const,
-    verified_by_api: true,
   }
 
   const { data: payment, error: paymentError } = existing
@@ -239,6 +244,13 @@ export async function POST(request: NextRequest) {
   if (paymentError) {
     await adminClient.storage.from('slips').remove([filename])
     return NextResponse.json({ error: 'Failed to save payment record' }, { status: 500 })
+  }
+
+  // Try to set verified_by_api flag (column may not exist if migration not run yet)
+  try {
+    await adminClient.from('payments').update({ verified_by_api: true }).eq('id', payment.id)
+  } catch (_) {
+    // Column not yet migrated — safe to ignore
   }
 
   await logAction({ actorId: user.id, action: 'payment_uploaded', targetId: payment.id, newValue: paymentData })

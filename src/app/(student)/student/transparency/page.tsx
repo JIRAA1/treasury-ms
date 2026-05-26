@@ -1,17 +1,51 @@
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import Topbar from '@/components/layout/Topbar'
 import { formatCurrency } from '@/lib/utils'
-import { FileText, ShieldCheck, TrendingUp, Users } from 'lucide-react'
-import Link from 'next/link'
+import { FileText, ShieldCheck, TrendingUp } from 'lucide-react'
+
+// Force the page to always fetch fresh data
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export const metadata = { title: 'ความโปร่งใสทางการเงิน — TreasuryMS' }
 
 export default async function TransparencyPage() {
+  const supabase = await createClient()
+  const { data: { user: authUser } } = await supabase.auth.getUser()
+  if (!authUser) redirect('/login')
+
   const adminClient = createAdminClient()
 
-  const { data: payments } = await adminClient.from('payments').select('amount, status, week').eq('status', 'approved')
-  const { data: expenses } = await adminClient.from('expenses').select('*').not('approved_by', 'is', null).order('created_at', { ascending: false })
-  const { count: studentCount } = await adminClient.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student')
-  const { data: settings } = await adminClient.from('week_settings').select('*').order('week', { ascending: true })
+  const { data: profile } = await adminClient
+    .from('users')
+    .select('id')
+    .or(`id.eq.${authUser.id},student_id.eq.${authUser.user_metadata.student_id}`)
+    .maybeSingle()
+
+  if (!profile) redirect('/bind')
+
+  const { data: payments } = await adminClient
+    .from('payments')
+    .select('amount, status, week')
+    .eq('status', 'approved')
+
+  const { data: expenses } = await adminClient
+    .from('expenses')
+    .select('*')
+    .not('approved_by', 'is', null)
+    .order('created_at', { ascending: false })
+
+  const { count: studentCount } = await adminClient
+    .from('users')
+    .select('*', { count: 'exact', head: true })
+    .eq('role', 'student')
+
+  const { data: settings } = await adminClient
+    .from('week_settings')
+    .select('*')
+    .order('week', { ascending: true })
 
   const totalIncome = payments?.reduce((s, p) => s + p.amount, 0) || 0
   const totalExpense = expenses?.reduce((s, e) => s + e.amount, 0) || 0
@@ -28,23 +62,23 @@ export default async function TransparencyPage() {
   }) || []
 
   return (
-    <div className="min-h-screen bg-background py-12 px-4">
-      <div className="max-w-3xl mx-auto space-y-8">
-        {/* Header */}
-        <div className="text-center space-y-2">
+    <div>
+      <Topbar title="ความโปร่งใส" subtitle="รายงานการเงินสาขา — ข้อมูล Real-time" />
+
+      <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-8 pb-12">
+        {/* Badge */}
+        <div className="flex items-center gap-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-[12px] font-bold border border-emerald-100">
             <ShieldCheck className="w-3.5 h-3.5" />
             ระบบตรวจสอบความโปร่งใส
           </div>
-          <h1 className="text-[28px] font-bold text-text-primary tracking-tight">รายงานการเงินสาขา</h1>
-          <p className="text-text-muted text-[14px]">ข้อมูลอัปเดตแบบ Real-time เพื่อความโปร่งใสของสมาชิกทุกคน</p>
         </div>
 
         {/* Summary Card */}
-        <div className="bg-text-primary text-white rounded-2xl p-8 shadow-xl shadow-text-primary/10 relative overflow-hidden">
-          <div className="relative z-10">
+        <div className="relative group overflow-hidden rounded-[2rem] bg-text-primary shadow-2xl shadow-black/10">
+          <div className="relative z-10 bg-text-primary m-[1px] rounded-[1.9rem] p-6 md:p-10">
             <div className="text-white/70 text-[13px] font-medium mb-1">ยอดเงินคงเหลือในกองกลาง</div>
-            <div className="text-[42px] font-bold tracking-tight leading-none mb-6">
+            <div className="text-[42px] font-bold tracking-tight leading-none mb-6 text-white">
               {formatCurrency(balance)}
             </div>
             <div className="grid grid-cols-2 gap-8 border-t border-white/10 pt-6">
@@ -62,7 +96,7 @@ export default async function TransparencyPage() {
         </div>
 
         {/* Income by Cycle */}
-        <div className="bg-background-secondary border border-border rounded-2xl overflow-hidden shadow-sm">
+        <div className="bg-background-secondary border border-border rounded-[2rem] overflow-hidden shadow-sm">
           <div className="px-6 py-4 border-b border-border bg-background-tertiary/50 flex justify-between items-center">
             <h2 className="font-bold text-text-primary text-[15px]">รายละเอียดรายรับตามงวด</h2>
             <div className="text-[12px] text-text-muted">รวม: {formatCurrency(totalIncome)}</div>
@@ -77,20 +111,22 @@ export default async function TransparencyPage() {
                 <div className="text-right">
                   <div className="text-[14px] font-bold text-text-primary">{formatCurrency(c.collected)}</div>
                   <div className="w-24 h-1 bg-border rounded-full mt-1.5 overflow-hidden">
-                    <div 
-                      className="h-full bg-emerald-500 transition-all" 
+                    <div
+                      className="h-full bg-emerald-500 transition-all"
                       style={{ width: `${(c.paidCount / (studentCount || 1)) * 100}%` }}
                     />
                   </div>
                 </div>
               </div>
             ))}
-            {cycleData.length === 0 && <div className="p-12 text-center text-text-muted italic">ยังไม่มีข้อมูลรายรับ</div>}
+            {cycleData.length === 0 && (
+              <div className="p-12 text-center text-text-muted italic">ยังไม่มีข้อมูลรายรับ</div>
+            )}
           </div>
         </div>
 
         {/* Expenses List */}
-        <div className="bg-background-secondary border border-border rounded-2xl overflow-hidden shadow-sm">
+        <div className="bg-background-secondary border border-border rounded-[2rem] overflow-hidden shadow-sm">
           <div className="px-6 py-4 border-b border-border bg-background-tertiary/50 flex justify-between items-center">
             <h2 className="font-bold text-text-primary text-[15px]">รายการค่าใช้จ่าย</h2>
             <div className="text-[12px] text-text-muted">รวม: {formatCurrency(totalExpense)}</div>
@@ -113,19 +149,17 @@ export default async function TransparencyPage() {
                 </div>
               </div>
             ))}
-            {expenses?.length === 0 && <div className="p-12 text-center text-text-muted italic">ยังไม่มีรายการค่าใช้จ่าย</div>}
+            {expenses?.length === 0 && (
+              <div className="p-12 text-center text-text-muted italic">ยังไม่มีรายการค่าใช้จ่าย</div>
+            )}
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="text-center pt-8 pb-12 space-y-4">
-          <p className="text-[12.5px] text-text-muted text-center leading-relaxed">
+        <div className="text-center pt-4 pb-4">
+          <p className="text-[12.5px] text-text-muted leading-relaxed">
             ระบบจัดทำขึ้นเพื่อความโปร่งใสในพรรคนักศึกษา <br />
             หากมีข้อสงสัยประการใด กรุณาติดต่อเหรัญญิกสาขา
           </p>
-          <div className="flex justify-center gap-4">
-            <Link href="/login" className="text-brand font-bold text-[13px] hover:underline">เข้าสู่ระบบสมาชิก</Link>
-          </div>
         </div>
       </div>
     </div>
