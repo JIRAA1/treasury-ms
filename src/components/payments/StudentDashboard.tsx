@@ -9,11 +9,11 @@ import StatusPill from '@/components/payments/StatusPill'
 import ExpenseRow from '@/components/expenses/ExpenseRow'
 import EmptyState from '@/components/shared/EmptyState'
 import QrModal from '@/components/payments/QrModal'
-import { formatCurrency, formatDate } from '@/lib/utils'
-import { FileText, Upload, ArrowRight, AlertCircle, Clock, QrCode, Sparkles, Lock, Calendar } from 'lucide-react'
+import { formatCurrency, formatDate, getTierConfig } from '@/lib/utils'
+import { FileText, Upload, ArrowRight, AlertCircle, Clock, QrCode, Sparkles, Lock, Calendar, CreditCard } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import type { WeekStatus } from '@/types'
+import type { WeekStatus, PaymentCredit } from '@/types'
 
 function getWindowStatus(w: WeekStatus) {
   const now = new Date()
@@ -31,13 +31,15 @@ export default function StudentDashboard({
   payments, 
   weekSettings, 
   expenses,
-  promptPayConfig 
+  promptPayConfig,
+  pendingCredits = [],
 }: { 
   profile: any, 
   payments: any[], 
   weekSettings: any[], 
   expenses: any[],
-  promptPayConfig: { promptpay_id: string, promptpay_name: string }
+  promptPayConfig: { promptpay_id: string, promptpay_name: string },
+  pendingCredits?: PaymentCredit[],
 }) {
   const [isQrModalOpen, setIsQrModalOpen] = useState(false)
 
@@ -111,6 +113,20 @@ export default function StudentDashboard({
                 <div className="flex-1 space-y-3">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted bg-background-muted px-2.5 py-1 rounded-lg border border-border">งวดปัจจุบัน</span>
+                    {/* Tier Badge */}
+                    {(() => {
+                      const tierCfg = getTierConfig(profile?.tier ?? 'B')
+                      return (
+                        <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg border ${tierCfg.color} ${tierCfg.bg} ${tierCfg.border}`}>
+                          Tier {profile?.tier ?? 'B'} · ฿{tierCfg.amount}/สัปดาห์
+                        </span>
+                      )
+                    })()}
+                    {profile?.tier === 'C' && (
+                      <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 px-2.5 py-1 rounded-lg font-bold">
+                        ลดหย่อนชั่วคราว
+                      </span>
+                    )}
                     {isOverdue && currentWeekStatus.status !== 'paid' && (
                       <span className="flex items-center gap-1 text-[10px] bg-red-50 text-red-600 px-2.5 py-1 rounded-lg border border-red-100 font-bold uppercase">
                         <AlertCircle className="w-3 h-3" />
@@ -197,6 +213,33 @@ export default function StudentDashboard({
                 </div>
               </div>
             </div>
+
+            {/* Credit Debt Banner */}
+            {pendingCredits.length > 0 && (
+              <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+                <CreditCard className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-black text-amber-800 mb-0.5">
+                    คุณมียอดค้างจ่าย {pendingCredits.length} รายการ
+                  </div>
+                  <div className="text-[11.5px] text-amber-700 space-y-0.5">
+                    {pendingCredits.map((c) => (
+                      <div key={c.id}>
+                        ฿{c.amount.toLocaleString()} — สัปดาห์ที่ {c.week}
+                        {(c.week_info as { title?: string } | undefined)?.title ? ` (${(c.week_info as { title?: string }).title})` : ''}
+                        {c.note ? ` · ${c.note}` : ''}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex-shrink-0 text-right">
+                  <div className="text-[18px] font-black text-amber-800">
+                    ฿{pendingCredits.reduce((s, c) => s + c.amount, 0).toLocaleString()}
+                  </div>
+                  <Link href="/student/history" className="text-[10.5px] text-amber-600 hover:underline font-bold">ดูประวัติ →</Link>
+                </div>
+              </div>
+            )}
 
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">

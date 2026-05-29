@@ -38,11 +38,12 @@ const studentNav: NavItem[] = [
   { label: 'ความโปร่งใส', href: '/student/transparency', icon: Eye },
 ]
 
-const adminNav = (pendingCount: number): NavItem[] => [
+const adminNav = (pendingCount: number, pendingCredits = 0): NavItem[] => [
   { label: 'ภาพรวมระบบ', href: '/admin/overview', icon: LayoutDashboard },
   { label: 'จัดการการชำระ', href: '/admin/payments', icon: CreditCard, badge: pendingCount > 0 ? pendingCount : undefined },
   { label: 'รายรับ (แหล่งอื่น)', href: '/admin/incomes', icon: TrendingUp },
   { label: 'บัญชีรายจ่าย', href: '/admin/expenses', icon: Receipt },
+  { label: 'บันทึก Credit', href: '/admin/credits', icon: Clock, badge: pendingCredits > 0 ? pendingCredits : undefined },
   { label: 'ส่งข่าวสาร (Broadcast)', href: '/admin/broadcast', icon: MessageSquare },
   { label: 'รายชื่อนักศึกษา', href: '/admin/students', icon: Users },
   { label: 'รายงานการเงิน', href: '/admin/reports', icon: BarChart3 },
@@ -54,11 +55,13 @@ export default function Sidebar({
   role, 
   user, 
   pendingCount = 0, 
+  pendingCredits = 0,
   hasUnpaidWeek = false 
 }: { 
   role: string, 
   user: User | null, 
   pendingCount: number, 
+  pendingCredits?: number,
   hasUnpaidWeek: boolean 
 }) {
   const pathname = usePathname()
@@ -66,7 +69,7 @@ export default function Sidebar({
   const isAdmin = role === 'admin' || role === 'treasurer'
   
   const isViewingAdmin = pathname.startsWith('/admin')
-  const navItems = isViewingAdmin ? adminNav(pendingCount) : studentNav
+  const navItems = isViewingAdmin ? adminNav(pendingCount, pendingCredits) : studentNav
 
   const initials = user?.fullname
     ? user.fullname.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)

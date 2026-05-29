@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 type AuditAction =
   | 'payment_uploaded'
@@ -16,15 +16,40 @@ type AuditAction =
   | 'user_role_changed'
   | 'system_reset'
   | 'clear_payments'
+  | 'tier_changed'
+  | 'credit_created'
+  | 'credit_repaid'
+  | 'credit_forgiven'
 
-export async function logAction(params: {
+interface LogParams {
   actorId: string
   action: AuditAction
   targetId?: string
   oldValue?: Record<string, unknown>
   newValue?: Record<string, unknown>
-}) {
-  const supabase = await createClient()
+}
+
+export async function logAction(supabase: SupabaseClient, params: LogParams): Promise<void>
+export async function logAction(params: LogParams): Promise<void>
+export async function logAction(
+  supabaseOrParams: SupabaseClient | LogParams,
+  params?: LogParams
+): Promise<void> {
+  if (params !== undefined) {
+    // Called as logAction(supabase, params)
+    await _logAction(supabaseOrParams as SupabaseClient, params)
+  } else {
+    // Called as logAction(params) — legacy, creates own client
+    const { createClient } = await import('@/lib/supabase/server')
+    const supabase = await createClient()
+    await _logAction(supabase, supabaseOrParams as LogParams)
+  }
+}
+
+async function _logAction(
+  supabase: SupabaseClient,
+  params: LogParams
+) {
   await supabase.from('audit_logs').insert({
     actor_id: params.actorId,
     action: params.action,

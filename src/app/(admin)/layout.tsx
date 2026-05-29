@@ -28,8 +28,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     .select('*', { count: 'exact', head: true })
     .eq('status', 'pending')
 
+  const { count: pendingCreditsCount } = await admin
+    .from('payment_credits')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'pending')
+
   return (
-    <AppShell role={profile.role as 'treasurer' | 'admin'} user={profile as User} pendingCount={pendingCount ?? 0}>
+    <AppShell role={profile.role as 'treasurer' | 'admin'} user={profile as User} pendingCount={pendingCount ?? 0} pendingCredits={pendingCreditsCount ?? 0}>
       {children}
     </AppShell>
   )

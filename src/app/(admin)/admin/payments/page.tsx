@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Topbar from '@/components/layout/Topbar'
 import StatusPill from '@/components/payments/StatusPill'
-import { formatCurrency, formatDate, getWeekLabel } from '@/lib/utils'
+import { formatCurrency, formatDate, getWeekLabel, getTierConfig } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { th } from 'date-fns/locale'
 import { Search, ExternalLink, CheckCircle, XCircle, AlertTriangle } from 'lucide-react'
@@ -18,7 +18,7 @@ interface Payment {
   status: 'pending' | 'approved' | 'rejected'
   created_at: string
   verified_by_api?: boolean | null
-  user: { fullname: string; student_id: string } | null
+  user: { fullname: string; student_id: string; tier?: string } | null
 }
 
 export default function AdminPaymentsPage() {
@@ -133,6 +133,14 @@ export default function AdminPaymentsPage() {
                         {p.user?.fullname?.[0] ?? 'U'}
                       </div>
                       <span className="font-medium text-text-primary truncate max-w-[120px]">{p.user?.fullname}</span>
+                      {p.user?.tier && (() => {
+                        const cfg = getTierConfig(p.user!.tier as 'A' | 'B' | 'C')
+                        return (
+                          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${cfg.color} ${cfg.bg} ${cfg.border}`}>
+                            {p.user!.tier}
+                          </span>
+                        )
+                      })()}
                     </div>
                   </td>
                   <td className="px-4 py-3 text-text-muted">{p.user?.student_id}</td>

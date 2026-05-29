@@ -6,7 +6,7 @@ import { formatCurrency, formatDate, getWeekLabel } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { th } from 'date-fns/locale'
 import Link from 'next/link'
-import { Bell, Plus, Download } from 'lucide-react'
+import { Plus, Download } from 'lucide-react'
 import type { Activity } from '@/components/shared/ActivityFeed'
 import NotificationTrigger from '@/components/admin/NotificationTrigger'
 import QuickApproveButton from '@/components/admin/QuickApproveButton'
@@ -23,6 +23,9 @@ export default async function AdminOverviewPage() {
     { data: auditLogs },
     { data: monthExpenses },
     { count: studentCount },
+    { data: users },
+    { data: pendingCredits },
+    { data: sysSettings },
   ] = await Promise.all([
     supabase.from('payments').select('*, user:user_id(fullname, student_id)').eq('status', 'pending').order('created_at').limit(8),
     supabase.rpc('get_treasury_balance'),
@@ -31,7 +34,21 @@ export default async function AdminOverviewPage() {
     supabase.from('expenses').select('amount').not('approved_by', 'is', null)
       .gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
     supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student'),
+    supabase.from('users').select('tier').eq('role', 'student'),
+    supabase.from('payment_credits').select('amount').eq('status', 'pending'),
+    supabase.from('system_settings').select('key, value').in('key', ['reserve_fund_monthly_target', 'tier_c_max_quota']),
   ])
+
+  // Tier breakdown
+  const tierBreakdown = { A: 0, B: 0, C: 0 }
+  for (const u of users ?? []) {
+    if (u.tier === 'A') tierBreakdown.A++
+    else if (u.tier === 'C') tierBreakdown.C++
+    else tierBreakdown.B++
+  }
+  const reserveTarget = parseInt(sysSettings?.find((s: { key: string; value: string }) => s.key === 'reserve_fund_monthly_target')?.value ?? '200', 10)
+  const creditDebtTotal = (pendingCredits ?? []).reduce((s: number, c: { amount: number }) => s + c.amount, 0)
+  const pendingCreditsCount = (pendingCredits ?? []).length
 
   // Weekly chart data (last 5 weeks) — dynamic from week_settings
   const { data: latestWeekSetting } = await supabase
@@ -63,7 +80,10 @@ export default async function AdminOverviewPage() {
       income_created: { type: 'uploaded', title: `${actorName} เพิ่มรายรับใหม่` },
       income_approved: { type: 'approved', title: `${actorName} อนุมัติรายรับใหม่` },
       notification_sent: { type: 'notification', title: `${actorName} ส่งแจ้งเตือน` },
-
+      tier_changed: { type: 'uploaded', title: `${actorName} เปลี่ยน Tier นักศึกษา` },
+      credit_created: { type: 'expense', title: `${actorName} บันทึก Credit ค้างจ่าย` },
+      credit_repaid: { type: 'approved', title: `${actorName} บันทึก Credit จ่ายคืน` },
+      credit_forgiven: { type: 'approved', title: `${actorName} ยกให้ Credit` },
     }
     const mapped = actionMap[log.action] ?? { type: 'uploaded' as const, title: log.action }
     return {
@@ -93,7 +113,7 @@ export default async function AdminOverviewPage() {
       />
 
       <div className="p-6 space-y-6">
-        {/* KPI Grid */}
+        {/* KPI Grid — Row 1 */}
         <div className="grid grid-cols-4 gap-4">
           <KpiCard label="ยอดคงเหลือ" value={formatCurrency(balance ?? 0)} sub="คำนวณจากรายรับ - รายจ่าย" />
           <KpiCard
@@ -104,6 +124,55 @@ export default async function AdminOverviewPage() {
           />
           <KpiCard label="ค่าใช้จ่ายเดือนนี้" value={formatCurrency(monthlyExpenseTotal)} sub="รายจ่ายที่อนุมัติแล้ว" />
           <KpiCard label="จำนวนนักศึกษา" value={studentCount ?? 0} sub="ทั้งหมดในระบบ" />
+        </div>
+
+        {/* KPI Grid — Row 2: Tier + Credit + Reserve */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Tier Distribution */}
+          <div className="bg-background-secondary border border-border rounded-xl p-5">
+            <div className="text-[11px] uppercase tracking-wide text-text-muted mb-3">สัดส่วน Tier นักศึกษา</div>
+            <div className="flex items-end gap-2 mb-3">
+              {[
+                { label: 'A', count: tierBreakdown.A, color: 'bg-emerald-400', text: 'text-emerald-700' },
+                { label: 'B', count: tierBreakdown.B, color: 'bg-slate-400', text: 'text-slate-600' },
+                { label: 'C', count: tierBreakdown.C, color: 'bg-amber-400', text: 'text-amber-700' },
+              ].map((t) => (
+                <div key={t.label} className="flex-1 flex flex-col items-center gap-1">
+                  <span className={`text-[11px] font-black ${t.text}`}>{t.count}</span>
+                  <div
+                    className={`w-full rounded-t-sm ${t.color} transition-all`}
+                    style={{ height: `${Math.max((t.count / Math.max(studentCount ?? 1, 1)) * 48, 4)}px` }}
+                  />
+                  <span className={`text-[10px] font-black ${t.text}`}>{t.label}</span>
+                </div>
+              ))}
+            </div>
+            <Link href="/admin/students" className="text-[11px] text-brand hover:underline">ดูรายชื่อ →</Link>
+          </div>
+
+          {/* Credit Debt */}
+          <div className={`border rounded-xl p-5 ${pendingCreditsCount > 0 ? 'bg-amber-50 border-amber-200' : 'bg-background-secondary border-border'}`}>
+            <div className="text-[11px] uppercase tracking-wide text-text-muted mb-1">ยอด Credit ค้างจ่าย</div>
+            <div className={`text-[26px] font-bold tracking-tight ${pendingCreditsCount > 0 ? 'text-amber-700' : 'text-text-primary'}`}>
+              {formatCurrency(creditDebtTotal)}
+            </div>
+            <div className="text-[11px] text-text-muted mt-1">
+              {pendingCreditsCount > 0
+                ? `${pendingCreditsCount} รายการค้างจ่าย`
+                : 'ไม่มียอดค้าง ✓'}
+            </div>
+            <Link href="/admin/credits" className="text-[11px] text-brand hover:underline mt-2 inline-block">จัดการ Credit →</Link>
+          </div>
+
+          {/* Reserve Fund placeholder */}
+          <div className="bg-background-secondary border border-border rounded-xl p-5">
+            <div className="text-[11px] uppercase tracking-wide text-text-muted mb-1">กองทุนสำรองเป้าหมาย</div>
+            <div className="text-[26px] font-bold text-text-primary tracking-tight">
+              ฿{reserveTarget.toLocaleString()}
+            </div>
+            <div className="text-[11px] text-text-muted mt-1">บันทึกผ่านรายรับประเภทพิเศษ</div>
+            <Link href="/admin/incomes" className="text-[11px] text-brand hover:underline mt-2 inline-block">บันทึกกองทุน →</Link>
+          </div>
         </div>
 
         {/* Middle Section */}

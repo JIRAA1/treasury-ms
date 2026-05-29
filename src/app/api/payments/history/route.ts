@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 
   let query = supabase
     .from('payments')
-    .select('*, user:user_id(fullname, student_id)', { count: 'exact' })
+    .select('*, user:user_id(fullname, student_id, tier)', { count: 'exact' })
     .order('created_at', { ascending: false })
 
   // Students only see their own; admins see all

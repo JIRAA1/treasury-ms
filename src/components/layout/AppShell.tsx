@@ -12,10 +12,11 @@ interface AppShellProps {
   role: 'student' | 'treasurer' | 'admin'
   user: User | null | undefined
   pendingCount?: number
+  pendingCredits?: number
   hasUnpaidWeek?: boolean
 }
 
-export default function AppShell({ children, role, user = null, pendingCount = 0, hasUnpaidWeek = false }: AppShellProps) {
+export default function AppShell({ children, role, user = null, pendingCount = 0, pendingCredits = 0, hasUnpaidWeek = false }: AppShellProps) {
   const { isSidebarOpen, closeSidebar } = useUIStore()
   const pathname = usePathname()
 
@@ -39,7 +40,7 @@ export default function AppShell({ children, role, user = null, pendingCount = 0
         "fixed inset-y-0 left-0 z-40 w-[240px] transform transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0",
         isSidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        <Sidebar role={role} user={user} pendingCount={pendingCount} hasUnpaidWeek={hasUnpaidWeek} />
+        <Sidebar role={role} user={user} pendingCount={pendingCount} pendingCredits={pendingCredits} hasUnpaidWeek={hasUnpaidWeek} />
       </div>
 
       {/* Main Content */}
