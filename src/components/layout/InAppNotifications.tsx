@@ -30,10 +30,18 @@ export default function InAppNotifications() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
+    const { data: profile } = await supabase
+      .from('users')
+      .select('id')
+      .or(`id.eq.${user.id},student_id.eq.${user.user_metadata?.student_id || 'NONE'}`)
+      .maybeSingle()
+
+    const targetUserId = profile?.id || user.id
+
     const { data } = await supabase
       .from('notifications')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', targetUserId)
       .order('created_at', { ascending: false })
       .limit(20)
 
@@ -49,7 +57,16 @@ export default function InAppNotifications() {
   const markAllAsRead = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    await supabase.from('notifications').update({ is_read: true }).eq('user_id', user.id).eq('is_read', false)
+
+    const { data: profile } = await supabase
+      .from('users')
+      .select('id')
+      .or(`id.eq.${user.id},student_id.eq.${user.user_metadata?.student_id || 'NONE'}`)
+      .maybeSingle()
+
+    const targetUserId = profile?.id || user.id
+
+    await supabase.from('notifications').update({ is_read: true }).eq('user_id', targetUserId).eq('is_read', false)
     setNotifications(notifications.map(n => ({ ...n, is_read: true })))
   }
 

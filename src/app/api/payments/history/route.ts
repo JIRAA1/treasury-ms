@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1'))
   const perPage = Math.min(100, parseInt(searchParams.get('per_page') ?? '20'))
 
-  const { data: profile } = await createAdminClient().from('users').select('role').or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`).maybeSingle()
+  const { data: profile } = await createAdminClient().from('users').select('id, role').or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`).maybeSingle()
   const isAdmin = profile?.role === 'admin' || profile?.role === 'treasurer'
 
   let query = supabase
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
   // Students only see their own; admins see all
   if (!isAdmin) {
-    query = query.eq('user_id', user.id)
+    query = query.eq('user_id', profile?.id || user.id)
   }
 
   if (status && status !== 'all') {

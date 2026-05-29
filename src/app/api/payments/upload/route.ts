@@ -30,7 +30,12 @@ export async function POST(request: NextRequest) {
 
   const adminClient = createAdminClient()
   
-  const { data: profile } = await createAdminClient().from('users').select('*').or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`).maybeSingle()
+  const { data: profile } = await adminClient.from('users').select('*').or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`).maybeSingle()
+  
+  if (!profile) {
+    return NextResponse.json({ error: 'ไม่พบข้อมูลบัญชีผู้ใช้งานในระบบ กรุณาลงทะเบียนหรือผูกบัญชีก่อนส่งสลิป' }, { status: 404 })
+  }
+
   const { data: admins } = await adminClient.from('users').select('fullname, line_user_id').in('role', ['admin', 'treasurer'])
 
   const notifyAdmins = async (title: string, details: string[], type: 'info' | 'warning' | 'error') => {
@@ -43,8 +48,8 @@ export async function POST(request: NextRequest) {
   }
 
   // 1. Quick Check — prevent double-submit
-  const { data: existing } = await supabase
-    .from('payments').select('id, status').eq('user_id', user.id).eq('week', week).maybeSingle()
+  const { data: existing } = await adminClient
+    .from('payments').select('id, status').eq('user_id', profile.id).eq('week', week).maybeSingle()
 
   if (existing && existing.status !== 'rejected') {
     return NextResponse.json({ error: 'คุณได้ส่งสลิปของสัปดาห์นี้ไปแล้ว' }, { status: 409 })
@@ -96,9 +101,9 @@ export async function POST(request: NextRequest) {
         .maybeSingle()
 
       if (dupPayment) {
-        const isOwnSlip = dupPayment.user_id === user.id
+        const isOwnSlip = dupPayment.user_id === profile.id
         await notifyAdmins('Duplicate Slip Blocked', [
-          `ผู้ส่ง: ${profile?.fullname || user.id}`,
+          `ผู้ส่ง: ${profile.fullname}`,
           `งวด: ${cycleTitle}`,
           `เหตุผล: สลิปนี้ซ้ำในระบบ (Ref: ${parsed.transRef})`
         ], 'warning')
@@ -129,13 +134,13 @@ export async function POST(request: NextRequest) {
 
     // Upload file first
     const ext = file.type.split('/')[1]
-    const filename = `${user.id}/week-${week}-${Date.now()}.${ext}`
+    const filename = `${profile.id}/week-${week}-${Date.now()}.${ext}`
     const { error: uploadError } = await adminClient.storage.from('slips').upload(filename, buffer, { contentType: file.type, upsert: true })
     if (uploadError) return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
     const { data: { publicUrl } } = supabase.storage.from('slips').getPublicUrl(filename)
 
     const paymentData = {
-      user_id: user.id,
+      user_id: profile.id,
       week,
       amount: 0,           // Unknown until manual review
       trans_ref: null,
@@ -144,8 +149,8 @@ export async function POST(request: NextRequest) {
     }
 
     const { data: payment, error: paymentError } = existing
-      ? await supabase.from('payments').update(paymentData).eq('id', existing.id).select().single()
-      : await supabase.from('payments').insert(paymentData).select().single()
+      ? await adminClient.from('payments').update(paymentData).eq('id', existing.id).select().single()
+      : await adminClient.from('payments').insert(paymentData).select().single()
 
     if (paymentError) {
       await adminClient.storage.from('slips').remove([filename])
@@ -159,7 +164,7 @@ export async function POST(request: NextRequest) {
       // Column not yet migrated — safe to ignore
     }
 
-    await logAction({ actorId: user.id, action: 'payment_uploaded', targetId: payment.id, newValue: { ...paymentData, note: 'quota_exceeded' } })
+    await logAction({ actorId: profile.id, action: 'payment_uploaded', targetId: payment.id, newValue: { ...paymentData, note: 'quota_exceeded' } })
 
     return NextResponse.json({ 
       success: true, 
@@ -194,7 +199,7 @@ export async function POST(request: NextRequest) {
 
   if (!isValidReceiver) {
     await notifyAdmins('Receiver Mismatch', [
-      `ผู้ส่ง: ${profile?.fullname || user.id}`,
+      `ผู้ส่ง: ${profile.fullname}`,
       `งวด: ${cycleTitle}`,
       `โอนไปที่: ${receiverName || 'ไม่ระบุ'}`,
       `ยอดเงิน: ฿${ocrResult.amount}`
@@ -210,7 +215,7 @@ export async function POST(request: NextRequest) {
   const { data: pendingCredit } = await adminClient
     .from('payment_credits')
     .select('id, amount')
-    .eq('user_id', user.id)
+    .eq('user_id', profile.id)
     .eq('week', week)
     .eq('status', 'pending')
     .maybeSingle()
@@ -222,7 +227,7 @@ export async function POST(request: NextRequest) {
     B: parseFloat(settings?.find((s: any) => s.key === 'tier_b_amount')?.value || '50'),
     C: parseFloat(settings?.find((s: any) => s.key === 'tier_c_amount')?.value || '30'),
   }
-  const tierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
+  const tierAmount = tierAmounts[profile.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
 
   // Determine if late fine is applicable (only if no credit and it's past deadline)
   const deadline = weekSetting?.deadline ? new Date(weekSetting.deadline) : null
@@ -233,7 +238,7 @@ export async function POST(request: NextRequest) {
   // 6. Amount Validation — server-side comparison AFTER OCR
   if (ocrResult.amount !== null && ocrResult.amount !== expectedStudentAmount) {
     await notifyAdmins('Amount Mismatch Blocked', [
-      `ผู้ส่ง: ${profile?.fullname || user.id}`,
+      `ผู้ส่ง: ${profile.fullname}`,
       `งวด: ${cycleTitle}`,
       `ยอดเงินในสลิป: ฿${ocrResult.amount}`,
       `ยอดเงินที่ต้องการ: ฿${expectedStudentAmount}`
@@ -247,7 +252,7 @@ export async function POST(request: NextRequest) {
 
   // 7. Storage & DB (Upload image only after all validations pass!)
   const ext = file.type.split('/')[1]
-  const filename = `${user.id}/week-${week}-${Date.now()}.${ext}`
+  const filename = `${profile.id}/week-${week}-${Date.now()}.${ext}`
   const { error: uploadError } = await adminClient.storage.from('slips').upload(filename, buffer, { contentType: file.type, upsert: true })
   if (uploadError) return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
   const { data: { publicUrl } } = supabase.storage.from('slips').getPublicUrl(filename)
@@ -255,7 +260,7 @@ export async function POST(request: NextRequest) {
   // If student has credit and uploaded a valid slip, auto-approve the payment and resolve credit
   const autoApprove = !!pendingCredit
   const paymentData = {
-    user_id: user.id,
+    user_id: profile.id,
     week,
     amount: ocrResult.amount || 0,
     trans_ref: ocrResult.trans_ref,
@@ -265,8 +270,8 @@ export async function POST(request: NextRequest) {
   }
 
   const { data: payment, error: paymentError } = existing
-    ? await supabase.from('payments').update(paymentData).eq('id', existing.id).select().single()
-    : await supabase.from('payments').insert(paymentData).select().single()
+    ? await adminClient.from('payments').update(paymentData).eq('id', existing.id).select().single()
+    : await adminClient.from('payments').insert(paymentData).select().single()
 
   if (paymentError) {
     await adminClient.storage.from('slips').remove([filename])
@@ -292,12 +297,12 @@ export async function POST(request: NextRequest) {
     // Column not yet migrated — safe to ignore
   }
 
-  await logAction({ actorId: user.id, action: 'payment_uploaded', targetId: payment.id, newValue: paymentData })
+  await logAction({ actorId: profile.id, action: 'payment_uploaded', targetId: payment.id, newValue: paymentData })
 
   // 8. Notify Success
   await notifyAdmins('New Slip Received', [
-    `จาก: ${profile?.fullname}`,
-    `รหัสนักศึกษา: ${profile?.student_id}`,
+    `จาก: ${profile.fullname}`,
+    `รหัสนักศึกษา: ${profile.student_id}`,
     `รายการ: ${cycleTitle}`,
     `ยอดเงิน: ฿${paymentData.amount.toLocaleString()}`
   ], 'info')

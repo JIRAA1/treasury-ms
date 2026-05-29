@@ -16,6 +16,8 @@ export async function POST(request: NextRequest) {
     }
 
     const adminClient = createAdminClient()
+    const { data: profile } = await adminClient.from('users').select('id').or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`).maybeSingle()
+
     const { data: existing, error } = await adminClient
       .from('payments')
       .select('id, week, status, user_id')
@@ -29,7 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (existing) {
-      const isOwnSlip = existing.user_id === user.id
+      const isOwnSlip = existing.user_id === (profile?.id || user.id)
       return NextResponse.json({
         exists: true,
         isOwnSlip,

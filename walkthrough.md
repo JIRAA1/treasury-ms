@@ -153,3 +153,25 @@ ALTER TABLE public.week_settings
   - **หน้าอัปโหลดสลิป**: แสดงยอดชำระของงวดนั้นๆ รวมค่าปรับตรงกัน
   - **API ยืนยันสลิป (OCR)**: ระบบตรวจสอบจำนวนเงินในสลิปจะเปรียบเทียบกับยอดพิเศษตาม Tier ที่รวมค่าปรับแล้วอย่างแม่นยำ สลิปต้องโอนตรงตามจำนวนดังกล่าวเท่านั้นจึงจะสามารถส่งผ่านและอนุมัติสำเร็จ
   - ผ่านการตรวจไทป์ TypeScript (`npx tsc --noEmit`) ปราศจาก Error 100% ครับ
+
+---
+
+## การแก้ไขปัญหาการอัปโหลดสลิปเนื่องจาก ID ไม่ตรงกันและ RLS (Bug Fix: Failed to save payment record) 🛠️
+
+### 1. สาเหตุของปัญหา
+- **Foreign Key Violation**: นักเรียนบางส่วนที่เข้าระบบผ่าน LINE Login มีค่า Auth User ID (`user.id` ของ Supabase) แตกต่างจาก Primary Key ในตารางข้อมูลนักเรียน (`profile.id` ในตาราง `users`) ส่งผลให้เกิด error `payments_user_id_fkey` เมื่อบันทึกด้วย `user.id`
+- **RLS Update Policy**: นโยบาย Row Level Security (RLS) ของตาราง `payments` บน Supabase client ปกติ ไม่ครอบคลุมคำสั่ง `update` ของนักเรียน ทำให้เมื่อผู้ใช้ต้องการอัปโหลดสลิปใหม่ทดแทนสลิปเดิมที่เคยโดนปฏิเสธ (Rejected) ระบบจะบล็อกคำสั่งแก้ไข
+
+### 2. รายละเอียดการแก้ไข
+1. **API อัปโหลดสลิป ([upload/route.ts](file:///c:/Users/ACER/treasury-ms/src/app/api/payments/upload/route.ts))**:
+   - เปลี่ยนการอ้างอิง `user.id` เป็น `profile.id` ในการระบุตัวตนผู้ส่งและใช้เช็คสลิปซ้ำ/ค้างชำระ
+   - เปลี่ยนคำสั่งบันทึก (`insert` / `update`) บนตาราง `payments` ไปรันผ่าน `adminClient` แทน เพื่อข้ามนโยบาย RLS (โดยยังมีความปลอดภัยสูงเพราะสิทธิ์และตัวตนได้รับการตรวจสอบบนฝั่ง Backend แล้ว)
+2. **API เช็คสลิปซ้ำ ([check-duplicate/route.ts](file:///c:/Users/ACER/treasury-ms/src/app/api/payments/check-duplicate/route.ts))**:
+   - ดึงโปรไฟล์เพื่อนำ `profile.id` ไปใช้ประเมินสถานะ `isOwnSlip` (สลิปของตัวเอง)
+3. **API ประวัติชำระเงิน ([history/route.ts](file:///c:/Users/ACER/treasury-ms/src/app/api/payments/history/route.ts))**:
+   - ดึง `profile.id` ของนักศึกษาที่ส่งคำขอมารวมในเงื่อนไขการค้นหา เพื่อให้นักเรียนที่ล็อกอินผ่าน LINE สามารถดึงประวัติการชำระเงินของตัวเองมาแสดงผลได้ถูกต้อง
+4. **หน้าจอนักเรียน ([upload/page.tsx](file:///c:/Users/ACER/treasury-ms/src/app/(student)/student/upload/page.tsx))**:
+   - ดึงข้อมูล profile ก่อนเพื่อแปลง Auth UID เป็น `profile.id` ก่อนที่จะส่งไปค้นหาประวัติการจ่ายเงินและเครดิตที่ค้างของงวดต่างๆ
+5. **ระบบแจ้งเตือนในหน้าเว็บ ([InAppNotifications.tsx](file:///c:/Users/ACER/treasury-ms/src/components/layout/InAppNotifications.tsx))**:
+   - ปรับการค้นหาประวัติการแจ้งเตือนโดยใช้ `profile.id` เพื่อให้การแจ้งเตือนเด้งขึ้นบนกระดิ่งตามโปรไฟล์ของตนเองได้อย่างถูกต้อง
+

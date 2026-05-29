@@ -54,19 +54,26 @@ export default function UploadPage() {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
-        // 1. Fetch settings, profile, and pending credits in parallel
+        // 1. Fetch user profile first to resolve DB user ID
+        const { data: profile } = await supabase
+          .from('users')
+          .select('id, tier')
+          .or(`id.eq.${user.id},student_id.eq.${user.user_metadata?.student_id || 'NONE'}`)
+          .maybeSingle()
+
+        const targetUserId = profile?.id || user.id
+
+        // 2. Fetch settings, payments, and pending credits in parallel
         const [
           { data: settings },
           { data: payments },
-          { data: profile },
           { data: sysSettings },
           { data: pendingCredits }
         ] = await Promise.all([
           supabase.from('week_settings').select('week, title, amount, deadline, payment_open_at, payment_close_at, late_fine_amount').order('week', { ascending: true }),
-          supabase.from('payments').select('week, status').eq('user_id', user.id),
-          supabase.from('users').select('tier').eq('id', user.id).maybeSingle(),
+          supabase.from('payments').select('week, status').eq('user_id', targetUserId),
           supabase.from('system_settings').select('*'),
-          supabase.from('payment_credits').select('week').eq('user_id', user.id).eq('status', 'pending')
+          supabase.from('payment_credits').select('week').eq('user_id', targetUserId).eq('status', 'pending')
         ])
 
         const tierAmounts = {
