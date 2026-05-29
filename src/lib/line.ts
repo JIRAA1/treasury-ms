@@ -241,7 +241,49 @@ export async function sendAdminAlert(to: string, title: string, details: string[
   })
 }
 
-export async function sendPaymentReminder(to: string, cycleTitle: string, amount: number, deadline: string) {
+export async function sendPaymentReminder(
+  to: string,
+  cycleTitle: string,
+  amount: number,
+  deadline: string,
+  openDate?: string,
+  closeDate?: string
+) {
+  const timeContents: object[] = []
+  if (openDate) {
+    timeContents.push({
+      type: 'box',
+      layout: 'baseline',
+      spacing: 'sm',
+      contents: [
+        { type: 'text', text: 'วันที่เปิดรับ', color: '#8e8e93', size: 'sm', flex: 2 },
+        { type: 'text', text: openDate, color: '#0f172a', size: 'sm', flex: 4, align: 'end', weight: 'bold' }
+      ]
+    })
+  }
+  if (closeDate) {
+    timeContents.push({
+      type: 'box',
+      layout: 'baseline',
+      spacing: 'sm',
+      contents: [
+        { type: 'text', text: 'วันที่ปิดรับ', color: '#991b1b', size: 'sm', flex: 2 },
+        { type: 'text', text: closeDate, color: '#991b1b', size: 'sm', flex: 4, align: 'end', weight: 'bold' }
+      ]
+    })
+  }
+  if (!openDate && !closeDate) {
+    timeContents.push({
+      type: 'box',
+      layout: 'baseline',
+      spacing: 'sm',
+      contents: [
+        { type: 'text', text: 'กำหนดส่ง', color: '#8e8e93', size: 'sm', flex: 2 },
+        { type: 'text', text: deadline, color: '#991b1b', size: 'sm', flex: 4, align: 'end', weight: 'bold' }
+      ]
+    })
+  }
+
   return await fetch(`${LINE_API}/push`, {
     method: 'POST',
     headers,
@@ -249,14 +291,20 @@ export async function sendPaymentReminder(to: string, cycleTitle: string, amount
       to,
       messages: [{
         type: 'flex',
-        altText: 'แจ้งเตือนยอดค้างชำระ',
+        altText: `แจ้งเตือน: ยอดค้างชำระ ${cycleTitle} ฿${amount.toLocaleString()}`,
         contents: {
           type: 'bubble',
+          styles: { header: { backgroundColor: '#b59410' } },
+          header: {
+            type: 'box',
+            layout: 'vertical',
+            contents: [{ type: 'text', text: 'PAYMENT REMINDER', color: '#ffffff', size: 'xs', weight: 'bold' }]
+          },
           body: {
             type: 'box',
             layout: 'vertical',
             contents: [
-              { type: 'text', text: 'งวดปัจจุบันกำหนดส่ง', weight: 'bold', color: '#b59410', size: 'sm' },
+              { type: 'text', text: 'แจ้งเตือนยอดค้างชำระ', weight: 'bold', color: '#b59410', size: 'sm' },
               { type: 'text', text: cycleTitle, weight: 'bold', size: 'xl', margin: 'md', color: '#0f172a' },
               {
                 type: 'box',
@@ -273,22 +321,14 @@ export async function sendPaymentReminder(to: string, cycleTitle: string, amount
                       { type: 'text', text: `฿${amount.toLocaleString()}`, color: '#0f172a', size: 'sm', flex: 4, align: 'end', weight: 'bold' }
                     ]
                   },
-                  {
-                    type: 'box',
-                    layout: 'baseline',
-                    spacing: 'sm',
-                    contents: [
-                      { type: 'text', text: 'กำหนดส่ง', color: '#8e8e93', size: 'sm', flex: 2 },
-                      { type: 'text', text: deadline, color: '#991b1b', size: 'sm', flex: 4, align: 'end', weight: 'bold' }
-                    ]
-                  }
+                  ...timeContents as any
                 ]
               },
               {
                 type: 'button',
                 action: { type: 'uri', label: 'ส่งสลิปหลักฐานการโอน', uri: `${process.env.NEXT_PUBLIC_APP_URL}/student/upload` },
                 style: 'primary',
-                color: '#0f172a',
+                color: '#b59410',
                 margin: 'xl',
                 height: 'sm'
               },
@@ -301,11 +341,18 @@ export async function sendPaymentReminder(to: string, cycleTitle: string, amount
   })
 }
 
-export async function sendBulkReminder(students: { lineUserId: string; cycleTitle: string; amount: number; deadline: string }[]): Promise<boolean[]> {
+export async function sendBulkReminder(students: { lineUserId: string; cycleTitle: string; amount: number; deadline: string; openDate?: string; closeDate?: string }[]): Promise<boolean[]> {
   const results: boolean[] = []
   for (const student of students) {
     try {
-      const res = await sendPaymentReminder(student.lineUserId, student.cycleTitle, student.amount, student.deadline)
+      const res = await sendPaymentReminder(
+        student.lineUserId,
+        student.cycleTitle,
+        student.amount,
+        student.deadline,
+        student.openDate,
+        student.closeDate
+      )
       if (!res.ok) {
         const err = await res.json()
         console.error(`[LINE Push Error] To: ${student.lineUserId}`, JSON.stringify(err))

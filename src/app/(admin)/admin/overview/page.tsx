@@ -115,7 +115,11 @@ export default async function AdminOverviewPage() {
       <div className="p-6 space-y-6">
         {/* KPI Grid — Row 1 */}
         <div className="grid grid-cols-4 gap-4">
-          <KpiCard label="ยอดคงเหลือ" value={formatCurrency(balance ?? 0)} sub="คำนวณจากรายรับ - รายจ่าย" />
+          <KpiCard 
+            label="ยอดคงเหลือ" 
+            value={formatCurrency((balance ?? 0) - reserveTarget)} 
+            sub={`หักเงินสำรอง ฿${reserveTarget.toLocaleString()} แล้ว (จากทั้งหมด ${formatCurrency(balance ?? 0)})`} 
+          />
           <KpiCard
             label="รอตรวจสอบ"
             value={pendingCount ?? 0}
@@ -151,7 +155,7 @@ export default async function AdminOverviewPage() {
           </div>
 
           {/* Credit Debt */}
-          <div className={`border rounded-xl p-5 ${pendingCreditsCount > 0 ? 'bg-amber-50 border-amber-200' : 'bg-background-secondary border-border'}`}>
+          <div className="bg-background-secondary border border-border rounded-xl p-5">
             <div className="text-[11px] uppercase tracking-wide text-text-muted mb-1">ยอด Credit ค้างจ่าย</div>
             <div className={`text-[26px] font-bold tracking-tight ${pendingCreditsCount > 0 ? 'text-amber-700' : 'text-text-primary'}`}>
               {formatCurrency(creditDebtTotal)}
@@ -161,17 +165,17 @@ export default async function AdminOverviewPage() {
                 ? `${pendingCreditsCount} รายการค้างจ่าย`
                 : 'ไม่มียอดค้าง ✓'}
             </div>
-            <Link href="/admin/credits" className="text-[11px] text-brand hover:underline mt-2 inline-block">จัดการ Credit →</Link>
+            <Link href="/admin/credits" className="text-[11px] text-brand hover:underline mt-2 inline-block font-bold">จัดการ Credit →</Link>
           </div>
 
-          {/* Reserve Fund placeholder */}
+          {/* Reserve Fund */}
           <div className="bg-background-secondary border border-border rounded-xl p-5">
-            <div className="text-[11px] uppercase tracking-wide text-text-muted mb-1">กองทุนสำรองเป้าหมาย</div>
+            <div className="text-[11px] uppercase tracking-wide text-text-muted mb-1">กองทุนสำรอง (สะสม)</div>
             <div className="text-[26px] font-bold text-text-primary tracking-tight">
               ฿{reserveTarget.toLocaleString()}
             </div>
-            <div className="text-[11px] text-text-muted mt-1">บันทึกผ่านรายรับประเภทพิเศษ</div>
-            <Link href="/admin/incomes" className="text-[11px] text-brand hover:underline mt-2 inline-block">บันทึกกองทุน →</Link>
+            <div className="text-[11px] text-text-muted mt-1">หักออกจากเงินกองกลางโดยตรง</div>
+            <Link href="/admin/settings" className="text-[11px] text-brand hover:underline mt-2 inline-block font-bold">ตั้งค่าเป้าหมาย →</Link>
           </div>
         </div>
 

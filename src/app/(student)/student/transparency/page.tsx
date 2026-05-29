@@ -48,16 +48,22 @@ export default async function TransparencyPage() {
     .select('*', { count: 'exact', head: true })
     .eq('role', 'student')
 
-  const { data: settings } = await adminClient
-    .from('week_settings')
-    .select('*')
-    .order('week', { ascending: true })
+  const [
+    { data: settings },
+    { data: sysSettings }
+  ] = await Promise.all([
+    adminClient.from('week_settings').select('*').order('week', { ascending: true }),
+    adminClient.from('system_settings').select('*')
+  ])
 
   const totalStudentIncome = payments?.reduce((s, p) => s + p.amount, 0) || 0
   const totalOtherIncome = incomes?.reduce((s, i) => s + i.amount, 0) || 0
   const totalIncome = totalStudentIncome + totalOtherIncome
   const totalExpense = expenses?.reduce((s, e) => s + e.amount, 0) || 0
   const balance = totalIncome - totalExpense
+
+  const reserveTarget = parseInt(sysSettings?.find((s: any) => s.key === 'reserve_fund_monthly_target')?.value ?? '200', 10)
+  const availableBalance = balance - reserveTarget
 
   const cycleData = settings?.map((s) => {
     const cyclePayments = payments?.filter((p) => p.week === s.week) || []
@@ -85,18 +91,22 @@ export default async function TransparencyPage() {
         {/* Summary Card */}
         <div className="relative group overflow-hidden rounded-[2rem] bg-text-primary shadow-2xl shadow-black/10">
           <div className="relative z-10 bg-text-primary m-[1px] rounded-[1.9rem] p-6 md:p-10">
-            <div className="text-white/70 text-[13px] font-medium mb-1">ยอดเงินคงเหลือในกองกลาง</div>
-            <div className="text-[42px] font-bold tracking-tight leading-none mb-6 text-white">
-              {formatCurrency(balance)}
+            <div className="text-white/70 text-[13px] font-medium mb-1 font-bold">ยอดเงินคงเหลือ (หักเงินสำรองแล้ว)</div>
+            <div className="text-[38px] md:text-[42px] font-bold tracking-tight leading-none mb-6 text-white">
+              {formatCurrency(availableBalance)}
             </div>
-            <div className="grid grid-cols-2 gap-8 border-t border-white/10 pt-6">
+            <div className="grid grid-cols-3 gap-4 border-t border-white/10 pt-6">
               <div>
-                <div className="text-white/50 text-[11px] uppercase tracking-wider font-bold mb-1">รายรับทั้งหมด</div>
-                <div className="text-[18px] font-bold text-emerald-400">+{formatCurrency(totalIncome)}</div>
+                <div className="text-white/50 text-[10px] uppercase tracking-wider font-bold mb-1">รายรับทั้งหมด</div>
+                <div className="text-[14px] md:text-[16px] font-bold text-emerald-400">+{formatCurrency(totalIncome)}</div>
               </div>
               <div>
-                <div className="text-white/50 text-[11px] uppercase tracking-wider font-bold mb-1">รายจ่ายทั้งหมด</div>
-                <div className="text-[18px] font-bold text-red-400">-{formatCurrency(totalExpense)}</div>
+                <div className="text-white/50 text-[10px] uppercase tracking-wider font-bold mb-1">รายจ่ายทั้งหมด</div>
+                <div className="text-[14px] md:text-[16px] font-bold text-red-400">-{formatCurrency(totalExpense)}</div>
+              </div>
+              <div>
+                <div className="text-white/50 text-[10px] uppercase tracking-wider font-bold mb-1">เงินสำรอง</div>
+                <div className="text-[14px] md:text-[16px] font-bold text-amber-400">{formatCurrency(reserveTarget)}</div>
               </div>
             </div>
           </div>

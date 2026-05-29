@@ -33,6 +33,7 @@ export default function StudentDashboard({
   expenses,
   promptPayConfig,
   pendingCredits = [],
+  tierAmounts,
 }: { 
   profile: any, 
   payments: any[], 
@@ -40,18 +41,22 @@ export default function StudentDashboard({
   expenses: any[],
   promptPayConfig: { promptpay_id: string, promptpay_name: string },
   pendingCredits?: PaymentCredit[],
+  tierAmounts: { A: number, B: number, C: number },
 }) {
   const [isQrModalOpen, setIsQrModalOpen] = useState(false)
 
   const weekStatuses: WeekStatus[] = (weekSettings || []).map((setting) => {
     const payment = payments?.find((p) => p.week === setting.week)
+    // ใช้ยอดตาม tier ของ student
+    const tierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
     return {
       week: setting.week,
       status: payment?.status === 'approved' ? 'paid'
              : payment?.status === 'pending' ? 'pending'
              : payment?.status === 'rejected' ? 'rejected'
              : 'unpaid',
-      amount: setting.amount || 100,
+      // ถ้า payment ที่ชำระไปแล้วมียอดจริง ให้ใช้ยอดนั้น (approved) มิฉะนั้นใช้ตาม tier
+      amount: payment?.status === 'approved' ? (payment?.amount ?? tierAmount) : tierAmount,
       payment,
       deadline: setting.deadline || null,
       title: setting.title,
@@ -116,9 +121,10 @@ export default function StudentDashboard({
                     {/* Tier Badge */}
                     {(() => {
                       const tierCfg = getTierConfig(profile?.tier ?? 'B')
+                      const amountVal = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierCfg.amount
                       return (
                         <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg border ${tierCfg.color} ${tierCfg.bg} ${tierCfg.border}`}>
-                          Tier {profile?.tier ?? 'B'} · ฿{tierCfg.amount}/สัปดาห์
+                          Tier {profile?.tier ?? 'B'} · ฿{amountVal}/สัปดาห์
                         </span>
                       )
                     })()}

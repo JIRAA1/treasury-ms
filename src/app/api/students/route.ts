@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const { data: settings } = await adminClient.from('week_settings').select('week')
   const totalCycles = settings?.length || 0
 
-  const { data: users } = await adminClient.from('users').select('id, fullname, student_id').eq('role', 'student')
+  const { data: users } = await adminClient.from('users').select('id, fullname, student_id, tier').eq('role', 'student')
   const { data: payments } = await adminClient.from('payments').select('user_id, status')
 
   const studentData = (users || []).map((u) => {

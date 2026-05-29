@@ -42,6 +42,12 @@ export default async function StudentDashboardPage() {
     promptpay_name: settings?.find((s: { key: string; value: string }) => s.key === 'promptpay_name')?.value || '',
   }
 
+  const tierAmounts = {
+    A: parseFloat(settings?.find((s: any) => s.key === 'tier_a_amount')?.value || '60'),
+    B: parseFloat(settings?.find((s: any) => s.key === 'tier_b_amount')?.value || '50'),
+    C: parseFloat(settings?.find((s: any) => s.key === 'tier_c_amount')?.value || '30'),
+  }
+
   return (
     <StudentDashboard
       profile={profile}
@@ -50,6 +56,7 @@ export default async function StudentDashboardPage() {
       expenses={expenses || []}
       promptPayConfig={promptPayConfig}
       pendingCredits={credits || []}
+      tierAmounts={tierAmounts}
     />
   )
 }

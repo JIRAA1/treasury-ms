@@ -7,10 +7,16 @@ import { logAction } from '@/lib/audit'
 // Query: ?status=pending|repaid|forgiven&user_id=xxx
 export async function GET(req: Request) {
   const supabase = await createClient()
+  const adminClient = createAdminClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: actor } = await supabase.from('users').select('id, role').eq('id', user.id).single()
+  // Use adminClient + or() to correctly resolve role regardless of how auth user maps to DB row
+  const { data: actor } = await adminClient
+    .from('users')
+    .select('id, role')
+    .or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`)
+    .maybeSingle()
   if (!actor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
@@ -19,7 +25,7 @@ export async function GET(req: Request) {
 
   const isAdmin = ['admin', 'treasurer'].includes(actor.role)
 
-  let query = supabase
+  let query = adminClient
     .from('payment_credits')
     .select(`
       *,
@@ -52,7 +58,12 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: actor } = await supabase.from('users').select('id, role').eq('id', user.id).single()
+  const adminClient = createAdminClient()
+  const { data: actor } = await adminClient
+    .from('users')
+    .select('id, role')
+    .or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`)
+    .maybeSingle()
   if (!actor || !['admin', 'treasurer'].includes(actor.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -72,11 +83,11 @@ export async function POST(req: Request) {
   const admin = createAdminClient()
 
   // Check week exists
-  const { data: weekData } = await supabase.from('week_settings').select('week').eq('week', week).single()
+  const { data: weekData } = await adminClient.from('week_settings').select('week').eq('week', week).single()
   if (!weekData) return NextResponse.json({ error: 'Week not found' }, { status: 404 })
 
   // Check student exists
-  const { data: student } = await supabase.from('users').select('id, fullname').eq('id', user_id).eq('role', 'student').single()
+  const { data: student } = await adminClient.from('users').select('id, fullname').eq('id', user_id).eq('role', 'student').single()
   if (!student) return NextResponse.json({ error: 'Student not found' }, { status: 404 })
 
   const { data: credit, error } = await admin

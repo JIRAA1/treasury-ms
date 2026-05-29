@@ -231,11 +231,12 @@ function AddCreditModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
 
   useEffect(() => {
     const load = async () => {
-      const [{ data: users }, { data: ws }] = await Promise.all([
-        supabase.from('users').select('id, fullname, student_id, tier').eq('role', 'student').order('fullname'),
+      const [resStudents, { data: ws }] = await Promise.all([
+        fetch('/api/students').then(r => r.json()),
         supabase.from('week_settings').select('week, title').order('week'),
       ])
-      setStudents(users ?? [])
+      const sortedStudents = (resStudents?.students ?? []).sort((a: any, b: any) => (a.fullname || '').localeCompare(b.fullname || ''))
+      setStudents(sortedStudents)
       setWeeks(ws ?? [])
     }
     load()

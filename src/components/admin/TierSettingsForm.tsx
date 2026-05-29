@@ -148,7 +148,7 @@ export default function TierSettingsForm({
           </div>
           <div className="flex items-start gap-2 p-4 bg-sky-50 border border-sky-200 rounded-xl flex-1 text-[12px] text-sky-800">
             <span className="mt-0.5 text-sky-500 font-black">ℹ</span>
-            <span>Admin บันทึกกองทุนสำรองผ่านหน้า <strong>รายรับ</strong> เป็น entry ประเภทพิเศษ ตัวเลขนี้ใช้เป็น reference เท่านั้น</span>
+            <span>ระบบจะหักยอดเงินกองทุนสำรองนี้ออกจากยอดเงินคงเหลือในคลัง (กองกลาง) โดยอัตโนมัติ โดยไม่ต้องสร้างรายการรายรับเพิ่มเติม</span>
           </div>
         </div>
       </div>

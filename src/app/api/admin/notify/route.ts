@@ -25,13 +25,22 @@ export async function POST(request: NextRequest) {
   let failed = 0
 
   if (body.type === 'reminder') {
-    // 1. Get all students
-    const { data: students, error: sError } = await adminClient
-      .from('users')
-      .select('id, fullname, student_id, line_user_id')
-      .eq('role', 'student') 
+    // 1. Get all students & system settings
+    const [{ data: students, error: sError }, { data: settings }] = await Promise.all([
+      adminClient
+        .from('users')
+        .select('id, fullname, student_id, line_user_id, tier')
+        .eq('role', 'student'),
+      adminClient.from('system_settings').select('*')
+    ])
     
     if (sError) throw sError
+
+    const tierAmounts = {
+      A: parseFloat(settings?.find((s: any) => s.key === 'tier_a_amount')?.value || '60'),
+      B: parseFloat(settings?.find((s: any) => s.key === 'tier_b_amount')?.value || '50'),
+      C: parseFloat(settings?.find((s: any) => s.key === 'tier_c_amount')?.value || '30'),
+    }
 
     // 2. Determine which cycle to target
     let week = body.week
@@ -108,12 +117,27 @@ export async function POST(request: NextRequest) {
     await adminClient.from('notifications').insert(notifs)
 
     const lineTargets = unpaidStudents.filter(s => s.line_user_id)
-    const results = await sendBulkReminder(lineTargets.map((s) => ({ 
-      lineUserId: s.line_user_id!, 
-      cycleTitle,
-      amount,
-      deadline
-    })))
+
+    // Format Thai dates for LINE Flex
+    const thaiDateStr = (isoStr: string | null) => {
+      if (!isoStr) return ''
+      return new Date(isoStr).toLocaleDateString('th-TH', {
+        day: 'numeric', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      })
+    }
+
+    const results = await sendBulkReminder(lineTargets.map((s) => {
+      const studentAmount = tierAmounts[s.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
+      return { 
+        lineUserId: s.line_user_id!, 
+        cycleTitle,
+        amount: studentAmount,
+        deadline,
+        openDate: cycleSetting.payment_open_at ? thaiDateStr(cycleSetting.payment_open_at) : undefined,
+        closeDate: cycleSetting.payment_close_at ? thaiDateStr(cycleSetting.payment_close_at) : undefined,
+      }
+    }))
     
     sent = results.filter(Boolean).length
     failed = results.filter((r) => !r).length

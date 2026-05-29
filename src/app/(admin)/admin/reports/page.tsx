@@ -11,17 +11,30 @@ export const metadata = { title: 'รายงาน — TreasuryMS' }
 export default async function AdminReportsPage() {
   const adminClient = createAdminClient()
 
-  const { data: students } = await adminClient.from('users').select('id, fullname, student_id').eq('role', 'student')
-  const { data: payments } = await adminClient.from('payments').select('*')
-  const { data: expenses } = await adminClient.from('expenses').select('*')
-  const { data: incomes } = await adminClient.from('incomes').select('*')
-  const { data: settings } = await adminClient.from('week_settings').select('*').order('week', { ascending: true })
+  const [
+    { data: students },
+    { data: payments },
+    { data: expenses },
+    { data: incomes },
+    { data: settings },
+    { data: sysSettings }
+  ] = await Promise.all([
+    adminClient.from('users').select('id, fullname, student_id').eq('role', 'student'),
+    adminClient.from('payments').select('*'),
+    adminClient.from('expenses').select('*'),
+    adminClient.from('incomes').select('*'),
+    adminClient.from('week_settings').select('*').order('week', { ascending: true }),
+    adminClient.from('system_settings').select('*')
+  ])
 
   const totalPayments = payments?.filter(p => p.status === 'approved').reduce((s, p) => s + p.amount, 0) || 0
   const totalOtherIncomes = incomes?.filter(i => i.approved_by).reduce((s, i) => s + i.amount, 0) || 0
   const totalIncome = totalPayments + totalOtherIncomes
   const totalExpense = expenses?.filter(e => e.approved_by).reduce((s, e) => s + e.amount, 0) || 0
   const balance = totalIncome - totalExpense
+
+  const reserveTarget = parseInt(sysSettings?.find((s: any) => s.key === 'reserve_fund_monthly_target')?.value ?? '200', 10)
+  const availableBalance = balance - reserveTarget
 
   const cycleData = settings?.map((s) => {
     const cyclePayments = payments?.filter(p => p.week === s.week && p.status === 'approved') || []
@@ -57,7 +70,12 @@ export default async function AdminReportsPage() {
         <div className="grid grid-cols-3 gap-4">
           <KpiCard label="รายรับทั้งหมด" value={formatCurrency(totalIncome)} sub={`จากนักเรียน: ${formatCurrency(totalPayments)} · แหล่งอื่น: ${formatCurrency(totalOtherIncomes)}`} subVariant="positive" />
           <KpiCard label="รายจ่ายทั้งหมด" value={formatCurrency(totalExpense)} sub="ยอดที่จ่ายออกจริง" subVariant="danger" />
-          <KpiCard label="ยอดคงเหลือ" value={formatCurrency(balance)} sub={balance >= 0 ? 'งบประมาณปัจจุบัน' : 'งบประมาณติดลบ'} subVariant={balance >= 0 ? 'positive' : 'danger'} />
+          <KpiCard 
+            label="ยอดคงเหลือ" 
+            value={formatCurrency(availableBalance)} 
+            sub={`หักเงินสำรอง ฿${reserveTarget.toLocaleString()} แล้ว (จากทั้งหมด ${formatCurrency(balance)})`} 
+            subVariant={availableBalance >= 0 ? 'positive' : 'danger'} 
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-6">

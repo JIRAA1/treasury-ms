@@ -12,7 +12,12 @@ export async function PATCH(req: Request, { params }: Params) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: actor } = await supabase.from('users').select('id, role').eq('id', user.id).single()
+  const adminClient = createAdminClient()
+  const { data: actor } = await adminClient
+    .from('users')
+    .select('id, role')
+    .or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`)
+    .maybeSingle()
   if (!actor || !['admin', 'treasurer'].includes(actor.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -26,7 +31,7 @@ export async function PATCH(req: Request, { params }: Params) {
   }
 
   // Fetch current credit
-  const { data: existing } = await supabase
+  const { data: existing } = await adminClient
     .from('payment_credits')
     .select('*, user:user_id(fullname, line_user_id)')
     .eq('id', id)
