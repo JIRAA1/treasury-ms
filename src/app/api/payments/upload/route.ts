@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
   const expectedName = nameSetting?.value || "ชานน ศ."
   const { data: weekSetting } = await adminClient
     .from('week_settings')
-    .select('title, amount, payment_open_at, payment_close_at')
+    .select('title, amount, deadline, payment_open_at, payment_close_at, late_fine_amount')
     .eq('week', week)
     .maybeSingle()
   const cycleTitle = weekSetting?.title || `งวดที่ ${week}`
@@ -206,17 +206,41 @@ export async function POST(request: NextRequest) {
     }, { status: 400 })
   }
 
+  // Check if student has pending credit for this week
+  const { data: pendingCredit } = await adminClient
+    .from('payment_credits')
+    .select('id, amount')
+    .eq('user_id', user.id)
+    .eq('week', week)
+    .eq('status', 'pending')
+    .maybeSingle()
+
+  // Load tier settings to calculate expected amount
+  const { data: settings } = await adminClient.from('system_settings').select('*')
+  const tierAmounts = {
+    A: parseFloat(settings?.find((s: any) => s.key === 'tier_a_amount')?.value || '60'),
+    B: parseFloat(settings?.find((s: any) => s.key === 'tier_b_amount')?.value || '50'),
+    C: parseFloat(settings?.find((s: any) => s.key === 'tier_c_amount')?.value || '30'),
+  }
+  const tierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
+
+  // Determine if late fine is applicable (only if no credit and it's past deadline)
+  const deadline = weekSetting?.deadline ? new Date(weekSetting.deadline) : null
+  const isPastDeadline = deadline ? new Date() > deadline : false
+  const lateFine = (!pendingCredit && isPastDeadline) ? (weekSetting?.late_fine_amount ?? 0) : 0
+  const expectedStudentAmount = tierAmount + lateFine
+
   // 6. Amount Validation — server-side comparison AFTER OCR
-  if (ocrResult.amount !== null && weekSetting && ocrResult.amount !== weekSetting.amount) {
+  if (ocrResult.amount !== null && ocrResult.amount !== expectedStudentAmount) {
     await notifyAdmins('Amount Mismatch Blocked', [
       `ผู้ส่ง: ${profile?.fullname || user.id}`,
       `งวด: ${cycleTitle}`,
       `ยอดเงินในสลิป: ฿${ocrResult.amount}`,
-      `ยอดเงินที่ต้องการ: ฿${weekSetting.amount}`
+      `ยอดเงินที่ต้องการ: ฿${expectedStudentAmount}`
     ], 'warning')
 
     return NextResponse.json({ 
-      error: `ยอดเงินในสลิป (฿${ocrResult.amount}) ไม่ตรงกับยอดชำระที่กำหนดของงวดนี้ (฿${weekSetting.amount})`, 
+      error: `ยอดเงินในสลิป (฿${ocrResult.amount}) ไม่ตรงกับยอดชำระที่กำหนดของงวดนี้ (฿${expectedStudentAmount})`, 
       code: 'AMOUNT_MISMATCH' 
     }, { status: 400 })
   }
@@ -228,13 +252,16 @@ export async function POST(request: NextRequest) {
   if (uploadError) return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
   const { data: { publicUrl } } = supabase.storage.from('slips').getPublicUrl(filename)
 
+  // If student has credit and uploaded a valid slip, auto-approve the payment and resolve credit
+  const autoApprove = !!pendingCredit
   const paymentData = {
     user_id: user.id,
     week,
     amount: ocrResult.amount || 0,
     trans_ref: ocrResult.trans_ref,
     slip_url: publicUrl,
-    status: 'pending' as const,
+    status: autoApprove ? ('approved' as const) : ('pending' as const),
+    verified_at: autoApprove ? new Date().toISOString() : null,
   }
 
   const { data: payment, error: paymentError } = existing
@@ -244,6 +271,18 @@ export async function POST(request: NextRequest) {
   if (paymentError) {
     await adminClient.storage.from('slips').remove([filename])
     return NextResponse.json({ error: 'Failed to save payment record' }, { status: 500 })
+  }
+
+  // Auto-resolve pending credit if payment is approved immediately
+  if (autoApprove && pendingCredit) {
+    await adminClient
+      .from('payment_credits')
+      .update({
+        status: 'repaid',
+        repaid_at: new Date().toISOString(),
+        repaid_via: payment.id
+      })
+      .eq('id', pendingCredit.id)
   }
 
   // Try to set verified_by_api flag (column may not exist if migration not run yet)

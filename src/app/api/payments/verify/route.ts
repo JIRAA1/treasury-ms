@@ -144,6 +144,28 @@ export async function POST(request: NextRequest) {
     
     if (error) return NextResponse.json({ error: 'Update failed' }, { status: 500 })
 
+    // Auto-resolve pending credit if payment is approved manually
+    if (finalStatus === 'approved') {
+      const { data: pendingCredit } = await adminClient
+        .from('payment_credits')
+        .select('id')
+        .eq('user_id', payment.user_id)
+        .eq('week', payment.week)
+        .eq('status', 'pending')
+        .maybeSingle()
+
+      if (pendingCredit) {
+        await adminClient
+          .from('payment_credits')
+          .update({
+            status: 'repaid',
+            repaid_at: new Date().toISOString(),
+            repaid_via: payment.id
+          })
+          .eq('id', pendingCredit.id)
+      }
+    }
+
     await logAction({
       actorId: profile?.id || user.id,
       action: action === 'approve' ? 'payment_approved' : 'payment_rejected',

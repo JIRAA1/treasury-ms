@@ -109,3 +109,9 @@ $$ LANGUAGE SQL SECURITY DEFINER;
 CREATE INDEX IF NOT EXISTS idx_payment_credits_user_id ON public.payment_credits(user_id);
 CREATE INDEX IF NOT EXISTS idx_payment_credits_status ON public.payment_credits(status);
 CREATE INDEX IF NOT EXISTS idx_payment_credits_week ON public.payment_credits(week);
+
+-- -----------------------------------------------
+-- STEP 8: เพิ่ม late_fine_amount ใน week_settings
+-- -----------------------------------------------
+ALTER TABLE public.week_settings
+  ADD COLUMN IF NOT EXISTS late_fine_amount NUMERIC(10,2) DEFAULT 0.00;

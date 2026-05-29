@@ -13,6 +13,7 @@ interface WeekSetting {
   title?: string
   payment_open_at?: string | null
   payment_close_at?: string | null
+  late_fine_amount?: number
 }
 
 function toLocalInput(isoStr?: string | null): string {
@@ -71,6 +72,7 @@ export default function WeekSettingsForm({ initialSettings }: { initialSettings:
       amount: 100,
       payment_open_at: null,
       payment_close_at: null,
+      late_fine_amount: 0,
     }])
   }
 
@@ -150,8 +152,17 @@ export default function WeekSettingsForm({ initialSettings }: { initialSettings:
                 />
               </div>
 
-              {/* Empty col for alignment */}
-              <div className="hidden xl:block" />
+              {/* Late Fine */}
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted mb-1.5">ค่าปรับเลท (฿)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={s.late_fine_amount ?? 0}
+                  onChange={(e) => updateSetting(s.week, 'late_fine_amount', parseFloat(e.target.value) || 0)}
+                  className="w-full bg-background border border-border rounded-xl px-3 py-2 text-[13px] font-black text-red-600 text-right outline-none focus:ring-2 focus:ring-brand/10 transition-all"
+                />
+              </div>
 
               {/* Payment Open */}
               <div>

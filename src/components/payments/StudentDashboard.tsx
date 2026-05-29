@@ -49,14 +49,24 @@ export default function StudentDashboard({
     const payment = payments?.find((p) => p.week === setting.week)
     // ใช้ยอดตาม tier ของ student
     const tierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
+    
+    // ตรวจสอบว่านักศึกษามีเครดิตค้างจ่าย (ผ่อนผัน) ในสัปดาห์นี้หรือไม่
+    const hasPendingCredit = pendingCredits.some((c) => c.week === setting.week && c.status === 'pending')
+
+    // คำนวณค่าปรับ (ถ้าไม่มีเครดิต และชำระเลยกำหนดส่ง)
+    const deadline = setting.deadline ? new Date(setting.deadline) : null
+    const isPastDeadline = deadline ? new Date() > deadline : false
+    const lateFine = (!hasPendingCredit && isPastDeadline) ? (setting.late_fine_amount ?? 0) : 0
+    const expectedAmount = tierAmount + lateFine
+
     return {
       week: setting.week,
       status: payment?.status === 'approved' ? 'paid'
              : payment?.status === 'pending' ? 'pending'
              : payment?.status === 'rejected' ? 'rejected'
              : 'unpaid',
-      // ถ้า payment ที่ชำระไปแล้วมียอดจริง ให้ใช้ยอดนั้น (approved) มิฉะนั้นใช้ตาม tier
-      amount: payment?.status === 'approved' ? (payment?.amount ?? tierAmount) : tierAmount,
+      // ถ้า payment ที่ชำระไปแล้วมียอดจริง ให้ใช้ยอดนั้น (approved) มิฉะนั้นใช้ตาม tier + fine
+      amount: payment?.status === 'approved' ? (payment?.amount ?? expectedAmount) : expectedAmount,
       payment,
       deadline: setting.deadline || null,
       title: setting.title,
@@ -178,9 +188,22 @@ export default function StudentDashboard({
                 
                 <div className="flex flex-col items-start md:items-end gap-1">
                   <div className="text-[11px] font-bold text-text-muted uppercase tracking-widest">ยอดที่ต้องชำระ</div>
-                  <div className="text-[32px] md:text-[44px] font-bold text-brand tracking-tighter leading-none mb-4">
+                  <div className="text-[32px] md:text-[44px] font-bold text-brand tracking-tighter leading-none">
                     ฿{currentWeekStatus.amount.toLocaleString()}
                   </div>
+                  {/* Late Fine Notice */}
+                  {(() => {
+                    const baseTierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
+                    const finePaid = currentWeekStatus.amount - baseTierAmount
+                    if (finePaid > 0 && currentWeekStatus.status !== 'paid') {
+                      return (
+                        <div className="text-[10px] text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-lg font-bold mt-1 mb-2">
+                          รวมค่าปรับจ่ายล่าช้า ฿{finePaid.toLocaleString()}
+                        </div>
+                      )
+                    }
+                    return <div className="mb-4" />
+                  })()}
                   
                   <div className="flex items-center gap-2 w-full md:w-auto">
                     {currentWeekStatus.status !== 'paid' && currentWeekStatus.status !== 'pending' && (

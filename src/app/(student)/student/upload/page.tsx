@@ -54,27 +54,44 @@ export default function UploadPage() {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
-        // 1. Get all settings (including window fields)
-        const { data: settings } = await supabase
-          .from('week_settings')
-          .select('week, title, amount, deadline, payment_open_at, payment_close_at')
-          .order('week', { ascending: true })
+        // 1. Fetch settings, profile, and pending credits in parallel
+        const [
+          { data: settings },
+          { data: payments },
+          { data: profile },
+          { data: sysSettings },
+          { data: pendingCredits }
+        ] = await Promise.all([
+          supabase.from('week_settings').select('week, title, amount, deadline, payment_open_at, payment_close_at, late_fine_amount').order('week', { ascending: true }),
+          supabase.from('payments').select('week, status').eq('user_id', user.id),
+          supabase.from('users').select('tier').eq('id', user.id).maybeSingle(),
+          supabase.from('system_settings').select('*'),
+          supabase.from('payment_credits').select('week').eq('user_id', user.id).eq('status', 'pending')
+        ])
 
-        // 2. Get user's payment history
-        const { data: payments } = await supabase
-          .from('payments')
-          .select('week, status')
-          .eq('user_id', user.id)
+        const tierAmounts = {
+          A: parseFloat(sysSettings?.find((s: any) => s.key === 'tier_a_amount')?.value || '60'),
+          B: parseFloat(sysSettings?.find((s: any) => s.key === 'tier_b_amount')?.value || '50'),
+          C: parseFloat(sysSettings?.find((s: any) => s.key === 'tier_c_amount')?.value || '30'),
+        }
+        const tierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
+        const pendingCreditWeeks = new Set(pendingCredits?.map(c => c.week) || [])
 
         const unpaid: PaymentCycle[] = []
         
         settings?.forEach(s => {
           const p = payments?.find(pay => pay.week === s.week)
           if (!p || p.status === 'rejected') {
+            const hasPendingCredit = pendingCreditWeeks.has(s.week)
+            const deadline = s.deadline ? new Date(s.deadline) : null
+            const isPastDeadline = deadline ? new Date() > deadline : false
+            const lateFine = (!hasPendingCredit && isPastDeadline) ? (s.late_fine_amount ?? 0) : 0
+            const expectedAmount = tierAmount + lateFine
+
             unpaid.push({
               week: s.week,
               title: s.title || `งวดที่ ${s.week}`,
-              amount: s.amount,
+              amount: expectedAmount,
               deadline: s.deadline,
               status: p?.status === 'rejected' ? 'rejected' : 'unpaid',
               payment_open_at: s.payment_open_at ?? null,
