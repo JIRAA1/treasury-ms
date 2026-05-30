@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { resolveAdminProfile } from '@/lib/supabase/resolve-profile'
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 
@@ -8,15 +9,15 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: profile } = await createAdminClient().from('users').select('role').or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`).maybeSingle()
-  if (profile?.role !== 'admin' && profile?.role !== 'treasurer') 
+  const adminClient = createAdminClient()
+  const profile = await resolveAdminProfile(adminClient, user)
+  if (!profile)
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { searchParams } = new URL(request.url)
-  const type = searchParams.get('type') // 'income', 'students', or 'audit'
+  const type = searchParams.get('type') // 'income' | 'audit' | 'credits' | default (students)
 
-  const adminClient = createAdminClient()
-  
+
   let buffer: Buffer
   let filename: string
 
@@ -87,6 +88,57 @@ export async function GET(request: NextRequest) {
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Audit_Logs')
     buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
     filename = `audit_report_${Date.now()}.xlsx`
+
+  } else if (type === 'credits') {
+    // Credit Report — รายชื่อนักศึกษาที่มียอดค้างชำระ
+    const { data: credits } = await adminClient
+      .from('payment_credits')
+      .select(`
+        id,
+        amount,
+        status,
+        note,
+        created_at,
+        repaid_at,
+        user:user_id ( fullname, student_id, tier ),
+        week_info:week ( title, deadline )
+      `)
+      .order('status', { ascending: true })  // pending ก่อน, repaid/forgiven ทีหลัง
+      .order('created_at', { ascending: false })
+
+    const statusLabel: Record<string, string> = {
+      pending: 'ค้างชำระ',
+      repaid: 'ชำระแล้ว',
+      forgiven: 'ยกเว้น'
+    }
+
+    const data = (credits || []).map((c) => {
+      const u = c.user as any
+      const w = c.week_info as any
+      return {
+        'รหัสนักศึกษา': u?.student_id || 'ไม่ระบุ',
+        'ชื่อ-นามสกุล': u?.fullname || 'ไม่ระบุ',
+        'Tier': u?.tier || 'B',
+        'งวด': w?.title || 'ไม่ระบุ',
+        'กำหนดชำระของงวด': w?.deadline ? new Date(w.deadline).toLocaleDateString('th-TH') : 'ไม่ระบุ',
+        'ยอดค้าง (บาท)': c.amount,
+        'สถานะ': statusLabel[c.status] || c.status,
+        'หมายเหตุ': c.note || '—',
+        'วันที่บันทึก': new Date(c.created_at).toLocaleDateString('th-TH'),
+        'วันที่ชำระ': c.repaid_at ? new Date(c.repaid_at).toLocaleDateString('th-TH') : '—',
+      }
+    })
+
+    const worksheet = XLSX.utils.json_to_sheet(data)
+    // Auto-fit columns
+    worksheet['!cols'] = [
+      { wch: 14 }, { wch: 24 }, { wch: 6 }, { wch: 20 }, { wch: 16 },
+      { wch: 12 }, { wch: 10 }, { wch: 24 }, { wch: 14 }, { wch: 14 },
+    ]
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Credit_Report')
+    buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+    filename = `credit_report_${Date.now()}.xlsx`
 
   } else {
     // Student summary

@@ -120,23 +120,32 @@ export default async function TransparencyPage() {
             <div className="text-[12px] text-text-muted">รวม: {formatCurrency(totalStudentIncome)}</div>
           </div>
           <div className="divide-y divide-border">
-            {cycleData.map((c) => (
-              <div key={c.week} className="px-6 py-4 flex items-center justify-between hover:bg-background-tertiary/30 transition-colors">
-                <div>
-                  <div className="text-[13.5px] font-bold text-text-primary">{c.title}</div>
-                  <div className="text-[11.5px] text-text-muted mt-0.5">ผู้ชำระแล้ว {c.paidCount} จาก {studentCount || 0} คน</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-[14px] font-bold text-text-primary">{formatCurrency(c.collected)}</div>
-                  <div className="w-24 h-1 bg-border rounded-full mt-1.5 overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-500 transition-all"
-                      style={{ width: `${(c.paidCount / (studentCount || 1)) * 100}%` }}
-                    />
+              {cycleData.map((c) => {
+                const rate = studentCount ? Math.round((c.paidCount / studentCount) * 100) : 0
+                const barColor = rate >= 80 ? 'bg-emerald-500' : rate >= 50 ? 'bg-amber-400' : 'bg-red-400'
+                return (
+                <div key={c.week} className="px-6 py-4 flex items-center justify-between hover:bg-background-tertiary/30 transition-colors">
+                  <div>
+                    <div className="text-[13.5px] font-bold text-text-primary">{c.title}</div>
+                    <div className="text-[11.5px] text-text-muted mt-0.5">ผู้ชำระแล้ว {c.paidCount} จาก {studentCount || 0} คน</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[14px] font-bold text-text-primary">{formatCurrency(c.collected)}</div>
+                    <div className="flex items-center gap-2 mt-1.5 justify-end">
+                      <div className="w-24 h-1.5 bg-border rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${barColor} transition-all`}
+                          style={{ width: `${rate}%` }}
+                        />
+                      </div>
+                      <span className={`text-[11px] font-bold tabular-nums ${rate >= 80 ? 'text-emerald-600' : rate >= 50 ? 'text-amber-600' : 'text-red-500'}`}>
+                        {rate}%
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+                )
+              })}
             {cycleData.length === 0 && (
               <div className="p-12 text-center text-text-muted italic">ยังไม่มีข้อมูลรายรับ</div>
             )}

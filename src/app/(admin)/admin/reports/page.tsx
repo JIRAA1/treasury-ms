@@ -53,6 +53,10 @@ export default async function AdminReportsPage() {
         subtitle="สรุปรายรับ-รายจ่าย และภาพรวมทั้งหมด"
         actions={
           <div className="flex gap-2">
+            <a href="/api/reports/export?type=credits" className="flex items-center gap-1.5 border border-amber-200 bg-amber-50 text-amber-700 text-[12.5px] font-medium px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors">
+              <Download className="w-3.5 h-3.5" />
+              Credit Report
+            </a>
             <a href="/api/reports/export?type=income" className="flex items-center gap-1.5 border border-border-strong bg-background text-[12.5px] font-medium px-3 py-1.5 rounded-lg hover:bg-background-secondary transition-colors">
               <Download className="w-3.5 h-3.5" />
               ส่งออกรายรับ

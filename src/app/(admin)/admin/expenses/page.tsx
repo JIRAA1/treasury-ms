@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Topbar from '@/components/layout/Topbar'
 import ExpenseForm from '@/components/expenses/ExpenseForm'
 import { formatCurrency, formatDate } from '@/lib/utils'
@@ -14,15 +14,21 @@ export default function AdminExpensesPage() {
   const [showForm, setShowForm] = useState(false)
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved'>('all')
 
-  const fetchExpenses = async () => {
+  const fetchExpenses = useCallback(async () => {
+    await Promise.resolve()
     setLoading(true)
-    const res = await fetch('/api/expenses')
-    const data = await res.json()
-    setExpenses(data.expenses ?? [])
-    setLoading(false)
-  }
+    try {
+      const res = await fetch('/api/expenses')
+      const data = await res.json()
+      setExpenses(data.expenses ?? [])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
-  useEffect(() => { fetchExpenses() }, [])
+  useEffect(() => {
+    fetchExpenses()
+  }, [fetchExpenses])
 
   const handleAddExpense = async (data: { title: string; description?: string; amount: number; category: string; receipt?: File }) => {
     const formData = new FormData()

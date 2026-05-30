@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Bell, Check, Trash2, Loader2, X } from 'lucide-react'
 import { cn, formatDate } from '@/lib/utils'
@@ -12,21 +12,7 @@ export default function InAppNotifications() {
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
 
-  useEffect(() => {
-    fetchNotifications()
-    
-    // Subscribe to new notifications
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => {
-        fetchNotifications()
-      })
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
-  }, [supabase])
-
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
@@ -47,7 +33,21 @@ export default function InAppNotifications() {
 
     setNotifications(data || [])
     setLoading(false)
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    fetchNotifications()
+    
+    // Subscribe to new notifications
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => {
+        fetchNotifications()
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [supabase, fetchNotifications])
 
   const markAsRead = async (id: string) => {
     await supabase.from('notifications').update({ is_read: true }).eq('id', id)

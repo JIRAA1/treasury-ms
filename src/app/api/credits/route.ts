@@ -1,7 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { resolveProfile, resolveAdminProfile } from '@/lib/supabase/resolve-profile'
 import { NextResponse } from 'next/server'
 import { logAction } from '@/lib/audit'
+import { sendLineMessage } from '@/lib/line'
 
 // GET /api/credits — admin ดูทั้งหมด, student ดูแค่ของตัวเอง
 // Query: ?status=pending|repaid|forgiven&user_id=xxx
@@ -11,19 +13,15 @@ export async function GET(req: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Use adminClient + or() to correctly resolve role regardless of how auth user maps to DB row
-  const { data: actor } = await adminClient
-    .from('users')
-    .select('id, role')
-    .or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`)
-    .maybeSingle()
+  // Use adminClient + resolveProfile() to correctly resolve role regardless of how auth user maps to DB row
+  const actor = await resolveProfile(adminClient, user, 'id, role')
   if (!actor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status')
   const filterUserId = searchParams.get('user_id')
 
-  const isAdmin = ['admin', 'treasurer'].includes(actor.role)
+  const isAdmin = ['admin', 'treasurer'].includes(actor['role'] as string)
 
   let query = adminClient
     .from('payment_credits')
@@ -36,7 +34,7 @@ export async function GET(req: Request) {
 
   // Students can only see their own
   if (!isAdmin) {
-    query = query.eq('user_id', actor.id)
+    query = query.eq('user_id', actor['id'] as string)
   } else if (filterUserId) {
     query = query.eq('user_id', filterUserId)
   }
@@ -59,12 +57,8 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const adminClient = createAdminClient()
-  const { data: actor } = await adminClient
-    .from('users')
-    .select('id, role')
-    .or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`)
-    .maybeSingle()
-  if (!actor || !['admin', 'treasurer'].includes(actor.role)) {
+  const actor = await resolveAdminProfile(adminClient, user)
+  if (!actor) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -83,7 +77,7 @@ export async function POST(req: Request) {
   const admin = createAdminClient()
 
   // Check week exists
-  const { data: weekData } = await adminClient.from('week_settings').select('week').eq('week', week).single()
+  const { data: weekData } = await adminClient.from('week_settings').select('week, title').eq('week', week).single()
   if (!weekData) return NextResponse.json({ error: 'Week not found' }, { status: 404 })
 
   // Check student exists
@@ -97,7 +91,7 @@ export async function POST(req: Request) {
       week,
       amount,
       note: note ?? null,
-      created_by: actor.id,
+      created_by: actor['id'] as string,
       status: 'pending',
     })
     .select()
@@ -110,8 +104,38 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  await logAction(supabase, {
-    actorId: actor.id,
+  // Fetch student's LINE ID for notification
+  const { data: studentFull } = await admin
+    .from('users')
+    .select('line_user_id, fullname')
+    .eq('id', user_id)
+    .single()
+
+  const cycleTitle = (weekData as any)?.title || `งวดที่ ${week}`
+  const notifMessage = `เหรัญญิกบันทึกยอดค้างชำระ ฿${amount.toLocaleString()} สำหรับ${cycleTitle} กรุณาชำระในรอบถัดไป`
+
+  // In-app notification
+  await admin.from('notifications').insert({
+    user_id,
+    title: 'มียอดค้างชำระในระบบ',
+    message: notifMessage,
+    type: 'warning',
+  })
+
+  // LINE notification
+  if (studentFull?.line_user_id) {
+    try {
+      await sendLineMessage(
+        studentFull.line_user_id,
+        `🔔 แจ้งยอดค้างชำระ\n${notifMessage}`
+      )
+    } catch (e) {
+      console.error('[Credits] Failed to send LINE notification:', e)
+    }
+  }
+
+  await logAction({
+    actorId: actor['id'] as string,
     action: 'credit_created',
     targetId: credit.id,
     newValue: { user_id, week, amount, note },

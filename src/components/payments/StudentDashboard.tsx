@@ -234,8 +234,9 @@ export default function StudentDashboard({
                       </>
                     )}
                     {currentWeekStatus.status === 'pending' && (
-                      <div className="bg-emerald-50 text-emerald-700 px-5 py-2.5 rounded-xl border border-emerald-100 text-[13px] font-bold">
-                        กำลังตรวจสอบรายการ...
+                      <div className="bg-blue-50 text-blue-700 px-5 py-2.5 rounded-xl border border-blue-100 text-[13px] font-bold flex items-center gap-2">
+                        <Clock className="w-4 h-4" />
+                        รอเหรัญญิกตรวจสอบ
                       </div>
                     )}
                   </div>
@@ -266,6 +267,22 @@ export default function StudentDashboard({
                     ฿{pendingCredits.reduce((s, c) => s + c.amount, 0).toLocaleString()}
                   </div>
                   <Link href="/student/history" className="text-[10.5px] text-amber-600 hover:underline font-bold">ดูประวัติ →</Link>
+                </div>
+              </div>
+            )}
+
+            {/* Pending Slip Banner */}
+            {weekStatuses.some(w => w.status === 'pending') && (
+              <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-100 rounded-2xl">
+                <Clock className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-black text-blue-900 mb-0.5">
+                    สลิปรอการตรวจสอบ
+                  </div>
+                  <div className="text-[11.5px] text-blue-800 leading-relaxed">
+                    สลิปของคุณได้รับแล้ว — <span className="font-bold">ยังไม่ผ่านการอนุมัติ</span> กรุณารอเหรัญญิกตรวจสอบ
+                    ระบบจะแจ้งผ่าน LINE เมื่อดำเนินการแล้ว
+                  </div>
                 </div>
               </div>
             )}

@@ -344,16 +344,43 @@ export default function SlipUploader({ week, unpaidCycles, onWeekChange, onSucce
   }
 
   if (step === 'success') {
+    // Auto-approved (credit case) vs pending (normal case)
+    const isAutoApproved = successData?.payment?.status === 'approved'
+
     return (
       <div className="text-center py-6">
-        <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <CheckCircle className="w-6 h-6 text-emerald-600" />
+        <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 ${isAutoApproved ? 'bg-emerald-100' : 'bg-blue-50'}`}>
+          <CheckCircle className={`w-6 h-6 ${isAutoApproved ? 'text-emerald-600' : 'text-blue-500'}`} />
         </div>
-        <div className="text-[15px] font-bold text-text-primary mb-1">ส่งสลิปชำระเงินสำเร็จ</div>
-        <div className="text-[12.5px] text-text-muted mb-5">
-          {successData?.message || `ระบบได้บันทึกการส่งสลิปของงวดที่ ${week} เรียบร้อยแล้ว`}
+        <div className="text-[15px] font-bold text-text-primary mb-1">ส่งสลิปสำเร็จ ✓</div>
+        <div className="text-[12.5px] text-text-muted mb-4">
+          {successData?.quota_exceeded
+            ? 'ระบบได้รับสลิปของคุณแล้ว'
+            : `ระบบบันทึกสลิปสำหรับงวดที่ ${week} เรียบร้อยแล้ว`}
         </div>
-        
+
+        {/* Status Banner */}
+        {isAutoApproved ? (
+          <div className="mb-5 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-left flex gap-2.5 items-start">
+            <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <div className="text-[12.5px] font-bold text-emerald-900">อนุมัติอัตโนมัติ</div>
+              <div className="text-[11.5px] text-emerald-800 mt-0.5">ยอดค้างชำระของคุณถูกหักออกแล้ว — ไม่ต้องรอเหรัญญิก</div>
+            </div>
+          </div>
+        ) : (
+          <div className="mb-5 p-3 bg-amber-50 border border-amber-100 rounded-xl text-left flex gap-2.5 items-start">
+            <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <div className="text-[12.5px] font-bold text-amber-900">รอเหรัญญิกตรวจสอบ</div>
+              <div className="text-[11.5px] text-amber-800 mt-0.5">
+                สลิปของคุณ<span className="font-bold">ยังไม่ผ่านการอนุมัติ</span> — กรุณารอเหรัญญิกตรวจสอบ
+                ระบบจะแจ้ง LINE เมื่ออนุมัติแล้ว
+              </div>
+            </div>
+          </div>
+        )}
+
         {ocrResult && (
           <div className="bg-background-muted border border-border-strong rounded-xl p-4 text-left mb-5 space-y-2.5">
             <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1 border-b border-border-strong pb-1">ข้อมูลที่ตรวจสอบพบ</div>
@@ -374,6 +401,7 @@ export default function SlipUploader({ week, unpaidCycles, onWeekChange, onSucce
       </div>
     )
   }
+
 
   if (step === 'failed') {
     return (

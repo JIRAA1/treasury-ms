@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { resolveAdminProfile } from '@/lib/supabase/resolve-profile'
 import { NextRequest, NextResponse } from 'next/server'
 import { sendPaymentApproved, sendPaymentRejected } from '@/lib/line'
 import { logAction } from '@/lib/audit'
@@ -10,8 +11,8 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const adminClient = createAdminClient()
-  const { data: profile } = await createAdminClient().from('users').select('id, role').or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`).maybeSingle()
-  if (!profile || !['admin', 'treasurer'].includes(profile.role))
+  const profile = await resolveAdminProfile(adminClient, user)
+  if (!profile)
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   interface VerifyBody {
@@ -167,7 +168,7 @@ export async function POST(request: NextRequest) {
     }
 
     await logAction({
-      actorId: profile?.id || user.id,
+      actorId: (profile?.['id'] as string) || user.id,
       action: action === 'approve' ? 'payment_approved' : 'payment_rejected',
       targetId: id,
       newValue: { status: finalStatus, slip_url: updateData.slip_url || null }

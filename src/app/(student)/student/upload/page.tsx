@@ -16,6 +16,7 @@ interface PaymentCycle {
   status: 'unpaid' | 'rejected'
   payment_open_at?: string | null
   payment_close_at?: string | null
+  qr_url?: string | null
 }
 
 type WindowStatus = 'open' | 'upcoming' | 'closed' | 'noWindow'
@@ -70,7 +71,7 @@ export default function UploadPage() {
           { data: sysSettings },
           { data: pendingCredits }
         ] = await Promise.all([
-          supabase.from('week_settings').select('week, title, amount, deadline, payment_open_at, payment_close_at, late_fine_amount').order('week', { ascending: true }),
+          supabase.from('week_settings').select('week, title, amount, deadline, payment_open_at, payment_close_at, late_fine_amount, qr_url').order('week', { ascending: true }),
           supabase.from('payments').select('week, status').eq('user_id', targetUserId),
           supabase.from('system_settings').select('*'),
           supabase.from('payment_credits').select('week').eq('user_id', targetUserId).eq('status', 'pending')
@@ -103,6 +104,7 @@ export default function UploadPage() {
               status: p?.status === 'rejected' ? 'rejected' : 'unpaid',
               payment_open_at: s.payment_open_at ?? null,
               payment_close_at: s.payment_close_at ?? null,
+              qr_url: s.qr_url ?? null,
             })
           }
         })
@@ -227,6 +229,19 @@ export default function UploadPage() {
                     </button>
                   )}
                 </div>
+
+                {/* QR Code — แสดงเพื่อให้นักศึกษาสแกนโอนก่อนส่งสลิป */}
+                {selectedCycle.qr_url && !isWindowLocked && (
+                  <div className="mb-4 flex flex-col items-center gap-2 p-4 bg-background-tertiary border border-border rounded-xl">
+                    <div className="text-[11px] text-text-muted font-bold uppercase tracking-wider">QR โอนเงิน</div>
+                    <img
+                      src={selectedCycle.qr_url}
+                      alt={`QR Code สำหรับ${selectedCycle.title}`}
+                      className="w-40 h-40 object-contain rounded-lg"
+                    />
+                    <div className="text-[11px] text-text-muted">สแกนเพื่อโอนเงิน จากนั้นส่งสลิปด้านล่าง</div>
+                  </div>
+                )}
 
                 {/* Window locked guard */}
                 {isWindowLocked ? (

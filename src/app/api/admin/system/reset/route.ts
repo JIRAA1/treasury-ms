@@ -2,6 +2,50 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 
+// Helper function to recursively delete all contents of a storage bucket
+async function deleteBucketContents(bucketName: string, adminClient: any) {
+  const deleteFolder = async (path: string = '') => {
+    const { data: items, error } = await adminClient.storage.from(bucketName).list(path)
+    if (error) {
+      console.error(`Error listing folder "${path}" in bucket "${bucketName}":`, error)
+      return
+    }
+    if (!items || items.length === 0) return
+
+    const filesToDelete: string[] = []
+    const subfolders: string[] = []
+
+    for (const item of items) {
+      const fullPath = path ? `${path}/${item.name}` : item.name
+      // Folders do not have an ID in Supabase storage list output
+      if (!item.id) {
+        subfolders.push(fullPath)
+      } else {
+        filesToDelete.push(fullPath)
+      }
+    }
+
+    // Delete all files in the current folder
+    if (filesToDelete.length > 0) {
+      const { error: delError } = await adminClient.storage.from(bucketName).remove(filesToDelete)
+      if (delError) {
+        console.error(`Error deleting files in folder "${path}" from bucket "${bucketName}":`, delError)
+      }
+    }
+
+    // Recursively list and delete subfolders
+    for (const folder of subfolders) {
+      await deleteFolder(folder)
+    }
+  }
+
+  try {
+    await deleteFolder()
+  } catch (err) {
+    console.error(`Failed to delete bucket contents for ${bucketName}:`, err)
+  }
+}
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user: authUser } } = await supabase.auth.getUser()
@@ -19,30 +63,46 @@ export async function POST(request: NextRequest) {
 
   try {
     if (action === 'clear_payments') {
-      // 1. Delete all payments
+      // 1. Clear repaid_via reference in payment_credits first to avoid foreign key violations
+      await adminClient.from('payment_credits').update({ repaid_via: null, status: 'pending' }).neq('id', '00000000-0000-0000-0000-000000000000')
+
+      // 2. Delete all payments
       const { error: pError } = await adminClient.from('payments').delete().neq('id', '00000000-0000-0000-0000-000000000000')
       if (pError) throw pError
 
-      // 2. Clean up storage files (slips folder)
-      // Note: We list and delete in chunks to avoid timeouts
-      const { data: files } = await adminClient.storage.from('slips').list()
-      if (files && files.length > 0) {
-        // We delete files from the root of slips. 
-        // For nested folders (user-id/), you might need a more recursive approach
-        const filesToDelete = files.map(f => f.name)
-        await adminClient.storage.from('slips').remove(filesToDelete)
-      }
+      // 3. Clean up storage files recursively in slips bucket
+      await deleteBucketContents('slips', adminClient)
 
-      return NextResponse.json({ success: true, message: 'ล้างข้อมูลการชำระเงินเรียบร้อยแล้ว' })
+      return NextResponse.json({ success: true, message: 'ล้างข้อมูลการชำระเงินและสลิปเรียบร้อยแล้ว' })
     }
 
     if (action === 'reset_all') {
-      // Clear payments, expenses, and audit logs
+      // 1. Clear all payment credits (due to repaid_via referencing payments)
+      await adminClient.from('payment_credits').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+      // 2. Delete all payments
       await adminClient.from('payments').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+      // 3. Delete all expenses
       await adminClient.from('expenses').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+      // 4. Delete all general incomes
+      await adminClient.from('incomes').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+      // 5. Delete all notifications
+      await adminClient.from('notifications').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+      // 6. Delete all audit logs
       await adminClient.from('audit_logs').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+
+      // 7. Reset all student tiers to default 'B' and clear tier_note
+      await adminClient.from('users').update({ tier: 'B', tier_note: null }).eq('role', 'student')
+
+      // 8. Clean up all storage buckets recursively
+      await deleteBucketContents('slips', adminClient)
+      await deleteBucketContents('receipts', adminClient)
       
-      return NextResponse.json({ success: true, message: 'รีเซ็ตระบบการเงินทั้งหมดเรียบร้อยแล้ว' })
+      return NextResponse.json({ success: true, message: 'รีเซ็ตระบบและลบไฟล์ทั้งหมดเรียบร้อยแล้ว' })
     }
 
     if (action === 'reset_all_bindings') {
@@ -55,8 +115,6 @@ export async function POST(request: NextRequest) {
       // 2. Delete student users from Supabase Auth
       try {
         const { data: { users: authUsers } } = await adminClient.auth.admin.listUsers()
-        // Delete only student auth accounts (those ending with @treasury.local)
-        // Ensure we don't accidentally delete admins, though admins should also be careful
         for (const authUser of authUsers) {
           if (authUser.email?.endsWith('@treasury.local')) {
             await adminClient.auth.admin.deleteUser(authUser.id)
@@ -64,7 +122,6 @@ export async function POST(request: NextRequest) {
         }
       } catch (err) {
         console.error('Failed to delete auth users during bulk reset:', err)
-        // We still proceed even if auth deletion fails partially
       }
 
       return NextResponse.json({ success: true, message: 'ล้างข้อมูลการเข้าสู่ระบบของนักศึกษาทุกคนเรียบร้อยแล้ว' })

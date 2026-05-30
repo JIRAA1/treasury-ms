@@ -6,6 +6,7 @@ import { logAction } from '@/lib/audit'
 import { extractQRCode } from '@/lib/qr'
 import { sendLineMessage, sendAdminAlert } from '@/lib/line'
 import { parseSlipQR } from '@/lib/slip-qr'
+import { createHash } from 'crypto'
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
@@ -88,6 +89,31 @@ export async function POST(request: NextRequest) {
   const bytes = await file.arrayBuffer()
   const buffer = Buffer.from(bytes)
 
+  // 2.5. File Hash — ป้องกัน duplicate เมื่อ OCR อ่าน trans_ref ไม่ได้ (null ≠ null ใน UNIQUE)
+  const fileHash = createHash('sha256').update(buffer).digest('hex')
+
+  const { data: hashDup } = await adminClient
+    .from('payments')
+    .select('id, user_id, status')
+    .eq('file_hash', fileHash)
+    .neq('status', 'rejected')
+    .maybeSingle()
+
+  if (hashDup) {
+    const isOwnSlip = hashDup.user_id === profile.id
+    await notifyAdmins('Duplicate Slip Blocked (Hash)', [
+      `ผู้ส่ง: ${profile.fullname}`,
+      `งวด: ${cycleTitle}`,
+      `เหตุผล: ไฟล์สลิปนี้เคยถูกอัปโหลดในระบบแล้ว (SHA-256 match)`
+    ], 'warning')
+    return NextResponse.json({
+      error: isOwnSlip
+        ? 'คุณเคยส่งไฟล์สลิปนี้ไปแล้ว'
+        : 'ไฟล์สลิปนี้ถูกใช้โดยนักศึกษาคนอื่นในระบบแล้ว',
+      code: 'DUPLICATE_SLIP'
+    }, { status: 409 })
+  }
+
   // 3. Server-Side QR & Duplicate Check (Pre-check)
   const qrData = await extractQRCode(buffer)
   if (qrData) {
@@ -146,6 +172,7 @@ export async function POST(request: NextRequest) {
       trans_ref: null,
       slip_url: publicUrl,
       status: 'pending' as const,
+      file_hash: fileHash,
     }
 
     const { data: payment, error: paymentError } = existing
@@ -267,6 +294,7 @@ export async function POST(request: NextRequest) {
     slip_url: publicUrl,
     status: autoApprove ? ('approved' as const) : ('pending' as const),
     verified_at: autoApprove ? new Date().toISOString() : null,
+    file_hash: fileHash,
   }
 
   const { data: payment, error: paymentError } = existing

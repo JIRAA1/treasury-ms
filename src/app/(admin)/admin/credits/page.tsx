@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import Topbar from '@/components/layout/Topbar'
 import KpiCard from '@/components/shared/KpiCard'
 import { formatCurrency, formatDate, getCreditStatusLabel, getTierConfig } from '@/lib/utils'
-import { Clock, CheckCircle2, Gift, Plus, Loader2, Filter } from 'lucide-react'
+import { CheckCircle2, Gift, Plus, Loader2, Filter } from 'lucide-react'
 import { toast } from 'sonner'
 import type { PaymentCredit, WeekSetting, User } from '@/types'
 
@@ -21,7 +21,6 @@ export default function AdminCreditsPage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<StatusFilter>('all')
   const [showAddModal, setShowAddModal] = useState(false)
-  const supabase = useMemo(() => createClient(), [])
 
   const fetchCredits = useCallback(async () => {
     setLoading(true)
@@ -35,7 +34,9 @@ export default function AdminCreditsPage() {
     }
   }, [filter])
 
-  useEffect(() => { fetchCredits() }, [fetchCredits])
+  useEffect(() => {
+    fetchCredits()
+  }, [fetchCredits])
 
   const handleResolve = async (id: string, status: 'repaid' | 'forgiven') => {
     const label = status === 'repaid' ? 'จ่ายคืนแล้ว' : 'ยกให้'
@@ -235,22 +236,19 @@ function AddCreditModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
         fetch('/api/students').then(r => r.json()),
         supabase.from('week_settings').select('week, title').order('week'),
       ])
-      const sortedStudents = (resStudents?.students ?? []).sort((a: any, b: any) => (a.fullname || '').localeCompare(b.fullname || ''))
+      const sortedStudents = (resStudents?.students ?? []).sort((a: Pick<User, 'fullname'>, b: Pick<User, 'fullname'>) => (a.fullname || '').localeCompare(b.fullname || ''))
       setStudents(sortedStudents)
       setWeeks(ws ?? [])
     }
     load()
   }, [supabase])
 
-  // Auto-fill amount from selected student's tier
-  useEffect(() => {
-    if (!form.user_id) return
-    const student = students.find(s => s.id === form.user_id)
-    if (student) {
-      const tierAmounts: Record<string, number> = { A: 60, B: 50, C: 30 }
-      setForm(f => ({ ...f, amount: String(tierAmounts[student.tier] ?? 50) }))
-    }
-  }, [form.user_id, students])
+  const handleStudentChange = (userId: string) => {
+    const student = students.find(s => s.id === userId)
+    const tierAmounts: Record<string, number> = { A: 60, B: 50, C: 30 }
+    const amount = student ? String(tierAmounts[student.tier] ?? 50) : ''
+    setForm(f => ({ ...f, user_id: userId, amount }))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -293,7 +291,7 @@ function AddCreditModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
             <label className="text-[11px] font-black uppercase tracking-widest text-text-muted mb-1.5 block">นักศึกษา</label>
             <select
               value={form.user_id}
-              onChange={e => setForm(f => ({ ...f, user_id: e.target.value }))}
+              onChange={e => handleStudentChange(e.target.value)}
               className="w-full px-4 py-3 text-[13px] border border-border rounded-xl bg-background outline-none focus:ring-2 focus:ring-brand/10"
             >
               <option value="">เลือกนักศึกษา...</option>
