@@ -7,6 +7,8 @@ import { th } from 'date-fns/locale'
 import { redirect } from 'next/navigation'
 import { Download, Shield, User, Activity as ActivityIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
+import { DeleteLogButton, ClearAllLogsButton } from './AuditClientComponents'
+
 
 export const metadata = { title: 'ตรวจสอบ — TreasuryMS Admin' }
 
@@ -71,13 +73,16 @@ export default async function AdminAuditPage({
         title="ตรวจสอบระบบ" 
         subtitle={`Audit Logs — ทั้งหมด ${totalLogs ?? 0} รายการ · หน้า ${page}/${totalPages}`} 
         actions={
-          <a
-            href="/api/reports/export?type=audit"
-            className="flex items-center gap-1.5 border border-border bg-background text-[12.5px] font-bold px-3 py-1.5 rounded-lg hover:bg-background-tertiary transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" />
-            ส่งออกข้อมูล (.xlsx)
-          </a>
+          <div className="flex items-center gap-2">
+            {logs && logs.length > 0 && <ClearAllLogsButton />}
+            <a
+              href="/api/reports/export?type=audit"
+              className="flex items-center gap-1.5 border border-border bg-background text-[12.5px] font-bold px-3 py-1.5 rounded-lg hover:bg-background-tertiary transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+              ส่งออกข้อมูล (.xlsx)
+            </a>
+          </div>
         }
       />
 
@@ -92,6 +97,7 @@ export default async function AdminAuditPage({
                   <th className="px-6 py-4 text-left font-bold text-text-muted text-[10px] uppercase tracking-widest">กิจกรรม</th>
                   <th className="px-6 py-4 text-left font-bold text-text-muted text-[10px] uppercase tracking-widest">เป้าหมาย (ID)</th>
                   <th className="px-6 py-4 text-left font-bold text-text-muted text-[10px] uppercase tracking-widest">รายละเอียดการเปลี่ยน</th>
+                  <th className="px-6 py-4 text-right font-bold text-text-muted text-[10px] uppercase tracking-widest w-[80px]">การจัดการ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -161,6 +167,9 @@ export default async function AdminAuditPage({
                         >
                           {changeDisplay}
                         </div>
+                      </td>
+                      <td className="px-6 py-4 text-right whitespace-nowrap">
+                        <DeleteLogButton id={log.id} />
                       </td>
                     </tr>
                   )
