@@ -28,6 +28,13 @@ export async function DELETE(request: NextRequest) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+
+    await logAction({
+      actorId: profile.id,
+      action: 'audit_deleted',
+      targetId: id
+    })
+
     return NextResponse.json({ success: true, deleted: id })
   } else {
     // Clear all logs
@@ -39,7 +46,7 @@ export async function DELETE(request: NextRequest) {
     // Log the clear action (so there's always at least one log indicating who did the clear!)
     await logAction({
       actorId: profile.id,
-      action: 'system_reset', // Or we can use system_reset, or we can use another label, but 'system_reset' is defined.
+      action: 'audit_cleared',
       newValue: { type: 'clear_audit_logs' }
     })
     

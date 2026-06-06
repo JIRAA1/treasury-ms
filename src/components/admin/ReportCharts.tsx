@@ -5,8 +5,10 @@ import { formatCurrency } from '@/lib/utils'
 import { TrendingUp, Percent, Info, Calendar } from 'lucide-react'
 
 interface CycleDataItem {
-  week: number
-  title: string
+  week?: number
+  title?: string
+  label?: string
+  period_order?: number
   amount: number
   collected: number
   paidCount: number

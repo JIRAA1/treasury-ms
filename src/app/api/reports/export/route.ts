@@ -72,12 +72,32 @@ export async function GET(request: NextRequest) {
   } else if (type === 'audit') {
     const { data: logs } = await adminClient.from('audit_logs').select('*, actor:actor_id(fullname, student_id)').order('created_at', { ascending: false })
     
+    const actionMap: Record<string, string> = {
+      payment_uploaded: 'อัปโหลดสลิป',
+      payment_approved: 'อนุมัติการชำระ',
+      payment_rejected: 'ปฏิเสธสลิป',
+      expense_created: 'เพิ่มค่าใช้จ่าย',
+      expense_approved: 'อนุมัติค่าใช้จ่าย',
+      expense_deleted: 'ลบค่าใช้จ่าย',
+      income_created: 'เพิ่มรายรับ',
+      income_approved: 'อนุมัติรายรับ',
+      income_deleted: 'ลบรายรับ',
+      notification_sent: 'ส่งแจ้งเตือน',
+      broadcast_sent: 'บรอดแคสต์',
+      student_binding_reset: 'รีเซ็ต LINE',
+      user_role_changed: 'เปลี่ยน Role',
+      system_reset: 'รีเซ็ตระบบ',
+      clear_payments: 'ล้างประวัติการโอน',
+      audit_deleted: 'ลบ Log',
+      audit_cleared: 'ล้าง Log ทั้งหมด'
+    }
+
     const data = (logs || []).map((log) => {
       const actor = log.actor as any
       return {
         'วัน-เวลา': new Date(log.created_at).toLocaleString('th-TH'),
         'ผู้ดำเนินการ': actor ? `${actor.fullname} (${actor.student_id})` : 'ระบบ',
-        'กิจกรรม': log.action,
+        'กิจกรรม': actionMap[log.action] || log.action,
         'ID เป้าหมาย': log.target_id,
         'ข้อมูลเก่า': JSON.stringify(log.old_value),
         'ข้อมูลใหม่': JSON.stringify(log.new_value)

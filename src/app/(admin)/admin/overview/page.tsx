@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import Topbar from '@/components/layout/Topbar'
 import KpiCard from '@/components/shared/KpiCard'
 import ActivityFeed from '@/components/shared/ActivityFeed'
@@ -14,7 +14,8 @@ import QuickApproveButton from '@/components/admin/QuickApproveButton'
 export const metadata = { title: 'ภาพรวม — TreasuryMS Admin' }
 
 export default async function AdminOverviewPage() {
-  const supabase = await createClient()
+  // Use admin client to bypass RLS for dashboard stats
+  const supabase = createAdminClient()
 
   const [
     { data: pendingPayments },
@@ -84,13 +85,18 @@ export default async function AdminOverviewPage() {
       payment_uploaded: { type: 'uploaded', title: `อัปโหลดสลิปใหม่` },
       expense_created: { type: 'expense', title: `${actorName} เพิ่มค่าใช้จ่าย` },
       expense_approved: { type: 'approved', title: `${actorName} อนุมัติค่าใช้จ่าย` },
+      expense_deleted: { type: 'rejected', title: `${actorName} ลบค่าใช้จ่าย` },
       income_created: { type: 'uploaded', title: `${actorName} เพิ่มรายรับใหม่` },
       income_approved: { type: 'approved', title: `${actorName} อนุมัติรายรับใหม่` },
+      income_deleted: { type: 'rejected', title: `${actorName} ลบรายรับ` },
       notification_sent: { type: 'notification', title: `${actorName} ส่งแจ้งเตือน` },
+      broadcast_sent: { type: 'notification', title: `${actorName} บรอดแคสต์ข้อความ` },
       tier_changed: { type: 'uploaded', title: `${actorName} เปลี่ยน Tier นักศึกษา` },
       credit_created: { type: 'expense', title: `${actorName} บันทึก Credit ค้างจ่าย` },
       credit_repaid: { type: 'approved', title: `${actorName} บันทึก Credit จ่ายคืน` },
       credit_forgiven: { type: 'approved', title: `${actorName} ยกให้ Credit` },
+      audit_deleted: { type: 'rejected', title: `${actorName} ลบประวัติการใช้งาน` },
+      audit_cleared: { type: 'rejected', title: `${actorName} ล้างประวัติการใช้งานทั้งหมด` },
     }
     const mapped = actionMap[log.action] ?? { type: 'uploaded' as const, title: log.action }
     return {
@@ -109,11 +115,11 @@ export default async function AdminOverviewPage() {
         subtitle="ข้อมูลล่าสุด ณ วันนี้"
         actions={
           <div className="flex items-center gap-2">
-            <Link href="/admin/expenses" className="flex items-center gap-1.5 border border-border-strong bg-background text-[12.5px] font-medium px-3 py-1.5 rounded-lg hover:bg-background-secondary transition-colors">
-              <Plus className="w-3.5 h-3.5" /> เพิ่มค่าใช้จ่าย
+            <Link href="/admin/expenses" className="flex items-center gap-1.5 border border-border-strong bg-background text-[11px] font-medium px-2.5 py-1.5 rounded-lg hover:bg-background-secondary transition-colors">
+              <Plus className="w-3 h-3" /> เพิ่มค่าใช้จ่าย
             </Link>
-            <a href="/api/reports/export?type=income" className="flex items-center gap-1.5 border border-border-strong bg-background text-[12.5px] font-medium px-3 py-1.5 rounded-lg hover:bg-background-secondary transition-colors">
-              <Download className="w-3.5 h-3.5" /> ส่งออกรายงาน
+            <a href="/api/reports/export?type=income" className="flex items-center gap-1.5 border border-border-strong bg-background text-[11px] font-medium px-2.5 py-1.5 rounded-lg hover:bg-background-secondary transition-colors">
+              <Download className="w-3 h-3" /> ส่งออกรายงาน
             </a>
           </div>
         }
@@ -142,8 +148,8 @@ export default async function AdminOverviewPage() {
         {/* KPI Grid — Row 2: Tier + Credit + Reserve */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Tier Distribution */}
-          <div className="bg-background-secondary border border-border rounded-xl p-5">
-            <div className="text-[11px] uppercase tracking-wide text-text-muted mb-3">สัดส่วน Tier นักศึกษา</div>
+          <div className="bg-background-secondary border border-border rounded-xl p-4">
+            <div className="text-[10px] uppercase tracking-wide text-text-muted mb-3">สัดส่วน Tier นักศึกษา</div>
             <div className="flex items-end gap-2 mb-3">
               {[
                 { label: 'A', count: tierBreakdown.A, color: 'bg-emerald-400', text: 'text-emerald-700' },
@@ -151,55 +157,55 @@ export default async function AdminOverviewPage() {
                 { label: 'C', count: tierBreakdown.C, color: 'bg-amber-400', text: 'text-amber-700' },
               ].map((t) => (
                 <div key={t.label} className="flex-1 flex flex-col items-center gap-1">
-                  <span className={`text-[11px] font-black ${t.text}`}>{t.count}</span>
+                  <span className={`text-[10px] font-black ${t.text}`}>{t.count}</span>
                   <div
                     className={`w-full rounded-t-sm ${t.color} transition-all`}
                     style={{ height: `${Math.max((t.count / Math.max(studentCount ?? 1, 1)) * 48, 4)}px` }}
                   />
-                  <span className={`text-[10px] font-black ${t.text}`}>{t.label}</span>
+                  <span className={`text-[9px] font-black ${t.text}`}>{t.label}</span>
                 </div>
               ))}
             </div>
-            <Link href="/admin/students" className="text-[11px] text-brand hover:underline">ดูรายชื่อ →</Link>
+            <Link href="/admin/students" className="text-[10px] text-brand hover:underline">ดูรายชื่อ →</Link>
           </div>
 
           {/* Credit Debt */}
-          <div className="bg-background-secondary border border-border rounded-xl p-5">
-            <div className="text-[11px] uppercase tracking-wide text-text-muted mb-1">ยอด Credit ค้างจ่าย</div>
-            <div className={`text-[26px] font-bold tracking-tight ${pendingCreditsCount > 0 ? 'text-amber-700' : 'text-text-primary'}`}>
+          <div className="bg-background-secondary border border-border rounded-xl p-4">
+            <div className="text-[10px] uppercase tracking-wide text-text-muted mb-1">ยอด Credit ค้างจ่าย</div>
+            <div className={`text-[22px] font-bold tracking-tight ${pendingCreditsCount > 0 ? 'text-amber-700' : 'text-text-primary'}`}>
               {formatCurrency(creditDebtTotal)}
             </div>
-            <div className="text-[11px] text-text-muted mt-1">
+            <div className="text-[10px] text-text-muted mt-1">
               {pendingCreditsCount > 0
                 ? `${pendingCreditsCount} รายการค้างจ่าย`
                 : 'ไม่มียอดค้าง ✓'}
             </div>
-            <Link href="/admin/credits" className="text-[11px] text-brand hover:underline mt-2 inline-block font-bold">จัดการ Credit →</Link>
+            <Link href="/admin/credits" className="text-[10px] text-brand hover:underline mt-2 inline-block font-bold">จัดการ Credit →</Link>
           </div>
 
           {/* Reserve Fund */}
-          <div className="bg-background-secondary border border-border rounded-xl p-5">
-            <div className="text-[11px] uppercase tracking-wide text-text-muted mb-1">กองทุนสำรอง (สะสม)</div>
-            <div className="text-[26px] font-bold text-text-primary tracking-tight">
+          <div className="bg-background-secondary border border-border rounded-xl p-4">
+            <div className="text-[10px] uppercase tracking-wide text-text-muted mb-1">กองทุนสำรอง (สะสม)</div>
+            <div className="text-[22px] font-bold text-text-primary tracking-tight">
               ฿{reserveTarget.toLocaleString()}
             </div>
-            <div className="text-[11px] text-text-muted mt-1">หักออกจากเงินกองกลางโดยตรง</div>
-            <Link href="/admin/settings" className="text-[11px] text-brand hover:underline mt-2 inline-block font-bold">ตั้งค่าเป้าหมาย →</Link>
+            <div className="text-[10px] text-text-muted mt-1">หักออกจากเงินกองกลางโดยตรง</div>
+            <Link href="/admin/settings" className="text-[10px] text-brand hover:underline mt-2 inline-block font-bold">ตั้งค่าเป้าหมาย →</Link>
           </div>
         </div>
 
         {/* Middle Section */}
-        <div className="grid gap-4" style={{ gridTemplateColumns: '3fr 2fr' }}>
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           {/* Pending Payments Table */}
-          <div className="bg-background-secondary border border-border rounded-xl overflow-hidden">
+          <div className="lg:col-span-3 bg-background-secondary border border-border rounded-xl overflow-hidden">
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-[13.5px] font-semibold text-text-primary">รายการรอตรวจสอบ</span>
+                <span className="text-[12px] font-semibold text-text-primary">รายการรอตรวจสอบ</span>
                 {(pendingCount ?? 0) > 0 && (
-                  <span className="bg-amber-100 text-amber-700 text-[10px] font-semibold px-1.5 py-0.5 rounded-full">{pendingCount}</span>
+                  <span className="bg-amber-100 text-amber-700 text-[9px] font-semibold px-1.5 py-0.5 rounded-full">{pendingCount}</span>
                 )}
               </div>
-              <Link href="/admin/payments" className="text-[12px] text-text-muted hover:text-text-primary transition-colors">ดูทั้งหมด →</Link>
+              <Link href="/admin/payments" className="text-[11px] text-text-muted hover:text-text-primary transition-colors">ดูทั้งหมด →</Link>
             </div>
             {pendingPayments && pendingPayments.length > 0 ? (
               <div className="divide-y divide-border">
@@ -208,15 +214,15 @@ export default async function AdminOverviewPage() {
                   return (
                     <div key={p.id} className="flex items-center gap-4 px-5 py-3">
                       <div className="w-7 h-7 rounded-full bg-brand flex items-center justify-center flex-shrink-0">
-                        <span className="text-white text-[10px] font-semibold">
+                        <span className="text-white text-[9px] font-semibold">
                           {user?.fullname?.[0] ?? 'U'}
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[12.5px] font-medium text-text-primary truncate">{user?.fullname}</div>
-                        <div className="text-[11px] text-text-muted">{user?.student_id} · {p.period?.label || '—'}</div>
+                        <div className="text-[11.5px] font-medium text-text-primary truncate">{user?.fullname}</div>
+                        <div className="text-[10px] text-text-muted">{user?.student_id} · {p.period?.label || '—'}</div>
                       </div>
-                      <div className="text-[12.5px] font-semibold text-text-primary">{formatCurrency(p.amount)}</div>
+                      <div className="text-[11.5px] font-semibold text-text-primary">{formatCurrency(p.amount)}</div>
                       <div className="flex items-center gap-1">
                         <QuickApproveButton paymentId={p.id} />
                       </div>
@@ -225,29 +231,29 @@ export default async function AdminOverviewPage() {
                 })}
               </div>
             ) : (
-              <div className="py-8 text-center text-[13px] text-text-muted">ไม่มีรายการรอตรวจสอบ ✓</div>
+              <div className="py-8 text-center text-[12px] text-text-muted">ไม่มีรายการรอตรวจสอบ ✓</div>
             )}
           </div>
 
           {/* Right Column */}
-          <div className="space-y-4">
+          <div className="lg:col-span-2 space-y-4">
             {/* Balance Card */}
-            <div className="bg-background-secondary border border-border rounded-xl p-5">
-              <div className="text-[11px] uppercase tracking-wide text-text-muted mb-2">ยอดคงเหลือคลัง</div>
-              <div className="text-[26px] font-bold text-text-primary tracking-tight">{formatCurrency(balance ?? 0)}</div>
+            <div className="bg-background-secondary border border-border rounded-xl p-4">
+              <div className="text-[10px] uppercase tracking-wide text-text-muted mb-2">ยอดคงเหลือคลัง</div>
+              <div className="text-[22px] font-bold text-text-primary tracking-tight">{formatCurrency(balance ?? 0)}</div>
             </div>
 
             {/* Period Chart */}
-            <div className="bg-background-secondary border border-border rounded-xl p-5">
-              <div className="text-[13px] font-semibold text-text-primary mb-1">อัตราการชำระ 5 งวดล่าสุด</div>
-              <div className="text-[10px] text-text-muted mb-4">{activeSemester?.name ?? '—'}</div>
+            <div className="bg-background-secondary border border-border rounded-xl p-4">
+              <div className="text-[12px] font-semibold text-text-primary mb-1">อัตราการชำระ 5 งวดล่าสุด</div>
+              <div className="text-[9px] text-text-muted mb-4">{activeSemester?.name ?? '—'}</div>
               <div className="flex items-end gap-2" style={{ height: '72px' }}>
                 {periodRates.map((p, i) => {
                   const isLatest = i === periodRates.length - 1
                   const barH = Math.max((p.rate / 100) * 60, 4)
                   return (
                     <div key={p.id} className="flex-1 flex flex-col items-center gap-1.5" title={`${p.label}: ${p.rate}%`}>
-                      <span className="text-[9px] font-bold text-text-muted">{p.rate > 0 ? `${p.rate}%` : ''}</span>
+                      <span className="text-[8.5px] font-bold text-text-muted">{p.rate > 0 ? `${p.rate}%` : ''}</span>
                       <div
                         className={`w-full rounded-t-md bar-grow ${
                           isLatest
@@ -256,19 +262,19 @@ export default async function AdminOverviewPage() {
                         }`}
                         style={{ height: `${barH}px`, animationDelay: `${i * 80}ms` }}
                       />
-                      <div className="text-[8.5px] text-text-muted truncate w-full text-center font-medium" title={p.label}>{p.label}</div>
+                      <div className="text-[8px] text-text-muted truncate w-full text-center font-medium" title={p.label}>{p.label}</div>
                     </div>
                   )
                 })}
                 {periodRates.length === 0 && (
-                  <div className="text-[12px] text-text-muted text-center w-full italic self-center">ยังไม่มีงวดชำระเงิน</div>
+                  <div className="text-[11px] text-text-muted text-center w-full italic self-center">ยังไม่มีงวดชำระเงิน</div>
                 )}
               </div>
             </div>
 
             {/* Activity */}
-            <div className="bg-background-secondary border border-border rounded-xl p-5">
-              <div className="text-[13px] font-semibold text-text-primary mb-3">กิจกรรมล่าสุด</div>
+            <div className="bg-background-secondary border border-border rounded-xl p-4">
+              <div className="text-[12px] font-semibold text-text-primary mb-3">กิจกรรมล่าสุด</div>
               <ActivityFeed activities={activities.slice(0, 6)} />
             </div>
           </div>
@@ -291,8 +297,8 @@ export default async function AdminOverviewPage() {
                 <a.icon className="w-4 h-4 text-text-secondary" />
               </div>
               <div>
-                <div className="text-[13px] font-bold text-text-primary">{a.label}</div>
-                <div className="text-[11.5px] text-text-muted">{a.desc}</div>
+                <div className="text-[12px] font-bold text-text-primary">{a.label}</div>
+                <div className="text-[10.5px] text-text-muted">{a.desc}</div>
               </div>
             </Link>
           ))}

@@ -100,6 +100,19 @@ export interface Expense {
   approver?: User
 }
 
+export interface Income {
+  id: string
+  title: string
+  description: string | null
+  amount: number
+  created_by: string
+  approved_by: string | null
+  source: string | null
+  created_at: string
+  creator?: User
+  approver?: User
+}
+
 export interface AuditLog {
   id: string
   actor_id: string | null

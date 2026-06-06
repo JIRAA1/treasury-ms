@@ -32,12 +32,12 @@ export default function Topbar({ title, subtitle, actions }: TopbarProps) {
           {/* Title block */}
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h2 className="text-[17px] md:text-[18px] font-black text-text-primary tracking-tight truncate leading-none">
+              <h2 className="text-[15px] md:text-[16px] font-black text-text-primary tracking-tight truncate leading-none">
                 {title}
               </h2>
             </div>
             {subtitle && (
-              <p className="text-[11px] text-text-muted font-medium truncate mt-0.5 tracking-wide">
+              <p className="text-[10px] text-text-muted font-medium truncate mt-0.5 tracking-wide">
                 {subtitle}
               </p>
             )}

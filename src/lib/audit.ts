@@ -26,9 +26,11 @@ type AuditAction =
   | 'period_created'
   | 'periods_batch_updated'
   | 'students_cleared'
+  | 'audit_deleted'
+  | 'audit_cleared'
 
 interface LogParams {
-  actorId: string
+  actorId: string | null
   action: AuditAction
   targetId?: string
   oldValue?: Record<string, unknown>
@@ -57,7 +59,7 @@ async function _logAction(
   const { createAdminClient } = await import('@/lib/supabase/admin')
   const adminClient = createAdminClient()
   const { error } = await adminClient.from('audit_logs').insert({
-    actor_id: params.actorId,
+    actor_id: params.actorId || null,
     action: params.action,
     target_id: params.targetId ?? null,
     old_value: params.oldValue ?? null,

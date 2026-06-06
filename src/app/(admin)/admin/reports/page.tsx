@@ -12,34 +12,42 @@ export const metadata = { title: 'รายงาน — TreasuryMS' }
 export default async function AdminReportsPage() {
   const adminClient = createAdminClient()
 
+  const { data: activeSemester } = await adminClient
+    .from('semesters')
+    .select('id')
+    .eq('is_active', true)
+    .maybeSingle()
+
+  const activeSemesterId = activeSemester?.id || '00000000-0000-0000-0000-000000000000'
+
   const [
     { data: students },
     { data: payments },
     { data: expenses },
     { data: incomes },
-    { data: settings },
+    { data: periods },
     { data: sysSettings }
   ] = await Promise.all([
     adminClient.from('users').select('id, fullname, student_id').eq('role', 'student'),
-    adminClient.from('payments').select('*'),
-    adminClient.from('expenses').select('*'),
-    adminClient.from('incomes').select('*'),
-    adminClient.from('week_settings').select('*').order('week', { ascending: true }),
-    adminClient.from('system_settings').select('*')
+    adminClient.from('payments').select('id, user_id, period_id, amount, status'),
+    adminClient.from('expenses').select('id, title, amount, approved_by, created_at'),
+    adminClient.from('incomes').select('id, title, amount, approved_by, source, created_at'),
+    adminClient.from('periods').select('id, label, period_order, amount').eq('semester_id', activeSemesterId).order('period_order', { ascending: true }),
+    adminClient.from('system_settings').select('key, value')
   ])
 
-  const totalPayments = payments?.filter(p => p.status === 'approved').reduce((s, p) => s + p.amount, 0) || 0
-  const totalOtherIncomes = incomes?.filter(i => i.approved_by).reduce((s, i) => s + i.amount, 0) || 0
+  const totalPayments = payments?.filter(p => p.status === 'approved').reduce((s, p) => s + (p.amount || 0), 0) || 0
+  const totalOtherIncomes = incomes?.filter(i => i.approved_by).reduce((s, i) => s + (i.amount || 0), 0) || 0
   const totalIncome = totalPayments + totalOtherIncomes
-  const totalExpense = expenses?.filter(e => e.approved_by).reduce((s, e) => s + e.amount, 0) || 0
+  const totalExpense = expenses?.filter(e => e.approved_by).reduce((s, e) => s + (e.amount || 0), 0) || 0
   const balance = totalIncome - totalExpense
 
   const reserveTarget = parseInt(sysSettings?.find((s: any) => s.key === 'reserve_fund_monthly_target')?.value ?? '200', 10)
   const availableBalance = balance - reserveTarget
 
-  const cycleData = settings?.map((s) => {
-    const cyclePayments = payments?.filter(p => p.week === s.week && p.status === 'approved') || []
-    const collected = cyclePayments.reduce((sum, p) => sum + p.amount, 0)
+  const cycleData = periods?.map((s) => {
+    const cyclePayments = payments?.filter(p => p.period_id === s.id && p.status === 'approved') || []
+    const collected = cyclePayments.reduce((sum, p) => sum + (p.amount || 0), 0)
     const paidCount = cyclePayments.length
     return { ...s, collected, paidCount }
   }) || []
@@ -54,15 +62,15 @@ export default async function AdminReportsPage() {
         subtitle="สรุปรายรับ-รายจ่าย และภาพรวมทั้งหมด"
         actions={
           <div className="flex gap-2">
-            <a href="/api/reports/export?type=credits" className="flex items-center gap-1.5 border border-amber-200 bg-amber-50 text-amber-700 text-[12.5px] font-medium px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors">
+            <a href="/api/reports/export?type=credits" className="flex items-center gap-1.5 border border-amber-200 bg-amber-50 text-amber-700 text-[11px] font-medium px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors">
               <Download className="w-3.5 h-3.5" />
               Credit Report
             </a>
-            <a href="/api/reports/export?type=income" className="flex items-center gap-1.5 border border-border-strong bg-background text-[12.5px] font-medium px-3 py-1.5 rounded-lg hover:bg-background-secondary transition-colors">
+            <a href="/api/reports/export?type=income" className="flex items-center gap-1.5 border border-border-strong bg-background text-[11px] font-medium px-3 py-1.5 rounded-lg hover:bg-background-secondary transition-colors">
               <Download className="w-3.5 h-3.5" />
               ส่งออกรายรับ
             </a>
-            <a href="/api/reports/export?type=students" className="flex items-center gap-1.5 border border-border-strong bg-background text-[12.5px] font-medium px-3 py-1.5 rounded-lg hover:bg-background-secondary transition-colors">
+            <a href="/api/reports/export?type=students" className="flex items-center gap-1.5 border border-border-strong bg-background text-[11px] font-medium px-3 py-1.5 rounded-lg hover:bg-background-secondary transition-colors">
               <Download className="w-3.5 h-3.5" />
               สรุปรายคน
             </a>
@@ -89,53 +97,53 @@ export default async function AdminReportsPage() {
         <div className="grid grid-cols-2 gap-6">
           {/* Cycle Summary */}
           <div className="bg-background-secondary border border-border rounded-xl p-5">
-            <div className="text-[14px] font-bold text-text-primary mb-4 flex items-center gap-2">
+            <div className="text-[13px] font-bold text-text-primary mb-4 flex items-center gap-2">
               <CreditCard className="w-4 h-4 text-brand" />
               สรุปตามงวดการชำระ
             </div>
             <div className="space-y-2">
               {cycleData.map((c) => (
-                <div key={c.week} className="flex items-center justify-between p-3 bg-background border border-border rounded-lg">
+                <div key={c.id} className="flex items-center justify-between p-3 bg-background border border-border rounded-lg">
                   <div>
-                    <div className="text-[13px] font-semibold text-text-primary">{c.title || `งวดที่ ${c.week}`}</div>
-                    <div className="text-[11px] text-text-muted">ชำระแล้ว {c.paidCount}/{students?.length || 0} คน</div>
+                    <div className="text-[12px] font-semibold text-text-primary">{c.label || `งวดที่ ${c.period_order}`}</div>
+                    <div className="text-[10px] text-text-muted">ชำระแล้ว {c.paidCount}/{students?.length || 0} คน</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-[13px] font-bold text-brand">{formatCurrency(c.collected)}</div>
-                    <div className="text-[11px] text-text-muted">ยอดที่กำหนด ฿{c.amount}</div>
+                    <div className="text-[12px] font-bold text-brand">{formatCurrency(c.collected)}</div>
+                    <div className="text-[10px] text-text-muted">ยอดที่กำหนด ฿{c.amount}</div>
                   </div>
                 </div>
               ))}
-              {cycleData.length === 0 && <div className="text-center py-8 text-text-muted italic text-[12.5px]">ยังไม่มีข้อมูลการชำระเงิน</div>}
+              {cycleData.length === 0 && <div className="text-center py-8 text-text-muted italic text-[11.5px]">ยังไม่มีข้อมูลการชำระเงิน</div>}
             </div>
           </div>
 
           {/* Student Summary */}
           <div className="bg-background-secondary border border-border rounded-xl p-5">
             <div className="flex items-center justify-between mb-4">
-              <div className="text-[14px] font-bold text-text-primary flex items-center gap-2">
+              <div className="text-[13px] font-bold text-text-primary flex items-center gap-2">
                 <Users className="w-4 h-4 text-brand" />
                 สถานะนักศึกษา
               </div>
-              <Link href="/admin/students" className="text-[11.5px] text-brand hover:underline flex items-center gap-1">
+              <Link href="/admin/students" className="text-[10.5px] text-brand hover:underline flex items-center gap-1">
                 ดูทั้งหมด <ArrowRight className="w-3 h-3" />
               </Link>
             </div>
             <div className="divide-y divide-border">
               {students?.slice(0, 8).map((s) => {
                 const paidCount = payments?.filter(p => p.user_id === s.id && p.status === 'approved').length || 0
-                const isFullyPaid = paidCount >= (settings?.length || 0)
+                const isFullyPaid = paidCount >= (periods?.length || 0)
                 return (
-                  <div key={s.id} className="py-2.5 flex items-center justify-between">
+                  <div key={s.id} className="py-2 flex items-center justify-between">
                     <div>
-                      <div className="text-[12.5px] font-medium text-text-primary">{s.fullname}</div>
-                      <div className="text-[10.5px] text-text-muted">{s.student_id}</div>
+                      <div className="text-[11.5px] font-medium text-text-primary">{s.fullname}</div>
+                      <div className="text-[9.5px] text-text-muted">{s.student_id}</div>
                     </div>
                     <div className={cn(
-                      "text-[11px] font-bold px-2 py-0.5 rounded-full",
+                      "text-[10px] font-bold px-2 py-0.5 rounded-full",
                       isFullyPaid ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"
                     )}>
-                      {paidCount}/{settings?.length || 0} งวด
+                      {paidCount}/{periods?.length || 0} งวด
                     </div>
                   </div>
                 )
@@ -149,11 +157,11 @@ export default async function AdminReportsPage() {
           {/* Other Incomes summary card */}
           <div className="bg-background-secondary border border-border rounded-xl p-5">
             <div className="flex items-center justify-between mb-4">
-              <div className="text-[14px] font-bold text-text-primary flex items-center gap-2">
+              <div className="text-[13px] font-bold text-text-primary flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-emerald-600" />
                 รายรับอื่น ๆ (ที่อนุมัติแล้ว)
               </div>
-              <Link href="/admin/incomes" className="text-[11.5px] text-brand hover:underline flex items-center gap-1">
+              <Link href="/admin/incomes" className="text-[10.5px] text-brand hover:underline flex items-center gap-1">
                 จัดการรายรับ <ArrowRight className="w-3 h-3" />
               </Link>
             </div>
@@ -161,16 +169,16 @@ export default async function AdminReportsPage() {
               {approvedOtherIncomes.slice(0, 5).map((i) => (
                 <div key={i.id} className="flex items-center justify-between p-3 bg-background border border-border rounded-lg">
                   <div>
-                    <div className="text-[13px] font-semibold text-text-primary">{i.title}</div>
-                    <div className="text-[11px] text-text-muted">{i.source || 'ไม่ระบุแหล่งที่มา'} · {new Date(i.created_at).toLocaleDateString('th-TH')}</div>
+                    <div className="text-[12px] font-semibold text-text-primary">{i.title}</div>
+                    <div className="text-[10px] text-text-muted">{i.source || 'ไม่ระบุแหล่งที่มา'} · {new Date(i.created_at).toLocaleDateString('th-TH')}</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-[13px] font-bold text-emerald-600">{formatCurrency(i.amount)}</div>
+                    <div className="text-[12px] font-bold text-emerald-600">{formatCurrency(i.amount)}</div>
                   </div>
                 </div>
               ))}
               {approvedOtherIncomes.length === 0 && (
-                <div className="text-center py-8 text-text-muted italic text-[12.5px]">ยังไม่มีข้อมูลรายรับอื่น ๆ</div>
+                <div className="text-center py-8 text-text-muted italic text-[11.5px]">ยังไม่มีข้อมูลรายรับอื่น ๆ</div>
               )}
             </div>
           </div>
@@ -178,11 +186,11 @@ export default async function AdminReportsPage() {
           {/* Expenses summary card */}
           <div className="bg-background-secondary border border-border rounded-xl p-5">
             <div className="flex items-center justify-between mb-4">
-              <div className="text-[14px] font-bold text-text-primary flex items-center gap-2">
+              <div className="text-[13px] font-bold text-text-primary flex items-center gap-2">
                 <Receipt className="w-4 h-4 text-red-600" />
                 รายจ่ายล่าสุด (ที่อนุมัติแล้ว)
               </div>
-              <Link href="/admin/expenses" className="text-[11.5px] text-brand hover:underline flex items-center gap-1">
+              <Link href="/admin/expenses" className="text-[10.5px] text-brand hover:underline flex items-center gap-1">
                 จัดการรายจ่าย <ArrowRight className="w-3 h-3" />
               </Link>
             </div>
@@ -190,16 +198,16 @@ export default async function AdminReportsPage() {
               {approvedExpenses.slice(0, 5).map((e) => (
                 <div key={e.id} className="flex items-center justify-between p-3 bg-background border border-border rounded-lg">
                   <div>
-                    <div className="text-[13px] font-semibold text-text-primary">{e.title}</div>
-                    <div className="text-[11px] text-text-muted">{new Date(e.created_at).toLocaleDateString('th-TH')}</div>
+                    <div className="text-[12px] font-semibold text-text-primary">{e.title}</div>
+                    <div className="text-[10px] text-text-muted">{new Date(e.created_at).toLocaleDateString('th-TH')}</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-[13px] font-bold text-red-600">{formatCurrency(e.amount)}</div>
+                    <div className="text-[12px] font-bold text-red-600">{formatCurrency(e.amount)}</div>
                   </div>
                 </div>
               ))}
               {approvedExpenses.length === 0 && (
-                <div className="text-center py-8 text-text-muted italic text-[12.5px]">ยังไม่มีข้อมูลรายจ่าย</div>
+                <div className="text-center py-8 text-text-muted italic text-[11.5px]">ยังไม่มีข้อมูลรายจ่าย</div>
               )}
             </div>
           </div>
@@ -208,5 +216,3 @@ export default async function AdminReportsPage() {
     </div>
   )
 }
-
-
