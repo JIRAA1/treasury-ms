@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Check, Loader2, Calendar, Settings, ArrowRight } from 'lucide-react'
+import { Plus, Check, Loader2, Calendar, Settings, ArrowRight, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
+import { useDialog } from '@/components/shared/GlobalDialog'
 
 interface Semester {
   id: string
@@ -21,6 +22,31 @@ export default function SemesterManager() {
   const [newName, setNewName] = useState('')
   const [newDesc, setNewDesc] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
+  const dialog = useDialog()
+
+  const handleDelete = (id: string, name: string) => {
+    dialog.show({
+      type: 'error',
+      title: 'ยืนยันการลบภาคเรียน',
+      message: `คุณแน่ใจหรือไม่ที่จะลบภาคเรียน "${name}"? งวดการชำระเงินทั้งหมดในเทอมนี้จะถูกลบไปด้วย และการดำเนินการนี้ไม่สามารถย้อนกลับได้`,
+      onConfirm: async () => {
+        dialog.setLoading(true)
+        try {
+          const res = await fetch(`/api/semesters/${id}`, {
+            method: 'DELETE',
+          })
+          const json = await res.json()
+          if (!res.ok) throw new Error(json.error || 'Failed to delete semester')
+          toast.success(json.message || 'ลบภาคเรียนเรียบร้อยแล้ว')
+          fetchSemesters()
+        } catch (err: any) {
+          toast.error(err.message || 'เกิดข้อผิดพลาดในการลบภาคเรียน')
+        } finally {
+          dialog.hide()
+        }
+      }
+    })
+  }
 
   const fetchSemesters = async () => {
     try {
@@ -187,12 +213,21 @@ export default function SemesterManager() {
 
             <div className="flex items-center gap-2.5 self-end md:self-center">
               {!s.is_active && (
-                <button
-                  onClick={() => handleActivate(s.id)}
-                  className="px-4 py-2 border border-brand/30 hover:border-brand text-brand hover:bg-brand/5 rounded-xl text-[12px] font-bold transition-all"
-                >
-                  ตั้งเป็น Active
-                </button>
+                <>
+                  <button
+                    onClick={() => handleActivate(s.id)}
+                    className="px-4 py-2 border border-brand/30 hover:border-brand text-brand hover:bg-brand/5 rounded-xl text-[12px] font-bold transition-all"
+                  >
+                    ตั้งเป็น Active
+                  </button>
+                  <button
+                    onClick={() => handleDelete(s.id, s.name)}
+                    className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 border border-transparent hover:border-red-200 rounded-xl transition-all"
+                    title="ลบภาคเรียน"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </>
               )}
               <Link
                 href={`/admin/settings/periods?semester_id=${s.id}`}

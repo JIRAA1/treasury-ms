@@ -9,9 +9,11 @@ export default function DataManagement() {
   const [loading, setLoading] = useState<string | null>(null)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [resetInput, setResetInput] = useState('')
+  const [showClearStudentsConfirm, setShowClearStudentsConfirm] = useState(false)
+  const [clearStudentsInput, setClearStudentsInput] = useState('')
   const dialog = useDialog()
 
-  const executeAction = async (action: 'clear_payments' | 'reset_all' | 'reset_all_bindings') => {
+  const executeAction = async (action: 'clear_payments' | 'reset_all' | 'reset_all_bindings' | 'clear_students') => {
     setLoading(action)
     try {
       const res = await fetch('/api/admin/system/reset', {
@@ -23,7 +25,9 @@ export default function DataManagement() {
       if (!res.ok) throw new Error(data.error)
       toast.success(data.message)
       setShowResetConfirm(false)
+      setShowClearStudentsConfirm(false)
       setResetInput('')
+      setClearStudentsInput('')
       setTimeout(() => window.location.reload(), 1500)
     } catch (error: any) {
       toast.error('ล้มเหลว: ' + error.message)
@@ -32,11 +36,16 @@ export default function DataManagement() {
     }
   }
 
-  const handleAction = async (action: 'clear_payments' | 'reset_all' | 'reset_all_bindings') => {
-    // reset_all ใช้ type-to-confirm modal แยกต่างหาก
+  const handleAction = async (action: 'clear_payments' | 'reset_all' | 'reset_all_bindings' | 'clear_students') => {
     if (action === 'reset_all') {
       setResetInput('')
       setShowResetConfirm(true)
+      return
+    }
+
+    if (action === 'clear_students') {
+      setClearStudentsInput('')
+      setShowClearStudentsConfirm(true)
       return
     }
 
@@ -124,7 +133,7 @@ export default function DataManagement() {
             <div className="flex-1">
               <h4 className="text-[14px] font-bold text-red-700">รีเซ็ตระบบและล้างข้อมูลทั้งหมด</h4>
               <p className="text-[12px] text-red-600/70 mt-1 leading-relaxed">
-                ลบข้อมูลทุกอย่างในระบบ (รายรับ, รายจ่าย, เครดิตค้างจ่าย, การแจ้งเตือน, ประวัติการทำงานทั้งหมด) ลบไฟล์รูปภาพใน Storage และรีเซ็ต Tier ของนักศึกษาทุกคนกลับเป็นเริ่มต้น (Tier B) โดยไม่ลบรายชื่อนักศึกษา
+                ลบข้อมูลทุกอย่างในระบบ (ภาคเรียน, งวดการชำระเงิน, รายรับ, รายจ่าย, เครดิตค้างจ่าย, การแจ้งเตือน, ประวัติการทำงานทั้งหมด) ลบไฟล์รูปภาพใน Storage และรีเซ็ต Tier ของนักศึกษาทุกคนกลับเป็นเริ่มต้น (Tier B) โดยไม่ลบรายชื่อนักศึกษา
               </p>
               <button
                 onClick={() => handleAction('reset_all')}
@@ -133,6 +142,29 @@ export default function DataManagement() {
               >
                 {loading === 'reset_all' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                 รีเซ็ตข้อมูลทั้งหมด
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Clear All Student Accounts */}
+        <div className="border border-orange-100 rounded-xl p-5 bg-orange-50/30">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-orange-100 rounded-lg">
+              <Trash2 className="w-5 h-5 text-orange-600" />
+            </div>
+            <div className="flex-1">
+              <h4 className="text-[14px] font-bold text-orange-700">ลบรายชื่อนักศึกษาทั้งหมด</h4>
+              <p className="text-[12px] text-orange-600/70 mt-1 leading-relaxed">
+                ลบรายชื่อบัญชีนักศึกษาทุกคนในระบบ (ไม่ลบแอดมิน/เหรัญญิก) รวมถึงประวัติการเงิน สลิปการโอน และข้อมูลผู้ใช้ของนักศึกษาทั้งหมด เหมาะสำหรับล้างระบบเพื่อนำเข้ารายชื่อนักศึกษารุ่นปีใหม่ทั้งหมด
+              </p>
+              <button
+                onClick={() => handleAction('clear_students')}
+                disabled={!!loading}
+                className="mt-4 px-4 py-2 bg-orange-600 text-white text-[12px] font-bold rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {loading === 'clear_students' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                ลบรายชื่อนักศึกษาทั้งหมด
               </button>
             </div>
           </div>
@@ -197,6 +229,63 @@ export default function DataManagement() {
                     <><Loader2 className="w-4 h-4 animate-spin" /> กำลังดำเนินการ...</>
                   ) : (
                     <><Trash2 className="w-4 h-4" /> รีเซ็ตทั้งหมด</>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Type-to-Confirm Modal for Clear Students */}
+      {showClearStudentsConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-background border border-orange-200 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            {/* Header */}
+            <div className="bg-orange-600 px-6 py-4 flex items-center gap-3">
+              <ShieldAlert className="w-5 h-5 text-white flex-shrink-0" />
+              <div>
+                <div className="text-white font-bold text-[14px]">ยืนยันการลบรายชื่อนักศึกษาทั้งหมด</div>
+                <div className="text-orange-200 text-[11.5px]">การดำเนินการนี้จะลบข้อมูลประวัติการเงินทั้งหมดและไม่สามารถย้อนกลับได้</div>
+              </div>
+            </div>
+            {/* Body */}
+            <div className="px-6 py-5 space-y-4">
+              <div className="text-[12.5px] text-text-secondary leading-relaxed">
+                รายชื่อนักศึกษาทุกคน, สลิป และข้อมูลประวัติการทำรายการของนักศึกษาทั้งหมดจะถูก
+                <span className="font-bold text-orange-700"> ลบถาวร</span> ออกจากระบบอย่างเสร็จสมบูรณ์
+              </div>
+              <div className="bg-orange-50 border border-orange-100 rounded-xl p-3">
+                <div className="text-[11.5px] text-orange-800 font-semibold mb-2">
+                  พิมพ์ <span className="font-black tracking-widest bg-orange-100 px-1.5 py-0.5 rounded">CLEAR STUDENTS</span> เพื่อยืนยัน:
+                </div>
+                <input
+                  id="clear-students-confirm-input"
+                  type="text"
+                  value={clearStudentsInput}
+                  onChange={(e) => setClearStudentsInput(e.target.value)}
+                  placeholder="พิมพ์ CLEAR STUDENTS ที่นี่"
+                  autoFocus
+                  className="w-full border border-orange-200 rounded-lg px-3 py-2 text-[13px] font-mono font-bold text-orange-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-orange-300"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setShowClearStudentsConfirm(false); setClearStudentsInput('') }}
+                  disabled={!!loading}
+                  className="flex-1 px-4 py-2.5 border border-border rounded-xl text-[13px] font-semibold text-text-muted hover:bg-background-tertiary transition-colors"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  onClick={() => executeAction('clear_students')}
+                  disabled={clearStudentsInput !== 'CLEAR STUDENTS' || !!loading}
+                  className="flex-1 px-4 py-2.5 bg-orange-600 text-white text-[13px] font-bold rounded-xl hover:bg-orange-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {loading === 'clear_students' ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> กำลังดำเนินการ...</>
+                  ) : (
+                    <><Trash2 className="w-4 h-4" /> ลบทั้งหมด</>
                   )}
                 </button>
               </div>
