@@ -26,10 +26,33 @@ export default async function TransparencyPage() {
 
   if (!profile) redirect('/bind')
 
+  const { data: activeSemester } = await adminClient
+    .from('semesters')
+    .select('id')
+    .eq('is_active', true)
+    .maybeSingle()
+
+  const activeSemesterId = activeSemester?.id || '00000000-0000-0000-0000-000000000000'
+
+  const [
+    { data: periods },
+    { data: sysSettings }
+  ] = await Promise.all([
+    adminClient
+      .from('periods')
+      .select('*')
+      .eq('semester_id', activeSemesterId)
+      .order('period_order', { ascending: true }),
+    adminClient.from('system_settings').select('*')
+  ])
+
+  const periodIds = (periods ?? []).map((p) => p.id)
+
   const { data: payments } = await adminClient
     .from('payments')
-    .select('amount, status, week')
+    .select('amount, status, period_id')
     .eq('status', 'approved')
+    .in('period_id', periodIds.length > 0 ? periodIds : ['00000000-0000-0000-0000-000000000000'])
 
   const { data: incomes } = await adminClient
     .from('incomes')
@@ -48,14 +71,6 @@ export default async function TransparencyPage() {
     .select('*', { count: 'exact', head: true })
     .eq('role', 'student')
 
-  const [
-    { data: settings },
-    { data: sysSettings }
-  ] = await Promise.all([
-    adminClient.from('week_settings').select('*').order('week', { ascending: true }),
-    adminClient.from('system_settings').select('*')
-  ])
-
   const totalStudentIncome = payments?.reduce((s, p) => s + p.amount, 0) || 0
   const totalOtherIncome = incomes?.reduce((s, i) => s + i.amount, 0) || 0
   const totalIncome = totalStudentIncome + totalOtherIncome
@@ -65,15 +80,15 @@ export default async function TransparencyPage() {
   const reserveTarget = parseInt(sysSettings?.find((s: any) => s.key === 'reserve_fund_monthly_target')?.value ?? '200', 10)
   const availableBalance = balance - reserveTarget
 
-  const cycleData = settings?.map((s) => {
-    const cyclePayments = payments?.filter((p) => p.week === s.week) || []
+  const cycleData = (periods ?? []).map((p) => {
+    const cyclePayments = payments?.filter((pay) => pay.period_id === p.id) || []
     return {
-      week: s.week,
-      title: s.title || `งวดที่ ${s.week}`,
-      collected: cyclePayments.reduce((sum, p) => sum + p.amount, 0),
+      id: p.id,
+      title: p.label || `งวดที่ ${p.period_order}`,
+      collected: cyclePayments.reduce((sum, pay) => sum + pay.amount, 0),
       paidCount: cyclePayments.length,
     }
-  }) || []
+  })
 
   return (
     <div>
@@ -124,7 +139,7 @@ export default async function TransparencyPage() {
                 const rate = studentCount ? Math.round((c.paidCount / studentCount) * 100) : 0
                 const barColor = rate >= 80 ? 'bg-emerald-500' : rate >= 50 ? 'bg-amber-400' : 'bg-red-400'
                 return (
-                <div key={c.week} className="px-6 py-4 flex items-center justify-between hover:bg-background-tertiary/30 transition-colors">
+                <div key={c.id} className="px-6 py-4 flex items-center justify-between hover:bg-background-tertiary/30 transition-colors">
                   <div>
                     <div className="text-[13.5px] font-bold text-text-primary">{c.title}</div>
                     <div className="text-[11.5px] text-text-muted mt-0.5">ผู้ชำระแล้ว {c.paidCount} จาก {studentCount || 0} คน</div>

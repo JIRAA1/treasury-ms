@@ -3,25 +3,20 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import StatusPill from '@/components/payments/StatusPill'
-import { formatCurrency, formatDate, getWeekLabel } from '@/lib/utils'
+import { formatCurrency, formatDate } from '@/lib/utils'
 import { Banknote, Check, X, Edit, Trash2, Link2Off, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import EditStudentModal from '@/components/admin/EditStudentModal'
-import type { WeekStatus } from '@/types'
-
-interface WeekRow extends WeekStatus {
-  title?: string
-  deadline?: string
-}
+import type { PeriodStatus } from '@/types'
 
 interface StudentDetailClientProps {
   student: Record<string, unknown>
-  weekStatuses: WeekRow[]
+  periodStatuses: PeriodStatus[]
   actorRole: string
   profileActionsOnly?: boolean
 }
 
-export default function StudentDetailClient({ student, weekStatuses, actorRole, profileActionsOnly = false }: StudentDetailClientProps) {
+export default function StudentDetailClient({ student, periodStatuses, actorRole, profileActionsOnly = false }: StudentDetailClientProps) {
   const router = useRouter()
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [loadingId, setLoadingId] = useState<string | null>(null)
@@ -30,28 +25,28 @@ export default function StudentDetailClient({ student, weekStatuses, actorRole, 
   const isTreasurer = actorRole === 'treasurer' || isAdmin
 
   // ---- Cash payment ----
-  const handleCashPayment = async (ws: WeekRow) => {
-    if (!confirm(`ยืนยันรับเงินสดจำนวน ${formatCurrency(ws.amount)} สำหรับ "${ws.title || `งวดที่ ${ws.week}`}" ใช่หรือไม่?`)) return
-    setLoadingId(`cash-${ws.week}`)
+  const handleCashPayment = async (ps: PeriodStatus) => {
+    if (!confirm(`ยืนยันรับเงินสดจำนวน ${formatCurrency(ps.period.amount)} สำหรับ "${ps.period.label}" ใช่หรือไม่?`)) return
+    setLoadingId(`cash-${ps.period.id}`)
     try {
       const paymentData = {
         user_id: student.id as string,
-        week: ws.week,
-        amount: ws.amount,
+        period_id: ps.period.id,
+        amount: ps.period.amount,
         status: 'approved',
         note: 'ชำระด้วยเงินสด (บันทึกโดยเหรัญญิก)',
         verified_at: new Date().toISOString(),
       }
 
       let paymentId: string
-      if (ws.payment?.id) {
+      if (ps.payment?.id) {
         const res = await fetch(`/api/payments/verify`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: ws.payment.id, action: 'approve' }),
+          body: JSON.stringify({ id: ps.payment.id, action: 'approve' }),
         })
         if (!res.ok) throw new Error((await res.json()).error)
-        paymentId = ws.payment.id
+        paymentId = ps.payment.id
       } else {
         const res = await fetch('/api/payments/cash', {
           method: 'POST',
@@ -80,17 +75,17 @@ export default function StudentDetailClient({ student, weekStatuses, actorRole, 
   }
 
   // ---- Toggle payment status ----
-  const handleToggleStatus = async (ws: WeekRow, newStatus: 'approved' | 'rejected' | 'pending') => {
-    if (!ws.payment?.id) return
+  const handleToggleStatus = async (ps: PeriodStatus, newStatus: 'approved' | 'rejected' | 'pending') => {
+    if (!ps.payment?.id) return
     const label = newStatus === 'approved' ? 'อนุมัติ' : newStatus === 'rejected' ? 'ปฏิเสธ' : 'ยกเลิกการอนุมัติ'
-    if (!confirm(`ยืนยัน${label}รายการงวดที่ ${ws.week}?`)) return
+    if (!confirm(`ยืนยัน${label}รายการ "${ps.period.label}"?`)) return
 
-    setLoadingId(`toggle-${ws.week}`)
+    setLoadingId(`toggle-${ps.period.id}`)
     try {
       const res = await fetch('/api/payments/verify', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: ws.payment.id, action: newStatus === 'approved' ? 'approve' : 'reject' }),
+        body: JSON.stringify({ id: ps.payment.id, action: newStatus === 'approved' ? 'approve' : 'reject' }),
       })
       if (!res.ok) throw new Error((await res.json()).error)
       toast.success(`อัปเดตสถานะเป็น "${label}" เรียบร้อย`)
@@ -177,27 +172,26 @@ export default function StudentDetailClient({ student, weekStatuses, actorRole, 
     )
   }
 
-  // ---- Full mode: render week payment rows ----
+  // ---- Full mode: render period payment rows ----
   return (
     <>
-      {/* Week payment rows — actions per row */}
       <div className="divide-y divide-border">
-        {weekStatuses.map((ws) => {
-          const isLoading = loadingId === `cash-${ws.week}` || loadingId === `toggle-${ws.week}`
+        {periodStatuses.map((ps) => {
+          const isLoading = loadingId === `cash-${ps.period.id}` || loadingId === `toggle-${ps.period.id}`
           return (
-            <div key={ws.week} className="flex items-center justify-between px-5 py-3.5 hover:bg-background-tertiary/30 transition-colors">
-              {/* Left: week label */}
+            <div key={ps.period.id} className="flex items-center justify-between px-5 py-3.5 hover:bg-background-tertiary/30 transition-colors">
+              {/* Left: period label */}
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-background-tertiary flex items-center justify-center">
-                  <span className="text-[11px] font-bold text-text-secondary">{getWeekLabel(ws.week)}</span>
+                <div className="w-16 h-8 rounded-lg bg-background-tertiary flex items-center justify-center flex-shrink-0 px-1 border border-border">
+                  <span className="text-[10px] font-bold text-text-secondary truncate">{ps.period.label}</span>
                 </div>
                 <div>
                   <div className="text-[12.5px] font-medium text-text-primary">
-                    {ws.title || `งวดที่ ${ws.week}`}
+                    {ps.period.label}
                   </div>
-                  {ws.deadline && (
+                  {ps.period.deadline && (
                     <div className="text-[10.5px] text-text-muted">
-                      ครบกำหนด: {formatDate(ws.deadline)}
+                      ครบกำหนด: {formatDate(ps.period.deadline)}
                     </div>
                   )}
                 </div>
@@ -205,18 +199,18 @@ export default function StudentDetailClient({ student, weekStatuses, actorRole, 
 
               {/* Right: amount + status + actions */}
               <div className="flex items-center gap-4">
-                {ws.payment ? (
+                {ps.payment ? (
                   <div className="text-right">
-                    <div className="text-[12.5px] font-semibold text-text-primary">{formatCurrency(ws.payment.amount)}</div>
-                    <div className="text-[10.5px] text-text-muted">{formatDate(ws.payment.created_at)}</div>
+                    <div className="text-[12.5px] font-semibold text-text-primary">{formatCurrency(ps.payment.amount)}</div>
+                    <div className="text-[10.5px] text-text-muted">{formatDate(ps.payment.created_at)}</div>
                   </div>
                 ) : (
-                  <div className="text-[12px] text-text-muted">{formatCurrency(ws.amount)}</div>
+                  <div className="text-[12px] text-text-muted">{formatCurrency(ps.period.amount)}</div>
                 )}
 
-                {ws.payment?.slip_url && (
+                {ps.payment?.slip_url && (
                   <a
-                    href={ws.payment.slip_url}
+                    href={ps.payment.slip_url}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-[11px] text-text-muted hover:text-text-primary underline underline-offset-2 transition-colors"
@@ -225,17 +219,16 @@ export default function StudentDetailClient({ student, weekStatuses, actorRole, 
                   </a>
                 )}
 
-                <StatusPill status={ws.status === 'paid' ? 'paid' : ws.status === 'pending' ? 'pending' : ws.status === 'rejected' ? 'rejected' : 'unpaid'} />
+                <StatusPill status={ps.status} />
 
-                {/* Admin/Treasurer actions per week */}
+                {/* Admin/Treasurer actions per period */}
                 {isTreasurer && (
                   <div className="flex items-center gap-1.5 ml-1">
                     {isLoading ? (
                       <Loader2 className="w-4 h-4 animate-spin text-text-muted" />
-                    ) : ws.status === 'paid' ? (
-                      // Can revert to pending
+                    ) : ps.status === 'paid' ? (
                       <button
-                        onClick={() => handleToggleStatus(ws, 'pending')}
+                        onClick={() => handleToggleStatus(ps, 'pending')}
                         title="ยกเลิกการอนุมัติ"
                         className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors border border-transparent hover:border-amber-100"
                       >
@@ -243,20 +236,18 @@ export default function StudentDetailClient({ student, weekStatuses, actorRole, 
                       </button>
                     ) : (
                       <>
-                        {/* Approve pending slip */}
-                        {ws.status === 'pending' && (
+                        {ps.status === 'pending' && (
                           <button
-                            onClick={() => handleToggleStatus(ws, 'approved')}
+                            onClick={() => handleToggleStatus(ps, 'approved')}
                             title="อนุมัติสลิป"
                             className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-100"
                           >
                             <Check className="w-3.5 h-3.5" />
                           </button>
                         )}
-                        {/* Cash payment button — only for unpaid/rejected */}
-                        {(ws.status === 'unpaid' || ws.status === 'rejected') && (
+                        {(ps.status === 'unpaid' || ps.status === 'rejected') && (
                           <button
-                            onClick={() => handleCashPayment(ws)}
+                            onClick={() => handleCashPayment(ps)}
                             className="flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 text-[10.5px] font-bold rounded-lg border border-emerald-100 hover:bg-emerald-100 transition-colors"
                           >
                             <Banknote className="w-3 h-3" />
@@ -272,9 +263,9 @@ export default function StudentDetailClient({ student, weekStatuses, actorRole, 
           )
         })}
 
-        {weekStatuses.length === 0 && (
+        {periodStatuses.length === 0 && (
           <div className="py-12 text-center text-[13px] text-text-muted italic">
-            ยังไม่มีข้อมูลงวดการชำระ
+            ยังไม่มีข้อมูลงวดการชำระในเทอมนี้
           </div>
         )}
       </div>

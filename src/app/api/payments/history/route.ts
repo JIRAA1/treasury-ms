@@ -16,14 +16,36 @@ export async function GET(request: NextRequest) {
   const { data: profile } = await createAdminClient().from('users').select('id, role').or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`).maybeSingle()
   const isAdmin = profile?.role === 'admin' || profile?.role === 'treasurer'
 
+  const period_id = searchParams.get('period_id')
+  const semester_id = searchParams.get('semester_id')
+
   let query = supabase
     .from('payments')
-    .select('*, user:user_id(fullname, student_id, tier)', { count: 'exact' })
+    .select('*, user:user_id(fullname, student_id, tier), period:period_id(label, period_order, semester_id)', { count: 'exact' })
     .order('created_at', { ascending: false })
 
   // Students only see their own; admins see all
   if (!isAdmin) {
     query = query.eq('user_id', profile?.id || user.id)
+  }
+
+  if (period_id) {
+    query = query.eq('period_id', period_id)
+  }
+
+  if (semester_id) {
+    const adminClient = createAdminClient()
+    const { data: sPeriods } = await adminClient
+      .from('periods')
+      .select('id')
+      .eq('semester_id', semester_id)
+    const periodIds = (sPeriods ?? []).map(p => p.id)
+    if (periodIds.length > 0) {
+      query = query.in('period_id', periodIds)
+    } else {
+      // Return empty if no periods in semester
+      query = query.eq('period_id', '00000000-0000-0000-0000-000000000000')
+    }
   }
 
   if (status && status !== 'all') {

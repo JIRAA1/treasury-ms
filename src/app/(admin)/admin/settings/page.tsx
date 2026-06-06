@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import Topbar from '@/components/layout/Topbar'
-import WeekSettingsForm from '@/components/admin/WeekSettingsForm'
+import SemesterManager from '@/components/admin/SemesterManager'
 import DataManagement from '@/components/admin/DataManagement'
 import PromptPaySettingsForm from '@/components/admin/PromptPaySettingsForm'
 import TierSettingsForm from '@/components/admin/TierSettingsForm'
@@ -17,11 +17,6 @@ export default async function AdminSettingsPage() {
   const adminClient = createAdminClient()
   const { data: profile } = await adminClient.from('users').select('role').or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`).maybeSingle()
   if (profile?.role !== 'admin' && profile?.role !== 'treasurer') redirect('/student/dashboard')
-
-  const { data: weekSettings } = await supabase
-    .from('week_settings')
-    .select('*')
-    .order('week', { ascending: true })
 
   const { data: sysSettings } = await supabase
     .from('system_settings')
@@ -61,13 +56,13 @@ export default async function AdminSettingsPage() {
           />
         </section>
 
-        {/* Cycle Settings */}
+        {/* Semester & Period Settings */}
         <section className="bg-background-secondary border border-border rounded-[2rem] p-8 shadow-sm">
           <div className="mb-6">
-            <h2 className="text-[18px] font-black text-text-primary uppercase tracking-tight italic">กำหนดการงวดการชำระ</h2>
-            <p className="text-[12.5px] text-text-muted font-medium">ระบุชื่องวด วันสิ้นสุดการรับสลิป และยอดเงินที่ต้องชำระ</p>
+            <h2 className="text-[18px] font-black text-text-primary uppercase tracking-tight italic">จัดการภาคเรียนและงวดการชำระเงิน</h2>
+            <p className="text-[12.5px] text-text-muted font-medium">เปิดใช้งานภาคเรียน (Active Semester) หรือกำหนดชื่องวด ยอดชำระ และกำหนดเวลาเปิด-ปิดรับสลิปแยกแต่ละภาคเรียน</p>
           </div>
-          <WeekSettingsForm initialSettings={weekSettings || []} />
+          <SemesterManager />
         </section>
 
         {/* Data Management */}

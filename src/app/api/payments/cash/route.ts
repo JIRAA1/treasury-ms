@@ -16,22 +16,22 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json() as {
     user_id: string
-    week: number
+    period_id: string
     amount: number
     note?: string
     verified_at?: string
   }
 
-  if (!body.user_id || !body.week || !body.amount) {
+  if (!body.user_id || !body.period_id || !body.amount) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
-  // Check if payment already exists for this week
+  // Check if payment already exists for this period
   const { data: existing } = await adminClient
     .from('payments')
     .select('id, status')
     .eq('user_id', body.user_id)
-    .eq('week', body.week)
+    .eq('period_id', body.period_id)
     .maybeSingle()
 
   if (existing && existing.status === 'approved') {
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
 
   const paymentData = {
     user_id: body.user_id,
-    week: body.week,
+    period_id: body.period_id,
     amount: body.amount,
     status: 'approved' as const,
     note: body.note || 'ชำระด้วยเงินสด (บันทึกโดยเหรัญญิก)',

@@ -12,27 +12,28 @@ interface Student {
 
 interface Payment {
   user_id: string
-  week: number
+  period_id: string
   status: 'approved' | 'pending'
 }
 
-interface WeekSetting {
-  week: number
-  title: string
+interface Period {
+  id: string
+  label: string
   amount: number
+  period_order: number
 }
 
 interface Props {
   currentUserId: string
   students: Student[]
   payments: Payment[]
-  weekSettings: WeekSetting[]
+  periods: Period[]
 }
 
 type StatusCell = 'paid' | 'pending' | 'unpaid'
 
-function getStatus(userId: string, week: number, payments: Payment[]): StatusCell {
-  const p = payments.find(p => p.user_id === userId && p.week === week)
+function getStatus(userId: string, periodId: string, payments: Payment[]): StatusCell {
+  const p = payments.find(p => p.user_id === userId && p.period_id === periodId)
   if (!p) return 'unpaid'
   if (p.status === 'approved') return 'paid'
   return 'pending'
@@ -65,7 +66,7 @@ const STATUS_CONFIG = {
   },
 }
 
-export default function ClassmatesClient({ currentUserId, students, payments, weekSettings }: Props) {
+export default function ClassmatesClient({ currentUserId, students, payments, periods }: Props) {
   const [search, setSearch] = useState('')
 
   const filtered = useMemo(() =>
@@ -77,7 +78,7 @@ export default function ClassmatesClient({ currentUserId, students, payments, we
   )
 
   const paidAllCount = students.filter(s =>
-    weekSettings.every(w => getStatus(s.id, w.week, payments) === 'paid')
+    periods.every(p => getStatus(s.id, p.id, payments) === 'paid')
   ).length
 
   return (
@@ -115,7 +116,7 @@ export default function ClassmatesClient({ currentUserId, students, payments, we
         </div>
 
         {/* Table */}
-        {weekSettings.length === 0 ? (
+        {periods.length === 0 ? (
           <div className="text-center py-20 text-text-muted">
             <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
             <p className="text-[14px] font-medium">ยังไม่มีกำหนดงวดการชำระ</p>
@@ -123,16 +124,16 @@ export default function ClassmatesClient({ currentUserId, students, payments, we
         ) : (
           <div className="bg-background-secondary border border-border rounded-[2rem] overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full text-[12.5px]" style={{ minWidth: `${180 + weekSettings.length * 110}px` }}>
+              <table className="w-full text-[12.5px]" style={{ minWidth: `${180 + periods.length * 110}px` }}>
                 <thead className="bg-background-tertiary/60 border-b border-border">
                   <tr>
                     <th className="px-5 py-4 text-left font-black text-[10px] uppercase tracking-widest text-text-muted w-8">#</th>
                     <th className="px-5 py-4 text-left font-black text-[10px] uppercase tracking-widest text-text-muted">ชื่อ-นามสกุล</th>
                     <th className="px-5 py-4 text-left font-black text-[10px] uppercase tracking-widest text-text-muted">รหัส</th>
-                    {weekSettings.map(w => (
-                      <th key={w.week} className="px-3 py-4 text-center font-black text-[10px] uppercase tracking-widest text-text-muted whitespace-nowrap">
-                        <div>{w.title || `งวด ${w.week}`}</div>
-                        <div className="text-brand font-black mt-0.5">฿{w.amount.toLocaleString()}</div>
+                    {periods.map(p => (
+                      <th key={p.id} className="px-3 py-4 text-center font-black text-[10px] uppercase tracking-widest text-text-muted whitespace-nowrap">
+                        <div>{p.label || `งวด ${p.period_order}`}</div>
+                        <div className="text-brand font-black mt-0.5">฿{p.amount.toLocaleString()}</div>
                       </th>
                     ))}
                     <th className="px-5 py-4 text-center font-black text-[10px] uppercase tracking-widest text-text-muted">สรุป</th>
@@ -141,13 +142,13 @@ export default function ClassmatesClient({ currentUserId, students, payments, we
                 <tbody className="divide-y divide-border/50">
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={3 + weekSettings.length + 1} className="py-16 text-center text-text-muted text-[13px]">
+                      <td colSpan={3 + periods.length + 1} className="py-16 text-center text-text-muted text-[13px]">
                         ไม่พบรายชื่อที่ค้นหา
                       </td>
                     </tr>
                   ) : filtered.map((student, idx) => {
                     const isMe = student.id === currentUserId
-                    const statuses = weekSettings.map(w => getStatus(student.id, w.week, payments))
+                    const statuses = periods.map(p => getStatus(student.id, p.id, payments))
                     const paidCount = statuses.filter(s => s === 'paid').length
                     const pendingCount = statuses.filter(s => s === 'pending').length
 
@@ -183,13 +184,13 @@ export default function ClassmatesClient({ currentUserId, students, payments, we
                           {student.student_id}
                         </td>
 
-                        {/* Per-week status */}
-                        {weekSettings.map((w, wi) => {
-                          const status = statuses[wi]
+                        {/* Per-period status */}
+                        {periods.map((p, pi) => {
+                          const status = statuses[pi]
                           const cfg = STATUS_CONFIG[status]
                           const Icon = cfg.icon
                           return (
-                            <td key={w.week} className="px-3 py-4 text-center">
+                            <td key={p.id} className="px-3 py-4 text-center">
                               <div className={`inline-flex items-center justify-center w-7 h-7 rounded-full border ${cfg.bg} ${cfg.border}`}>
                                 <Icon className={`w-3.5 h-3.5 ${cfg.cell}`} />
                               </div>
@@ -201,9 +202,9 @@ export default function ClassmatesClient({ currentUserId, students, payments, we
                         <td className="px-5 py-4 text-center">
                           <div className="flex flex-col items-center gap-0.5">
                             <span className={`text-[12px] font-black ${
-                              paidCount === weekSettings.length ? 'text-emerald-600' : 'text-text-primary'
+                              paidCount === periods.length ? 'text-emerald-600' : 'text-text-primary'
                             }`}>
-                              {paidCount}/{weekSettings.length}
+                              {paidCount}/{periods.length}
                             </span>
                             {pendingCount > 0 && (
                               <span className="text-[10px] text-amber-500 font-bold">+{pendingCount} รอตรวจ</span>

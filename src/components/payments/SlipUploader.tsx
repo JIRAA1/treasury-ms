@@ -7,20 +7,20 @@ import { parseSlipQR } from '@/lib/slip-qr'
 import jsQR from 'jsqr'
 import { useDialog } from '@/components/shared/GlobalDialog'
 
-interface PaymentCycle {
-  week: number
-  title: string
+interface PaymentPeriod {
+  id: string
+  label: string
   amount: number
   deadline: string
   status: 'unpaid' | 'rejected'
 }
 
 interface SlipUploaderProps {
-  week: number
-  unpaidCycles: PaymentCycle[]
-  onWeekChange?: (week: number) => void
-  onSuccess?: () => void
-  onError?: (error: string) => void
+  periodId: string;
+  unpaidCycles: PaymentPeriod[];
+  onPeriodChange?: (periodId: string) => void;
+  onSuccess?: () => void;
+  onError?: (error: string) => void;
 }
 
 type Step = 'upload' | 'verifying' | 'success' | 'failed'
@@ -49,7 +49,7 @@ interface StepResult {
   message?: string
 }
 
-export default function SlipUploader({ week, unpaidCycles, onWeekChange, onSuccess, onError }: SlipUploaderProps) {
+export default function SlipUploader({ periodId, unpaidCycles, onPeriodChange, onSuccess, onError }: SlipUploaderProps) {
   const dialog = useDialog()
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
@@ -80,11 +80,11 @@ export default function SlipUploader({ week, unpaidCycles, onWeekChange, onSucce
     hasQR: false,
     isValid: false
   })
-  const [suggestedWeek, setSuggestedWeek] = useState<PaymentCycle | null>(null)
+  const [suggestedWeek, setSuggestedWeek] = useState<PaymentPeriod | null>(null)
   const [amountMismatch, setAmountMismatch] = useState(false)
   const [manualConfirm, setManualConfirm] = useState(false)
 
-  const selectedCycle = unpaidCycles.find(c => c.week === week)
+  const selectedCycle = unpaidCycles.find(c => c.id === periodId)
 
   const handleFile = (f: File) => {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(f.type)) {
@@ -177,8 +177,8 @@ export default function SlipUploader({ week, unpaidCycles, onWeekChange, onSucce
 
         // Amount Check
         if (parsed.amount !== null && selectedCycle && parsed.amount !== selectedCycle.amount) {
-          // Look for other unpaid week matching the slip amount
-          const match = unpaidCycles.find(c => c.amount === parsed.amount && c.week !== week)
+          // Look for other unpaid period matching the slip amount
+          const match = unpaidCycles.find(c => c.amount === parsed.amount && c.id !== periodId)
           if (match) {
             setSuggestedWeek(match)
           } else {
@@ -211,23 +211,23 @@ export default function SlipUploader({ week, unpaidCycles, onWeekChange, onSucce
   }
 
   const handleSwitchWeek = () => {
-    if (suggestedWeek && onWeekChange) {
-      onWeekChange(suggestedWeek.week)
+    if (suggestedWeek && onPeriodChange) {
+      onPeriodChange(suggestedWeek.id)
       setSuggestedWeek(null)
     }
   }
 
-  // Trigger re-check if user changes the week manually
+  // Trigger re-check if user changes the period manually
   useEffect(() => {
     if (file && qrStatus.scanned && qrStatus.isValid) {
-      // Re-evaluate amount match for the new selected week
-      const currentCycle = unpaidCycles.find(c => c.week === week)
+      // Re-evaluate amount match for the new selected period
+      const currentCycle = unpaidCycles.find(c => c.id === periodId)
       if (qrStatus.amount !== null && currentCycle) {
         if (qrStatus.amount === currentCycle.amount) {
           setSuggestedWeek(null)
           setAmountMismatch(false)
         } else {
-          const match = unpaidCycles.find(c => c.amount === qrStatus.amount && c.week !== week)
+          const match = unpaidCycles.find(c => c.amount === qrStatus.amount && c.id !== periodId)
           if (match) {
             setSuggestedWeek(match)
             setAmountMismatch(false)
@@ -238,7 +238,7 @@ export default function SlipUploader({ week, unpaidCycles, onWeekChange, onSucce
         }
       }
     }
-  }, [week, unpaidCycles, file, qrStatus.scanned, qrStatus.isValid, qrStatus.amount])
+  }, [periodId, unpaidCycles, file, qrStatus.scanned, qrStatus.isValid, qrStatus.amount])
 
   const handleSubmit = async () => {
     if (!file) return
@@ -261,7 +261,7 @@ export default function SlipUploader({ week, unpaidCycles, onWeekChange, onSucce
 
     const formData = new FormData()
     formData.append('file', file)
-    formData.append('week', week.toString())
+    formData.append('period_id', periodId)
 
     try {
       await updateStep(1)
@@ -356,7 +356,7 @@ export default function SlipUploader({ week, unpaidCycles, onWeekChange, onSucce
         <div className="text-[12.5px] text-text-muted mb-4">
           {successData?.quota_exceeded
             ? 'ระบบได้รับสลิปของคุณแล้ว'
-            : `ระบบบันทึกสลิปสำหรับงวดที่ ${week} เรียบร้อยแล้ว`}
+            : `ระบบบันทึกสลิปสำหรับ ${selectedCycle?.label || 'งวดที่กำหนด'} เรียบร้อยแล้ว`}
         </div>
 
         {/* Status Banner */}
@@ -533,8 +533,8 @@ export default function SlipUploader({ week, unpaidCycles, onWeekChange, onSucce
                           <div className="text-[12.5px] font-bold text-amber-900">ตรวจพบยอดเงินไม่ตรงกับงวดที่เลือก</div>
                           <div className="text-[11.5px] text-amber-800 mt-1">
                             ยอดเงินสลิปคือ <span className="font-bold">฿{qrStatus.amount?.toLocaleString()}</span> 
-                            ซึ่งตรงกับยอดที่ต้องชำระของ <span className="font-bold">{suggestedWeek.title}</span> 
-                            (คุณกำลังทำรายการสำหรับ {selectedCycle?.title} ยอด ฿{selectedCycle?.amount.toLocaleString()})
+                            ซึ่งตรงกับยอดที่ต้องชำระของ <span className="font-bold">{suggestedWeek.label}</span> 
+                            (คุณกำลังทำรายการสำหรับ {selectedCycle?.label} ยอด ฿{selectedCycle?.amount.toLocaleString()})
                           </div>
                         </div>
                       </div>
@@ -542,7 +542,7 @@ export default function SlipUploader({ week, unpaidCycles, onWeekChange, onSucce
                         onClick={handleSwitchWeek}
                         className="w-full bg-amber-600 text-white text-[12px] font-semibold py-2 px-3 rounded-lg hover:bg-amber-700 transition-colors shadow-sm"
                       >
-                        สลับชำระสำหรับ {suggestedWeek.title}
+                        สลับชำระสำหรับ {suggestedWeek.label}
                       </button>
                     </div>
                   )}
@@ -586,7 +586,7 @@ export default function SlipUploader({ week, unpaidCycles, onWeekChange, onSucce
         disabled={isSubmitDisabled}
         className="w-full bg-brand text-white text-[13.5px] font-semibold py-3 rounded-xl hover:bg-brand-hover transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-sm"
       >
-        {scanning ? 'กำลังตรวจสอบสลิป...' : `ยืนยันส่งหลักฐานงวดที่ ${week}`}
+        {scanning ? 'กำลังตรวจสอบสลิป...' : `ยืนยันส่งหลักฐานสำหรับ ${selectedCycle?.label || 'งวดที่เลือก'}`}
       </button>
     </div>
   )

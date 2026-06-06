@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
 
     const { data: existing, error } = await adminClient
       .from('payments')
-      .select('id, week, status, user_id')
+      .select('id, period_id, status, user_id')
       .eq('trans_ref', transRef)
       .neq('status', 'rejected')
       .maybeSingle()
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
         isOwnSlip,
         payment: {
           id: existing.id,
-          week: existing.week,
+          period_id: existing.period_id,
           status: existing.status
         }
       })

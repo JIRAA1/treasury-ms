@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Topbar from '@/components/layout/Topbar'
 import StatusPill from '@/components/payments/StatusPill'
-import { formatCurrency, formatDate, getWeekLabel, getTierConfig } from '@/lib/utils'
+import { formatCurrency, formatDate, getTierConfig } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { th } from 'date-fns/locale'
 import { Search, ExternalLink, CheckCircle, XCircle, AlertTriangle } from 'lucide-react'
@@ -11,7 +11,7 @@ import { toast } from 'sonner'
 
 interface Payment {
   id: string
-  week: number
+  period_id: string
   amount: number
   trans_ref: string | null
   slip_url: string | null
@@ -19,6 +19,7 @@ interface Payment {
   created_at: string
   verified_by_api?: boolean | null
   user: { fullname: string; student_id: string; tier?: string } | null
+  period: { label: string; period_order: number; semester_id: string } | null
 }
 
 export default function AdminPaymentsPage() {
@@ -27,6 +28,8 @@ export default function AdminPaymentsPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all')
+  const [filterPeriod, setFilterPeriod] = useState<string>('')
+  const [periods, setPeriods] = useState<{ id: string; label: string }[]>([])
   const [search, setSearch] = useState('')
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null)
   const [rejectReason, setRejectReason] = useState('')
@@ -37,6 +40,7 @@ export default function AdminPaymentsPage() {
     setLoading(true)
     const params = new URLSearchParams()
     if (filterStatus !== 'all') params.set('status', filterStatus)
+    if (filterPeriod) params.set('period_id', filterPeriod)
     if (search) params.set('search', search)
     params.set('page', String(page))
     params.set('per_page', String(PER_PAGE))
@@ -46,12 +50,31 @@ export default function AdminPaymentsPage() {
     setTotal(data.total ?? 0)
     setTotalPages(data.totalPages ?? 1)
     setLoading(false)
-  }, [filterStatus, search, page])
+  }, [filterStatus, filterPeriod, search, page])
+
+  // Load periods on mount
+  useEffect(() => {
+    async function loadPeriods() {
+      try {
+        const sRes = await fetch('/api/semesters')
+        const sData = await sRes.json()
+        const activeSemester = sData.data?.find((s: any) => s.is_active)
+        if (activeSemester) {
+          const pRes = await fetch(`/api/semesters/${activeSemester.id}/periods`)
+          const pData = await pRes.json()
+          setPeriods(pData.data ?? [])
+        }
+      } catch (err) {
+        console.error('Failed to load periods', err)
+      }
+    }
+    loadPeriods()
+  }, [])
 
   useEffect(() => { fetchPayments() }, [fetchPayments])
 
   // Reset to page 1 when filters change
-  useEffect(() => { setPage(1) }, [filterStatus, search])
+  useEffect(() => { setPage(1) }, [filterStatus, filterPeriod, search])
 
   const handleAction = async (id: string, action: 'approve' | 'reject') => {
     const res = await fetch('/api/payments/verify', {
@@ -97,6 +120,16 @@ export default function AdminPaymentsPage() {
               </button>
             ))}
           </div>
+          <select
+            value={filterPeriod}
+            onChange={(e) => { setFilterPeriod(e.target.value); setPage(1) }}
+            className="px-3 py-1.5 text-[12.5px] border border-border rounded-lg bg-background outline-none focus:ring-1 focus:ring-brand font-medium text-text-secondary cursor-pointer"
+          >
+            <option value="">ทุกงวด</option>
+            {periods.map((p) => (
+              <option key={p.id} value={p.id}>{p.label}</option>
+            ))}
+          </select>
           <div className="text-[12px] text-text-muted ml-auto">แสดง {payments.length} / {total} รายการ</div>
         </div>
 
@@ -144,7 +177,7 @@ export default function AdminPaymentsPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-text-muted">{p.user?.student_id}</td>
-                  <td className="px-4 py-3 font-medium">{getWeekLabel(p.week)}</td>
+                  <td className="px-4 py-3 font-medium">{p.period?.label || '—'}</td>
                   <td className="px-4 py-3 font-semibold text-text-primary">{formatCurrency(p.amount)}</td>
                   <td className="px-4 py-3 font-mono text-[11.5px] text-text-muted">{p.trans_ref ?? '—'}</td>
                   <td className="px-4 py-3 text-text-muted">{formatDistanceToNow(new Date(p.created_at), { locale: th, addSuffix: true })}</td>
@@ -215,7 +248,7 @@ export default function AdminPaymentsPage() {
               {[
                 ['นักศึกษา', selectedPayment.user?.fullname],
                 ['รหัสนักศึกษา', selectedPayment.user?.student_id],
-                ['สัปดาห์', `W${selectedPayment.week}`],
+                ['งวด', selectedPayment.period?.label || '—'],
                 ['จำนวน', formatCurrency(selectedPayment.amount)],
                 ['Trans Ref', selectedPayment.trans_ref ?? '—'],
                 ['วันที่ส่ง', formatDate(selectedPayment.created_at)],

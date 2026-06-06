@@ -30,24 +30,40 @@ export default async function ClassmatesPage() {
     .eq('role', 'student')
     .order('student_id', { ascending: true })
 
-  // Fetch all approved/pending payments for all students
-  const { data: payments } = await adminClient
-    .from('payments')
-    .select('user_id, week, status')
-    .in('status', ['approved', 'pending'])
+  // Fetch active semester first
+  const { data: activeSemester } = await adminClient
+    .from('semesters')
+    .select('id')
+    .eq('is_active', true)
+    .maybeSingle()
 
-  // Fetch week settings
-  const { data: weekSettings } = await adminClient
-    .from('week_settings')
-    .select('week, title, amount')
-    .order('week', { ascending: true })
+  let periods: any[] = []
+  let periodIds: string[] = []
+  if (activeSemester) {
+    const { data: pData } = await adminClient
+      .from('periods')
+      .select('id, label, amount, period_order')
+      .eq('semester_id', activeSemester.id)
+      .order('period_order', { ascending: true })
+    periods = pData || []
+    periodIds = periods.map(p => p.id)
+  }
+
+  // Fetch approved/pending payments for all students in active periods
+  const { data: payments } = periodIds.length > 0
+    ? await adminClient
+        .from('payments')
+        .select('user_id, period_id, status')
+        .in('status', ['approved', 'pending'])
+        .in('period_id', periodIds)
+    : { data: [] }
 
   return (
     <ClassmatesClient
       currentUserId={profile.id}
       students={students || []}
       payments={payments || []}
-      weekSettings={weekSettings || []}
+      periods={periods || []}
     />
   )
 }

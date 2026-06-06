@@ -28,7 +28,7 @@ export async function GET(req: Request) {
     .select(`
       *,
       user:user_id ( id, fullname, student_id, tier ),
-      week_info:week ( title, deadline )
+      period_info:period_id ( label, deadline )
     `)
     .order('created_at', { ascending: false })
 
@@ -50,7 +50,7 @@ export async function GET(req: Request) {
 }
 
 // POST /api/credits — admin สร้าง credit ให้นักศึกษา
-// Body: { user_id, week, amount, note? }
+// Body: { user_id, period_id, amount, note? }
 export async function POST(req: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -63,22 +63,22 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json()
-  const { user_id, week, amount, note } = body as {
+  const { user_id, period_id, amount, note } = body as {
     user_id: string
-    week: number
+    period_id: string
     amount: number
     note?: string
   }
 
-  if (!user_id || !week || !amount) {
+  if (!user_id || !period_id || !amount) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
   const admin = createAdminClient()
 
-  // Check week exists
-  const { data: weekData } = await adminClient.from('week_settings').select('week, title').eq('week', week).single()
-  if (!weekData) return NextResponse.json({ error: 'Week not found' }, { status: 404 })
+  // Check period exists
+  const { data: periodData } = await adminClient.from('periods').select('id, label').eq('id', period_id).single()
+  if (!periodData) return NextResponse.json({ error: 'Period not found' }, { status: 404 })
 
   // Check student exists
   const { data: student } = await adminClient.from('users').select('id, fullname').eq('id', user_id).eq('role', 'student').single()
@@ -88,7 +88,7 @@ export async function POST(req: Request) {
     .from('payment_credits')
     .insert({
       user_id,
-      week,
+      period_id,
       amount,
       note: note ?? null,
       created_by: actor['id'] as string,
@@ -99,7 +99,7 @@ export async function POST(req: Request) {
 
   if (error) {
     if (error.code === '23505') {
-      return NextResponse.json({ error: 'นักศึกษาคนนี้มี credit สำหรับสัปดาห์นี้อยู่แล้ว' }, { status: 409 })
+      return NextResponse.json({ error: 'นักศึกษาคนนี้มี credit สำหรับงวดนี้อยู่แล้ว' }, { status: 409 })
     }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
@@ -111,7 +111,7 @@ export async function POST(req: Request) {
     .eq('id', user_id)
     .single()
 
-  const cycleTitle = (weekData as any)?.title || `งวดที่ ${week}`
+  const cycleTitle = (periodData as any)?.label || `งวดนี้`
   const notifMessage = `เหรัญญิกบันทึกยอดค้างชำระ ฿${amount.toLocaleString()} สำหรับ${cycleTitle} กรุณาชำระในรอบถัดไป`
 
   // In-app notification
@@ -138,7 +138,7 @@ export async function POST(req: Request) {
     actorId: actor['id'] as string,
     action: 'credit_created',
     targetId: credit.id,
-    newValue: { user_id, week, amount, note },
+    newValue: { user_id, period_id, amount, note },
   })
 
   return NextResponse.json({ credit }, { status: 201 })

@@ -12,7 +12,9 @@ export default function PaymentRow({ payment, showWeek = true, className }: Paym
   return (
     <div className={cn('flex items-center gap-4 py-3 text-[12.5px]', className)}>
       {showWeek && (
-        <div className="w-10 text-[11px] font-semibold text-text-muted flex-shrink-0">W{payment.week}</div>
+        <div className="w-20 text-[11px] font-semibold text-text-muted flex-shrink-0 truncate">
+          {payment.period?.label || '—'}
+        </div>
       )}
       <div className="flex-1 text-text-muted">{formatDate(payment.created_at)}</div>
       <div className="font-semibold text-text-primary">{formatCurrency(payment.amount)}</div>

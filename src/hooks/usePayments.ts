@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Payment, WeekStatus } from '@/types'
+import type { Payment, PeriodStatus } from '@/types'
 import { toast } from 'sonner'
 
 export function usePayments(userId?: string) {
@@ -19,7 +19,7 @@ export function usePayments(userId?: string) {
         .from('payments')
         .select('*, user:users(*)')
         .eq('user_id', userId)
-        .order('week', { ascending: true })
+        .order('created_at', { ascending: true })
 
       if (error) throw error
       setPayments(data as Payment[])
@@ -31,7 +31,7 @@ export function usePayments(userId?: string) {
     }
   }, [supabase, userId])
 
-  const fetchAllPayments = useCallback(async (filters?: { status?: string, week?: number }) => {
+  const fetchAllPayments = useCallback(async (filters?: { status?: string, period_id?: string }) => {
     setLoading(true)
     try {
       let query = supabase
@@ -42,8 +42,8 @@ export function usePayments(userId?: string) {
       if (filters?.status && filters.status !== 'all') {
         query = query.eq('status', filters.status)
       }
-      if (filters?.week) {
-        query = query.eq('week', filters.week)
+      if (filters?.period_id) {
+        query = query.eq('period_id', filters.period_id)
       }
 
       const { data, error } = await query

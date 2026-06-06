@@ -1,19 +1,12 @@
 'use client'
 
 import { cn } from '@/lib/utils'
-import type { WeekStatus } from '@/types'
+import type { PeriodStatus } from '@/types'
 
-interface WeekSetting {
-  week: number
-  title?: string
-  deadline?: string | null
-  amount: number
-}
-
-interface WeekGridProps {
-  weeks: WeekStatus[]
-  onWeekClick?: (week: WeekStatus) => void
-  currentWeek?: number
+interface PeriodGridProps {
+  periods: PeriodStatus[]
+  onPeriodClick?: (period: PeriodStatus) => void
+  currentPeriodId?: string
   className?: string
 }
 
@@ -31,32 +24,31 @@ const statusLabel: Record<string, string> = {
   rejected: 'ถูกปฏิเสธ',
 }
 
-export default function WeekGrid({ weeks, onWeekClick, currentWeek, className }: WeekGridProps) {
+export default function PeriodGrid({ periods, onPeriodClick, currentPeriodId, className }: PeriodGridProps) {
   return (
     <div className={cn('grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2', className)}>
-      {weeks.map((ws) => {
-        const isCurrent = ws.week === currentWeek
-        const displayTitle = ws.payment?.id ? (ws.week.toString()) : (ws.week.toString()) // Fallback
+      {periods.map((ps) => {
+        const isCurrent = ps.period.id === currentPeriodId
         
         return (
           <button
-            key={ws.week}
-            onClick={() => onWeekClick?.(ws)}
+            key={ps.period.id}
+            onClick={() => onPeriodClick?.(ps)}
             className={cn(
               'border rounded-lg p-3 text-left cursor-pointer transition-all duration-150 hover:shadow-sm hover:translate-y-[-1px]',
-              cellStyles[ws.status],
+              cellStyles[ps.status],
               isCurrent && 'ring-2 ring-brand ring-offset-2 border-brand'
             )}
           >
             <div className="text-[12px] font-bold truncate mb-1">
-              {ws.status === 'paid' ? '✅ ' : ''}
-              {ws.week}. {ws.deadline ? new Date(ws.deadline).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }) : `งวดที่ ${ws.week}`}
+              {ps.status === 'paid' ? '✅ ' : ''}
+              {ps.period.label}
             </div>
             <div className={cn('text-[10px] mb-1 opacity-80')}>
-              {ws.status === 'paid' && ws.payment?.note?.includes('เงินสด') ? 'ชำระเงินสด' : statusLabel[ws.status]}
+              {ps.status === 'paid' && ps.payment?.note?.includes('เงินสด') ? 'ชำระเงินสด' : statusLabel[ps.status]}
             </div>
             <div className={cn('text-[11px] font-semibold')}>
-              ฿{ws.amount.toLocaleString()}
+              ฿{(ps.payment?.amount ?? ps.period.amount).toLocaleString()}
             </div>
           </button>
         )

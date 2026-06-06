@@ -8,23 +8,23 @@ import EmptyState from '@/components/shared/EmptyState'
 import { CheckCircle, Clock, Lock, Calendar } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
-interface PaymentCycle {
-  week: number
-  title: string
+interface PaymentPeriod {
+  id: string
+  label: string
   amount: number
   deadline: string
   status: 'unpaid' | 'rejected'
-  payment_open_at?: string | null
-  payment_close_at?: string | null
+  open_at?: string | null
+  close_at?: string | null
   qr_url?: string | null
 }
 
 type WindowStatus = 'open' | 'upcoming' | 'closed' | 'noWindow'
 
-function getWindowStatus(cycle: PaymentCycle): WindowStatus {
+function getWindowStatus(cycle: PaymentPeriod): WindowStatus {
   const now = new Date()
-  const openAt = cycle.payment_open_at ? new Date(cycle.payment_open_at) : null
-  const closeAt = cycle.payment_close_at ? new Date(cycle.payment_close_at) : null
+  const openAt = cycle.open_at ? new Date(cycle.open_at) : null
+  const closeAt = cycle.close_at ? new Date(cycle.close_at) : null
 
   if (!openAt && !closeAt) return 'noWindow'
   if (openAt && now < openAt) return 'upcoming'
@@ -44,8 +44,8 @@ function formatThaiDate(isoStr: string) {
 
 export default function UploadPage() {
   const router = useRouter()
-  const [unpaidCycles, setUnpaidCycles] = useState<PaymentCycle[]>([])
-  const [selectedWeek, setSelectedWeek] = useState<number | null>(null)
+  const [unpaidCycles, setUnpaidCycles] = useState<PaymentPeriod[]>([])
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
 
@@ -71,10 +71,10 @@ export default function UploadPage() {
           { data: sysSettings },
           { data: pendingCredits }
         ] = await Promise.all([
-          supabase.from('week_settings').select('week, title, amount, deadline, payment_open_at, payment_close_at, late_fine_amount, qr_url').order('week', { ascending: true }),
-          supabase.from('payments').select('week, status').eq('user_id', targetUserId),
+          supabase.from('periods').select('id, label, amount, deadline, open_at, close_at, late_fine_amount, qr_url').order('period_order', { ascending: true }),
+          supabase.from('payments').select('period_id, status').eq('user_id', targetUserId),
           supabase.from('system_settings').select('*'),
-          supabase.from('payment_credits').select('week').eq('user_id', targetUserId).eq('status', 'pending')
+          supabase.from('payment_credits').select('period_id').eq('user_id', targetUserId).eq('status', 'pending')
         ])
 
         const tierAmounts = {
@@ -83,34 +83,34 @@ export default function UploadPage() {
           C: parseFloat(sysSettings?.find((s: any) => s.key === 'tier_c_amount')?.value || '30'),
         }
         const tierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
-        const pendingCreditWeeks = new Set(pendingCredits?.map(c => c.week) || [])
+        const pendingCreditPeriodIds = new Set(pendingCredits?.map(c => c.period_id) || [])
 
-        const unpaid: PaymentCycle[] = []
+        const unpaid: PaymentPeriod[] = []
         
         settings?.forEach(s => {
-          const p = payments?.find(pay => pay.week === s.week)
+          const p = payments?.find(pay => pay.period_id === s.id)
           if (!p || p.status === 'rejected') {
-            const hasPendingCredit = pendingCreditWeeks.has(s.week)
+            const hasPendingCredit = pendingCreditPeriodIds.has(s.id)
             const deadline = s.deadline ? new Date(s.deadline) : null
             const isPastDeadline = deadline ? new Date() > deadline : false
             const lateFine = (!hasPendingCredit && isPastDeadline) ? (s.late_fine_amount ?? 0) : 0
             const expectedAmount = tierAmount + lateFine
 
             unpaid.push({
-              week: s.week,
-              title: s.title || `งวดที่ ${s.week}`,
+              id: s.id,
+              label: s.label,
               amount: expectedAmount,
               deadline: s.deadline,
               status: p?.status === 'rejected' ? 'rejected' : 'unpaid',
-              payment_open_at: s.payment_open_at ?? null,
-              payment_close_at: s.payment_close_at ?? null,
+              open_at: s.open_at ?? null,
+              close_at: s.close_at ?? null,
               qr_url: s.qr_url ?? null,
             })
           }
         })
 
         setUnpaidCycles(unpaid)
-        if (unpaid.length === 1) setSelectedWeek(unpaid[0].week)
+        if (unpaid.length === 1) setSelectedPeriodId(unpaid[0].id)
       } catch (error) {
         console.error('Failed to fetch upload data:', error)
       } finally {
@@ -121,7 +121,7 @@ export default function UploadPage() {
     fetchData()
   }, [supabase])
 
-  const selectedCycle = unpaidCycles.find(c => c.week === selectedWeek)
+  const selectedCycle = unpaidCycles.find(c => c.id === selectedPeriodId)
   const selectedWindowStatus = selectedCycle ? getWindowStatus(selectedCycle) : null
   const isWindowLocked = selectedWindowStatus === 'upcoming' || selectedWindowStatus === 'closed'
 
@@ -144,7 +144,7 @@ export default function UploadPage() {
         ) : (
           <div className="space-y-5">
             {/* Step 1: Select Cycle */}
-            {selectedWeek === null && (
+            {selectedPeriodId === null && (
               <div className="bg-background-secondary border border-border rounded-xl p-5">
                 <div className="text-[13.5px] font-semibold text-text-primary mb-1">เลือกงวดที่ต้องการส่งสลิป</div>
                 <div className="text-[12px] text-text-muted mb-4">มี {unpaidCycles.length} รายการที่รอการชำระ</div>
@@ -154,8 +154,8 @@ export default function UploadPage() {
                     const locked = winStatus === 'upcoming' || winStatus === 'closed'
                     return (
                       <button
-                        key={cycle.week}
-                        onClick={() => !locked && setSelectedWeek(cycle.week)}
+                        key={cycle.id}
+                        onClick={() => !locked && setSelectedPeriodId(cycle.id)}
                         disabled={locked}
                         className={`flex items-center justify-between border rounded-xl p-4 text-left transition-all duration-150 ${
                           locked
@@ -167,7 +167,7 @@ export default function UploadPage() {
                       >
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <div className="text-[14px] font-bold text-text-primary">{cycle.title}</div>
+                            <div className="text-[14px] font-bold text-text-primary">{cycle.label}</div>
                             {locked && <Lock className="w-3.5 h-3.5 text-text-muted" />}
                           </div>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -177,10 +177,10 @@ export default function UploadPage() {
                               กำหนดส่ง: {new Date(cycle.deadline).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })}
                             </span>
                             {/* Window status badge */}
-                            {winStatus === 'upcoming' && cycle.payment_open_at && (
+                            {winStatus === 'upcoming' && cycle.open_at && (
                               <span className="text-[10px] bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full border border-amber-100 font-bold flex items-center gap-1">
                                 <Calendar className="w-2.5 h-2.5" />
-                                เปิด {formatThaiDate(cycle.payment_open_at)}
+                                เปิด {formatThaiDate(cycle.open_at)}
                               </span>
                             )}
                             {winStatus === 'closed' && (
@@ -189,11 +189,11 @@ export default function UploadPage() {
                                 ปิดรับสลิปแล้ว
                               </span>
                             )}
-                            {winStatus === 'open' && (cycle.payment_open_at || cycle.payment_close_at) && (
+                            {winStatus === 'open' && (cycle.open_at || cycle.close_at) && (
                               <span className="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full border border-emerald-100 font-bold flex items-center gap-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                 เปิดรับอยู่
-                                {cycle.payment_close_at && ` · ถึง ${formatThaiDate(cycle.payment_close_at)}`}
+                                {cycle.close_at && ` · ถึง ${formatThaiDate(cycle.close_at)}`}
                               </span>
                             )}
                           </div>
@@ -215,16 +215,16 @@ export default function UploadPage() {
             )}
 
             {/* Step 2: Upload */}
-            {selectedWeek !== null && selectedCycle && (
+            {selectedPeriodId !== null && selectedCycle && (
               <div className="bg-background-secondary border border-border rounded-xl p-5">
                 <div className="flex items-center justify-between mb-4 pb-4 border-b border-border">
                   <div>
                     <div className="text-[11px] text-text-muted uppercase tracking-wider font-bold mb-0.5">กำลังส่งสลิปสำหรับ</div>
-                    <div className="text-[15px] font-bold text-text-primary">{selectedCycle.title}</div>
+                    <div className="text-[15px] font-bold text-text-primary">{selectedCycle.label}</div>
                     <div className="text-[12.5px] font-medium text-brand mt-0.5">ยอดโอนที่กำหนด: ฿{selectedCycle.amount.toLocaleString()}</div>
                   </div>
                   {unpaidCycles.length > 1 && (
-                    <button onClick={() => setSelectedWeek(null)} className="text-[12px] text-brand hover:underline font-medium">
+                    <button onClick={() => setSelectedPeriodId(null)} className="text-[12px] text-brand hover:underline font-medium">
                       เปลี่ยนงวด
                     </button>
                   )}
@@ -236,7 +236,7 @@ export default function UploadPage() {
                     <div className="text-[11px] text-text-muted font-bold uppercase tracking-wider">QR โอนเงิน</div>
                     <img
                       src={selectedCycle.qr_url}
-                      alt={`QR Code สำหรับ${selectedCycle.title}`}
+                      alt={`QR Code สำหรับ${selectedCycle.label}`}
                       className="w-40 h-40 object-contain rounded-lg"
                     />
                     <div className="text-[11px] text-text-muted">สแกนเพื่อโอนเงิน จากนั้นส่งสลิปด้านล่าง</div>
@@ -249,19 +249,19 @@ export default function UploadPage() {
                     <div className="w-12 h-12 bg-background-tertiary rounded-full flex items-center justify-center mx-auto">
                       <Lock className="w-5 h-5 text-text-muted" />
                     </div>
-                    {selectedWindowStatus === 'upcoming' && selectedCycle.payment_open_at ? (
+                    {selectedWindowStatus === 'upcoming' && selectedCycle.open_at ? (
                       <>
                         <div className="text-[14px] font-bold text-text-primary">ยังไม่ถึงเวลาเปิดรับสลิป</div>
                         <div className="text-[12.5px] text-text-muted">
-                          จะเปิดรับสลิปในวันที่ <span className="font-semibold text-text-primary">{formatThaiDate(selectedCycle.payment_open_at)}</span>
+                          จะเปิดรับสลิปในวันที่ <span className="font-semibold text-text-primary">{formatThaiDate(selectedCycle.open_at)}</span>
                         </div>
                       </>
                     ) : (
                       <>
                         <div className="text-[14px] font-bold text-text-primary">หมดเวลารับสลิปแล้ว</div>
-                        {selectedCycle.payment_close_at && (
+                        {selectedCycle.close_at && (
                           <div className="text-[12.5px] text-text-muted">
-                            ปิดรับเมื่อวันที่ <span className="font-semibold text-text-primary">{formatThaiDate(selectedCycle.payment_close_at)}</span>
+                            ปิดรับเมื่อวันที่ <span className="font-semibold text-text-primary">{formatThaiDate(selectedCycle.close_at)}</span>
                           </div>
                         )}
                         <div className="text-[12px] text-text-disabled">กรุณาติดต่อเหรัญญิกหากต้องการส่งสลิปล่าช้า</div>
@@ -270,9 +270,9 @@ export default function UploadPage() {
                   </div>
                 ) : (
                   <SlipUploader
-                    week={selectedWeek}
+                    periodId={selectedPeriodId!}
                     unpaidCycles={unpaidCycles}
-                    onWeekChange={setSelectedWeek}
+                    onPeriodChange={setSelectedPeriodId}
                     onSuccess={() => {
                       setTimeout(() => router.push('/student/dashboard'), 2500)
                     }}

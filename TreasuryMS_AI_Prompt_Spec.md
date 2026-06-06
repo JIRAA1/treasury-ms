@@ -239,55 +239,126 @@ Run these SQL migrations in Supabase SQL Editor:
 -- ============================================================
 
 CREATE TABLE users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  student_id TEXT UNIQUE NOT NULL,
-  fullname TEXT NOT NULL,
-  email TEXT,
-  line_user_id TEXT UNIQUE,
-  role TEXT NOT NULL DEFAULT 'student' CHECK (role IN ('student', 'treasurer', 'admin')),
-  verified BOOLEAN DEFAULT false,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  student_id text NOT NULL UNIQUE,
+  fullname text NOT NULL,
+  email text,
+  line_user_id text UNIQUE,
+  role text NOT NULL DEFAULT 'student'::text CHECK (role = ANY (ARRAY['student'::text, 'treasurer'::text, 'admin'::text])),
+  verified boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  tier text NOT NULL DEFAULT 'B'::text CHECK (tier = ANY (ARRAY['A'::text, 'B'::text, 'C'::text])),
+  tier_note text,
+  CONSTRAINT users_pkey PRIMARY KEY (id)
+);
+
+CREATE TABLE week_settings (
+  week integer NOT NULL,
+  title text NOT NULL,
+  deadline timestamp with time zone NOT NULL,
+  amount numeric DEFAULT 100.00,
+  start_date timestamp with time zone DEFAULT now(),
+  qr_url text,
+  payment_open_at timestamp with time zone,
+  payment_close_at timestamp with time zone,
+  activity_type text CHECK (activity_type = ANY (ARRAY['small'::text, 'medium'::text, 'large'::text])),
+  activity_extra_amount numeric DEFAULT 0,
+  is_separate_collection boolean DEFAULT false,
+  base_amount numeric DEFAULT 50.00,
+  late_fine_amount numeric DEFAULT 0.00,
+  CONSTRAINT week_settings_pkey PRIMARY KEY (week)
 );
 
 CREATE TABLE payments (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  week INTEGER NOT NULL CHECK (week >= 1 AND week <= 20),
-  amount NUMERIC(10,2) NOT NULL,
-  trans_ref TEXT UNIQUE,
-  slip_url TEXT,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
-  verified_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(user_id, week)
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  week integer NOT NULL,
+  amount numeric NOT NULL,
+  trans_ref text UNIQUE,
+  slip_url text,
+  status text NOT NULL DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text])),
+  note text,
+  verified_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  verified_by_api boolean DEFAULT true,
+  file_hash text,
+  CONSTRAINT payments_pkey PRIMARY KEY (id),
+  CONSTRAINT payments_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id),
+  CONSTRAINT payments_week_fkey FOREIGN KEY (week) REFERENCES week_settings(week)
 );
 
 CREATE TABLE expenses (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  title TEXT NOT NULL,
-  description TEXT,
-  amount NUMERIC(10,2) NOT NULL,
-  created_by UUID NOT NULL REFERENCES users(id),
-  approved_by UUID REFERENCES users(id),
-  receipt_url TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE notifications (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  message TEXT NOT NULL,
-  sent_at TIMESTAMPTZ DEFAULT NOW()
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  description text,
+  amount numeric NOT NULL,
+  created_by uuid,
+  approved_by uuid,
+  receipt_url text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT expenses_pkey PRIMARY KEY (id),
+  CONSTRAINT expenses_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(id),
+  CONSTRAINT expenses_approved_by_fkey FOREIGN KEY (approved_by) REFERENCES users(id)
 );
 
 CREATE TABLE audit_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  actor_id UUID REFERENCES users(id),
-  action TEXT NOT NULL,
-  target_id UUID,
-  old_value JSONB,
-  new_value JSONB,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  actor_id uuid,
+  action text NOT NULL,
+  target_id uuid,
+  old_value jsonb,
+  new_value jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT audit_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT audit_logs_actor_id_fkey FOREIGN KEY (actor_id) REFERENCES users(id)
+);
+
+CREATE TABLE notifications (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  title text NOT NULL,
+  message text NOT NULL,
+  type text DEFAULT 'info'::text,
+  is_read boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT notifications_pkey PRIMARY KEY (id),
+  CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE system_settings (
+  key text NOT NULL,
+  value text,
+  CONSTRAINT system_settings_pkey PRIMARY KEY (key)
+);
+
+CREATE TABLE incomes (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  description text,
+  amount numeric NOT NULL,
+  created_by uuid,
+  approved_by uuid,
+  source text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT incomes_pkey PRIMARY KEY (id),
+  CONSTRAINT incomes_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(id),
+  CONSTRAINT incomes_approved_by_fkey FOREIGN KEY (approved_by) REFERENCES users(id)
+);
+
+CREATE TABLE payment_credits (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  week integer NOT NULL,
+  amount numeric NOT NULL,
+  status text NOT NULL DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'repaid'::text, 'forgiven'::text])),
+  repaid_at timestamp with time zone,
+  repaid_via uuid,
+  note text,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT payment_credits_pkey PRIMARY KEY (id),
+  CONSTRAINT payment_credits_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id),
+  CONSTRAINT payment_credits_week_fkey FOREIGN KEY (week) REFERENCES week_settings(week)
 );
 
 -- ============================================================

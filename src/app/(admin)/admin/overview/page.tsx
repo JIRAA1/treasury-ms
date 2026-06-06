@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import Topbar from '@/components/layout/Topbar'
 import KpiCard from '@/components/shared/KpiCard'
 import ActivityFeed from '@/components/shared/ActivityFeed'
-import { formatCurrency, formatDate, getWeekLabel } from '@/lib/utils'
+import { formatCurrency, formatDate } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { th } from 'date-fns/locale'
 import Link from 'next/link'
@@ -27,7 +27,7 @@ export default async function AdminOverviewPage() {
     { data: pendingCredits },
     { data: sysSettings },
   ] = await Promise.all([
-    supabase.from('payments').select('*, user:user_id(fullname, student_id)').eq('status', 'pending').order('created_at').limit(8),
+    supabase.from('payments').select('*, user:user_id(fullname, student_id), period:period_id(label, period_order)').eq('status', 'pending').order('created_at').limit(8),
     supabase.rpc('get_treasury_balance'),
     supabase.from('payments').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
     supabase.from('audit_logs').select('*, actor:actor_id(fullname)').order('created_at', { ascending: false }).limit(10),
@@ -50,19 +50,26 @@ export default async function AdminOverviewPage() {
   const creditDebtTotal = (pendingCredits ?? []).reduce((s: number, c: { amount: number }) => s + c.amount, 0)
   const pendingCreditsCount = (pendingCredits ?? []).length
 
-  // Weekly chart data (last 5 weeks) — dynamic from week_settings
-  const { data: latestWeekSetting } = await supabase
-    .from('week_settings')
-    .select('week')
-    .order('week', { ascending: false })
-    .limit(1)
+  // Period chart data (last 5 periods of active semester)
+  const { data: activeSemester } = await supabase
+    .from('semesters')
+    .select('id, name')
+    .eq('is_active', true)
     .maybeSingle()
-  const currentWeek = latestWeekSetting?.week ?? 1
-  const weeklyRates = await Promise.all(
-    [currentWeek - 4, currentWeek - 3, currentWeek - 2, currentWeek - 1, currentWeek].map(async (w) => {
-      if (w < 1) return { week: w, rate: 0 }
-      const { data } = await supabase.rpc('get_week_collection_rate', { target_week: w })
-      return { week: w, rate: data ?? 0 }
+
+  const activeSemesterId = activeSemester?.id || '00000000-0000-0000-0000-000000000000'
+
+  const { data: recentPeriods } = await supabase
+    .from('periods')
+    .select('id, label, period_order')
+    .eq('semester_id', activeSemesterId)
+    .order('period_order', { ascending: false })
+    .limit(5)
+
+  const periodRates = await Promise.all(
+    (recentPeriods ?? []).reverse().map(async (p) => {
+      const { data } = await supabase.rpc('get_period_collection_rate', { target_period_id: p.id })
+      return { id: p.id, label: p.label, rate: data ?? 0 }
     })
   )
 
@@ -205,7 +212,7 @@ export default async function AdminOverviewPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="text-[12.5px] font-medium text-text-primary truncate">{user?.fullname}</div>
-                        <div className="text-[11px] text-text-muted">{user?.student_id} · {getWeekLabel(p.week)}</div>
+                        <div className="text-[11px] text-text-muted">{user?.student_id} · {p.period?.label || '—'}</div>
                       </div>
                       <div className="text-[12.5px] font-semibold text-text-primary">{formatCurrency(p.amount)}</div>
                       <div className="flex items-center gap-1">
@@ -230,19 +237,22 @@ export default async function AdminOverviewPage() {
 
             {/* Weekly Chart */}
             <div className="bg-background-secondary border border-border rounded-xl p-5">
-              <div className="text-[13px] font-semibold text-text-primary mb-4">อัตราการชำระ 5 สัปดาห์ล่าสุด</div>
+              <div className="text-[13px] font-semibold text-text-primary mb-4">อัตราการชำระ 5 งวดล่าสุด</div>
               <div className="flex items-end gap-2 h-16">
-                {weeklyRates.map((w, i) => (
-                  <div key={w.week} className="flex-1 flex flex-col items-center gap-1">
+                {periodRates.map((p, i) => (
+                  <div key={p.id} className="flex-1 flex flex-col items-center gap-1">
                     <div className="w-full relative">
                       <div
-                        className={`w-full rounded-t-sm transition-all ${i === weeklyRates.length - 1 ? 'bg-brand' : 'bg-background-muted'}`}
-                        style={{ height: `${Math.max((w.rate / 100) * 56, 4)}px` }}
+                        className={`w-full rounded-t-sm transition-all ${i === periodRates.length - 1 ? 'bg-brand' : 'bg-background-muted'}`}
+                        style={{ height: `${Math.max((p.rate / 100) * 56, 4)}px` }}
                       />
                     </div>
-                    <div className="text-[9.5px] text-text-muted">W{w.week}</div>
+                    <div className="text-[9px] text-text-muted truncate max-w-[45px] font-medium" title={p.label}>{p.label}</div>
                   </div>
                 ))}
+                {periodRates.length === 0 && (
+                  <div className="text-[12px] text-text-muted text-center w-full italic">ยังไม่มีงวดชำระเงิน</div>
+                )}
               </div>
             </div>
 

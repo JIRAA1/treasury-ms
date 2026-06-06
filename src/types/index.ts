@@ -11,6 +11,34 @@ export interface User {
   created_at: string
 }
 
+export interface Semester {
+  id: string
+  name: string
+  description: string | null
+  is_active: boolean
+  created_at: string
+  periods?: Period[]
+}
+
+export interface Period {
+  id: string
+  semester_id: string
+  label: string
+  period_order: number
+  amount: number
+  base_amount: number
+  late_fine_amount: number
+  activity_type: 'small' | 'medium' | 'large' | null
+  activity_extra_amount: number
+  is_separate_collection: boolean
+  qr_url: string | null
+  open_at: string | null
+  close_at: string | null
+  deadline: string
+  created_at: string
+  semester?: Semester
+}
+
 export interface WeekSetting {
   week: number
   title: string
@@ -29,7 +57,7 @@ export interface WeekSetting {
 export interface PaymentCredit {
   id: string
   user_id: string
-  week: number
+  period_id: string
   amount: number
   status: 'pending' | 'repaid' | 'forgiven'
   repaid_at: string | null
@@ -38,13 +66,14 @@ export interface PaymentCredit {
   created_by: string | null
   created_at: string
   user?: User
-  week_info?: Pick<WeekSetting, 'title' | 'deadline'>
+  period?: Period
+  period_info?: Pick<Period, 'label' | 'deadline'>
 }
 
 export interface Payment {
   id: string
   user_id: string
-  week: number
+  period_id: string
   amount: number
   trans_ref: string | null
   slip_url: string | null
@@ -53,6 +82,7 @@ export interface Payment {
   created_at: string
   note?: string | null
   user?: User
+  period?: Period
 }
 
 export interface Expense {
@@ -79,15 +109,10 @@ export interface AuditLog {
   actor?: User
 }
 
-export interface WeekStatus {
-  week: number
+export interface PeriodStatus {
+  period: Period
   status: 'paid' | 'pending' | 'unpaid' | 'rejected'
-  amount: number
   payment?: Payment
-  deadline?: string | null
-  title?: string | null
-  payment_open_at?: string | null
-  payment_close_at?: string | null
 }
 
 export interface DashboardStats {
@@ -100,6 +125,8 @@ export interface DashboardStats {
   pendingCount: number
   creditDebtTotal?: number
   tierBreakdown?: { A: number; B: number; C: number }
+  activeSemester?: Semester
+  currentPeriod?: Period
 }
 
 export type TierType = 'A' | 'B' | 'C'
@@ -112,3 +139,4 @@ export interface TierConfig {
   bg: string
   border: string
 }
+

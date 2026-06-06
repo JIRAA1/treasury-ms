@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Topbar from '@/components/layout/Topbar'
 import KpiCard from '@/components/shared/KpiCard'
-import WeekGrid from '@/components/payments/WeekGrid'
+import PeriodGrid from '@/components/payments/PeriodGrid'
 import PaymentRow from '@/components/payments/PaymentRow'
 import StatusPill from '@/components/payments/StatusPill'
 import ExpenseRow from '@/components/expenses/ExpenseRow'
@@ -13,12 +13,12 @@ import { formatCurrency, formatDate, getTierConfig } from '@/lib/utils'
 import { FileText, Upload, ArrowRight, AlertCircle, Clock, QrCode, Sparkles, Lock, Calendar, CreditCard } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import type { WeekStatus, PaymentCredit } from '@/types'
+import type { PeriodStatus, PaymentCredit, Period } from '@/types'
 
-function getWindowStatus(w: WeekStatus) {
+function getWindowStatus(p: Period) {
   const now = new Date()
-  const openAt = w.payment_open_at ? new Date(w.payment_open_at) : null
-  const closeAt = w.payment_close_at ? new Date(w.payment_close_at) : null
+  const openAt = p.open_at ? new Date(p.open_at) : null
+  const closeAt = p.close_at ? new Date(p.close_at) : null
 
   if (!openAt && !closeAt) return 'open'
   if (openAt && now < openAt) return 'upcoming'
@@ -29,7 +29,7 @@ function getWindowStatus(w: WeekStatus) {
 export default function StudentDashboard({ 
   profile, 
   payments, 
-  weekSettings, 
+  periods, 
   expenses,
   promptPayConfig,
   pendingCredits = [],
@@ -37,7 +37,7 @@ export default function StudentDashboard({
 }: { 
   profile: any, 
   payments: any[], 
-  weekSettings: any[], 
+  periods: Period[], 
   expenses: any[],
   promptPayConfig: { promptpay_id: string, promptpay_name: string },
   pendingCredits?: PaymentCredit[],
@@ -45,22 +45,22 @@ export default function StudentDashboard({
 }) {
   const [isQrModalOpen, setIsQrModalOpen] = useState(false)
 
-  const weekStatuses: WeekStatus[] = (weekSettings || []).map((setting) => {
-    const payment = payments?.find((p) => p.week === setting.week)
+  const periodStatuses: PeriodStatus[] = (periods || []).map((period) => {
+    const payment = payments?.find((p) => p.period_id === period.id)
     // ใช้ยอดตาม tier ของ student
     const tierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
     
-    // ตรวจสอบว่านักศึกษามีเครดิตค้างจ่าย (ผ่อนผัน) ในสัปดาห์นี้หรือไม่
-    const hasPendingCredit = pendingCredits.some((c) => c.week === setting.week && c.status === 'pending')
+    // ตรวจสอบว่านักศึกษามีเครดิตค้างจ่าย (ผ่อนผัน) ในงวดนี้หรือไม่
+    const hasPendingCredit = pendingCredits.some((c) => c.period_id === period.id && c.status === 'pending')
 
     // คำนวณค่าปรับ (ถ้าไม่มีเครดิต และชำระเลยกำหนดส่ง)
-    const deadline = setting.deadline ? new Date(setting.deadline) : null
+    const deadline = period.deadline ? new Date(period.deadline) : null
     const isPastDeadline = deadline ? new Date() > deadline : false
-    const lateFine = (!hasPendingCredit && isPastDeadline) ? (setting.late_fine_amount ?? 0) : 0
+    const lateFine = (!hasPendingCredit && isPastDeadline) ? (period.late_fine_amount ?? 0) : 0
     const expectedAmount = tierAmount + lateFine
 
     return {
-      week: setting.week,
+      period,
       status: payment?.status === 'approved' ? 'paid'
              : payment?.status === 'pending' ? 'pending'
              : payment?.status === 'rejected' ? 'rejected'
@@ -68,19 +68,15 @@ export default function StudentDashboard({
       // ถ้า payment ที่ชำระไปแล้วมียอดจริง ให้ใช้ยอดนั้น (approved) มิฉะนั้นใช้ตาม tier + fine
       amount: payment?.status === 'approved' ? (payment?.amount ?? expectedAmount) : expectedAmount,
       payment,
-      deadline: setting.deadline || null,
-      title: setting.title,
-      payment_open_at: setting.payment_open_at,
-      payment_close_at: setting.payment_close_at
     }
   })
 
-  const currentWeekStatus = weekStatuses.find((w) => w.status !== 'paid') ?? weekStatuses[weekStatuses.length - 1]
-  const currentWeek = currentWeekStatus?.week || 0
-  const currentDeadline = currentWeekStatus?.deadline ? new Date(currentWeekStatus.deadline) : null
+  const currentPeriodStatus = periodStatuses.find((p) => p.status !== 'paid') ?? periodStatuses[periodStatuses.length - 1]
+  const currentPeriod = currentPeriodStatus?.period
+  const currentDeadline = currentPeriod?.deadline ? new Date(currentPeriod.deadline) : null
   const isOverdue = currentDeadline ? new Date() > currentDeadline : false
   
-  const windowStatus = currentWeekStatus ? getWindowStatus(currentWeekStatus) : 'open'
+  const windowStatus = currentPeriod ? getWindowStatus(currentPeriod) : 'open'
   const isLocked = windowStatus === 'upcoming' || windowStatus === 'closed'
 
   const formatThaiDate = (date: Date) => {
@@ -93,11 +89,11 @@ export default function StudentDashboard({
     })
   }
 
-  const paidCount = weekStatuses.filter((w) => w.status === 'paid').length
-  const pendingCount = weekStatuses.filter((w) => w.status === 'pending').length
-  const unpaidCount = weekStatuses.filter((w) => w.status === 'unpaid' || w.status === 'rejected').length
+  const paidCount = periodStatuses.filter((w) => w.status === 'paid').length
+  const pendingCount = periodStatuses.filter((w) => w.status === 'pending').length
+  const unpaidCount = periodStatuses.filter((w) => w.status === 'unpaid' || w.status === 'rejected').length
   const totalPaid = (payments?.filter((p) => p.status === 'approved') ?? []).reduce((s, p) => s + p.amount, 0)
-  const totalCycles = weekStatuses.length
+  const totalCycles = periodStatuses.length
 
   return (
     <div className="pb-12 bg-background">
@@ -105,7 +101,7 @@ export default function StudentDashboard({
         title={`สวัสดี, ${profile?.fullname ?? 'นักศึกษา'}`}
         subtitle="ภาพรวมระบบการเงินสาขา"
         actions={
-          currentWeekStatus && currentWeekStatus.status !== 'paid' && currentWeekStatus.status !== 'pending' && !isLocked ? (
+          currentPeriodStatus && currentPeriodStatus.status !== 'paid' && currentPeriodStatus.status !== 'pending' && !isLocked ? (
             <Link href="/student/upload" className="flex items-center gap-2 bg-brand text-white text-[12px] font-bold px-4 py-2 rounded-xl hover:bg-brand-hover transition-all shadow-lg shadow-brand/10 active:scale-95">
               <Upload className="w-4 h-4" />
               <span className="hidden sm:inline">ส่งสลิป</span>
@@ -143,7 +139,7 @@ export default function StudentDashboard({
                         ลดหย่อนชั่วคราว
                       </span>
                     )}
-                    {isOverdue && currentWeekStatus.status !== 'paid' && (
+                    {isOverdue && currentPeriodStatus.status !== 'paid' && (
                       <span className="flex items-center gap-1 text-[10px] bg-red-50 text-red-600 px-2.5 py-1 rounded-lg border border-red-100 font-bold uppercase">
                         <AlertCircle className="w-3 h-3" />
                         เกินกำหนด
@@ -152,7 +148,7 @@ export default function StudentDashboard({
                     {windowStatus === 'upcoming' && (
                       <span className="flex items-center gap-1 text-[10px] bg-amber-50 text-amber-600 px-2.5 py-1 rounded-lg border border-amber-100 font-bold uppercase">
                         <Calendar className="w-3 h-3" />
-                        จะเปิดรับในวันที่ {currentWeekStatus.payment_open_at ? formatThaiDate(new Date(currentWeekStatus.payment_open_at)) : ''}
+                        จะเปิดรับในวันที่ {currentPeriod?.open_at ? formatThaiDate(new Date(currentPeriod.open_at)) : ''}
                       </span>
                     )}
                     {windowStatus === 'closed' && (
@@ -165,7 +161,7 @@ export default function StudentDashboard({
                   
                   <div>
                     <h1 className="text-[24px] md:text-[32px] font-bold text-text-primary tracking-tight leading-tight">
-                      {currentWeekStatus.title || `งวดที่ ${currentWeek}`}
+                      {currentPeriod?.label || 'งวดปัจจุบัน'}
                     </h1>
                     <div className="flex items-center gap-2 text-text-muted mt-1 font-medium text-[13px]">
                       <Clock className="w-4 h-4" />
@@ -175,12 +171,12 @@ export default function StudentDashboard({
 
                   <StatusPill 
                     status={
-                      currentWeekStatus.status === 'paid' ? 'paid'
-                      : currentWeekStatus.status === 'pending' ? 'pending'
-                      : currentWeekStatus.status === 'rejected' ? 'rejected'
+                      currentPeriodStatus.status === 'paid' ? 'paid'
+                      : currentPeriodStatus.status === 'pending' ? 'pending'
+                      : currentPeriodStatus.status === 'rejected' ? 'rejected'
                       : 'unpaid'
                     } 
-                    note={currentWeekStatus.payment?.note}
+                    note={currentPeriodStatus.payment?.note}
                   />
                 </div>
                 
@@ -189,13 +185,13 @@ export default function StudentDashboard({
                 <div className="flex flex-col items-start md:items-end gap-1">
                   <div className="text-[11px] font-bold text-text-muted uppercase tracking-widest">ยอดที่ต้องชำระ</div>
                   <div className="text-[32px] md:text-[44px] font-bold text-brand tracking-tighter leading-none">
-                    ฿{currentWeekStatus.amount.toLocaleString()}
+                    ฿{currentPeriodStatus.period.amount.toLocaleString()}
                   </div>
                   {/* Late Fine Notice */}
                   {(() => {
                     const baseTierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
-                    const finePaid = currentWeekStatus.amount - baseTierAmount
-                    if (finePaid > 0 && currentWeekStatus.status !== 'paid') {
+                    const finePaid = currentPeriodStatus.period.amount - baseTierAmount
+                    if (finePaid > 0 && currentPeriodStatus.status !== 'paid') {
                       return (
                         <div className="text-[10px] text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-lg font-bold mt-1 mb-2">
                           รวมค่าปรับจ่ายล่าช้า ฿{finePaid.toLocaleString()}
@@ -206,7 +202,7 @@ export default function StudentDashboard({
                   })()}
                   
                   <div className="flex items-center gap-2 w-full md:w-auto">
-                    {currentWeekStatus.status !== 'paid' && currentWeekStatus.status !== 'pending' && (
+                    {currentPeriodStatus.status !== 'paid' && currentPeriodStatus.status !== 'pending' && (
                       <>
                         {!isLocked ? (
                           <>
@@ -222,7 +218,7 @@ export default function StudentDashboard({
                               className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 bg-brand text-white text-[12px] font-bold px-6 py-2.5 rounded-xl hover:bg-brand-hover transition-all active:scale-95 shadow-lg shadow-brand/20"
                             >
                               <Upload className="w-4 h-4" />
-                              {currentWeekStatus.status === 'rejected' ? 'ส่งใหม่' : 'ส่งสลิป'}
+                              {currentPeriodStatus.status === 'rejected' ? 'ส่งใหม่' : 'ส่งสลิป'}
                             </Link>
                           </>
                         ) : (
@@ -233,7 +229,7 @@ export default function StudentDashboard({
                         )}
                       </>
                     )}
-                    {currentWeekStatus.status === 'pending' && (
+                    {currentPeriodStatus.status === 'pending' && (
                       <div className="bg-blue-50 text-blue-700 px-5 py-2.5 rounded-xl border border-blue-100 text-[13px] font-bold flex items-center gap-2">
                         <Clock className="w-4 h-4" />
                         รอเหรัญญิกตรวจสอบ
@@ -255,8 +251,7 @@ export default function StudentDashboard({
                   <div className="text-[11.5px] text-amber-700 space-y-0.5">
                     {pendingCredits.map((c) => (
                       <div key={c.id}>
-                        ฿{c.amount.toLocaleString()} — สัปดาห์ที่ {c.week}
-                        {(c.week_info as { title?: string } | undefined)?.title ? ` (${(c.week_info as { title?: string }).title})` : ''}
+                        ฿{c.amount.toLocaleString()} — {c.period_info?.label || 'งวดค้างชำระ'}
                         {c.note ? ` · ${c.note}` : ''}
                       </div>
                     ))}
@@ -272,7 +267,7 @@ export default function StudentDashboard({
             )}
 
             {/* Pending Slip Banner */}
-            {weekStatuses.some(w => w.status === 'pending') && (
+            {periodStatuses.some(w => w.status === 'pending') && (
               <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-100 rounded-2xl">
                 <Clock className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
@@ -307,7 +302,7 @@ export default function StudentDashboard({
                   <span className="text-[10px] font-bold text-red-600 bg-red-50 px-3 py-1 rounded-full border border-red-100 uppercase">{unpaidCount} Due</span>
                 </div>
               </div>
-              <WeekGrid weeks={weekStatuses} currentWeek={currentWeek} />
+              <PeriodGrid periods={periodStatuses} currentPeriodId={currentPeriod?.id} />
             </div>
           </>
         )}
@@ -359,8 +354,8 @@ export default function StudentDashboard({
           onClose={() => setIsQrModalOpen(false)}
           promptPayId={promptPayConfig.promptpay_id}
           promptPayName={promptPayConfig.promptpay_name}
-          title={currentWeekStatus.title || `งวดที่ ${currentWeekStatus.week}`}
-          amount={currentWeekStatus.amount}
+          title={currentPeriod?.label || `งวดปัจจุบัน`}
+          amount={currentPeriodStatus.period.amount}
         />
       )}
     </div>

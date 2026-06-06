@@ -20,6 +20,10 @@ type AuditAction =
   | 'credit_created'
   | 'credit_repaid'
   | 'credit_forgiven'
+  | 'semester_created'
+  | 'semester_activated'
+  | 'period_created'
+  | 'periods_batch_updated'
 
 interface LogParams {
   actorId: string

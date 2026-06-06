@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json() as {
     type: 'reminder' | 'custom'
-    week?: number
+    period_id?: string
     message?: string
     target: 'all_unpaid' | string[]
   }
@@ -43,61 +43,73 @@ export async function POST(request: NextRequest) {
     }
 
     // 2. Determine which cycle to target
-    let week = body.week
+    let period_id = body.period_id
     let cycleSetting = null
 
-    if (!week) {
-      // Get all configured cycles, latest first
+    if (!period_id) {
+      // Find the active semester
+      const { data: activeSemester } = await adminClient
+        .from('semesters')
+        .select('id')
+        .eq('is_active', true)
+        .maybeSingle()
+
+      if (!activeSemester) {
+        return NextResponse.json({ error: 'ไม่พบภาคเรียนที่ใช้งานอยู่ (Active Semester) กรุณาเปิดใช้งานก่อน' }, { status: 400 })
+      }
+
+      // Get all configured periods for this semester, latest first
       const { data: allCycles } = await adminClient
-        .from('week_settings')
+        .from('periods')
         .select('*')
-        .order('week', { ascending: false })
+        .eq('semester_id', activeSemester.id)
+        .order('period_order', { ascending: false })
 
       if (!allCycles || allCycles.length === 0) {
         return NextResponse.json({ error: 'กรุณาเพิ่มงวดการชำระเงินในหน้าตั้งค่าก่อน' }, { status: 400 })
       }
 
-      // Find the most recent cycle that still has unpaid students
+      // Find the most recent period that still has unpaid students
       for (const cycle of allCycles) {
         const { data: paid } = await adminClient
           .from('payments')
           .select('user_id')
-          .eq('week', cycle.week)
+          .eq('period_id', cycle.id)
           .in('status', ['approved', 'pending'])
         
         const paidIds = new Set(paid?.map(p => p.user_id) || [])
         const unpaid = (students ?? []).filter(s => !paidIds.has(s.id))
         
         if (unpaid.length > 0) {
-          week = cycle.week
+          period_id = cycle.id
           cycleSetting = cycle
           break
         }
       }
 
-      // If everyone is caught up, use the absolute latest cycle
-      if (!week) {
-        week = allCycles[0].week
+      // If everyone is caught up, use the absolute latest period
+      if (!period_id) {
+        period_id = allCycles[0].id
         cycleSetting = allCycles[0]
       }
     } else {
-      const { data: s } = await adminClient.from('week_settings').select('*').eq('week', week).single()
+      const { data: s } = await adminClient.from('periods').select('*').eq('id', period_id).single()
       cycleSetting = s
     }
 
     if (!cycleSetting) return NextResponse.json({ error: 'ไม่พบข้อมูลงวดการชำระที่ต้องการ' }, { status: 400 })
 
-    const cycleTitle = cycleSetting.title || `งวดที่ ${week}`
+    const cycleTitle = cycleSetting.label || `งวดที่ ${cycleSetting.period_order}`
     const amount = cycleSetting.amount || 100
     const deadline = new Date(cycleSetting.deadline).toLocaleDateString('th-TH', { 
       day: 'numeric', month: 'long', year: 'numeric' 
     })
 
-    // 3. Final list of unpaid students for the selected week
+    // 3. Final list of unpaid students for the selected period
     const { data: finalPaid } = await adminClient
       .from('payments')
       .select('user_id')
-      .eq('week', week!)
+      .eq('period_id', period_id!)
       .in('status', ['approved', 'pending'])
 
     const finalPaidIds = new Set(finalPaid?.map(p => p.user_id) || [])
@@ -134,8 +146,8 @@ export async function POST(request: NextRequest) {
         cycleTitle,
         amount: studentAmount,
         deadline,
-        openDate: cycleSetting.payment_open_at ? thaiDateStr(cycleSetting.payment_open_at) : undefined,
-        closeDate: cycleSetting.payment_close_at ? thaiDateStr(cycleSetting.payment_close_at) : undefined,
+        openDate: cycleSetting.open_at ? thaiDateStr(cycleSetting.open_at) : undefined,
+        closeDate: cycleSetting.close_at ? thaiDateStr(cycleSetting.close_at) : undefined,
       }
     }))
     
@@ -154,6 +166,6 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  await logAction({ actorId: profile?.id || user.id, action: 'notification_sent', newValue: { type: body.type, sent, failed, week: body.week } })
+  await logAction({ actorId: profile?.id || user.id, action: 'notification_sent', newValue: { type: body.type, sent, failed, period_id: body.period_id } })
   return NextResponse.json({ sent, failed })
 }

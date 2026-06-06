@@ -39,12 +39,12 @@ export default async function HistoryPage({
   const [{ data: payments }, { data: credits }] = await Promise.all([
     adminClient
       .from('payments')
-      .select('*')
+      .select('*, period:period_id(label, period_order)')
       .eq('user_id', profile.id)
-      .order('week', { ascending: false }),
+      .order('created_at', { ascending: false }),
     adminClient
       .from('payment_credits')
-      .select('*, week_info:week(title, deadline)')
+      .select('*, period_info:period_id(label, deadline)')
       .eq('user_id', profile.id)
       .order('created_at', { ascending: false }),
   ])
@@ -110,7 +110,7 @@ export default async function HistoryPage({
               <div className="divide-y divide-border">
                 {/* Header */}
                 <div className="flex items-center gap-4 px-5 py-2 text-[10px] font-bold uppercase tracking-wider text-text-muted bg-background-tertiary/50">
-                  <div className="w-10">งวดที่</div>
+                  <div className="w-20">งวดที่</div>
                   <div className="flex-1">วันที่ทำรายการ</div>
                   <div className="w-20 text-right">จำนวนเงิน</div>
                   <div className="w-24 text-right">สถานะ</div>
@@ -153,7 +153,7 @@ export default async function HistoryPage({
                 <div className="divide-y divide-border">
                   {credits.map((c) => {
                     const statusStyle = getCreditStatusLabel(c.status)
-                    const weekInfo = c.week_info as { title?: string; deadline?: string } | null
+                    const periodInfo = c.period_info as { label?: string; deadline?: string } | null
                     return (
                       <div key={c.id} className="flex items-start gap-4 px-5 py-4 hover:bg-background-tertiary/20 transition-colors">
                         <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -161,8 +161,7 @@ export default async function HistoryPage({
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[13px] font-bold text-text-primary">สัปดาห์ที่ {c.week}</span>
-                            {weekInfo?.title && <span className="text-[11px] text-text-muted">{weekInfo.title}</span>}
+                            <span className="text-[13px] font-bold text-text-primary">{periodInfo?.label || 'งวดชำระ'}</span>
                             <span className={`text-[10.5px] font-black px-2 py-0.5 rounded-full ${statusStyle.bg} ${statusStyle.color}`}>
                               {statusStyle.label}
                             </span>

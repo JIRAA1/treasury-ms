@@ -7,11 +7,11 @@ import KpiCard from '@/components/shared/KpiCard'
 import { formatCurrency, formatDate, getCreditStatusLabel, getTierConfig } from '@/lib/utils'
 import { CheckCircle2, Gift, Plus, Loader2, Filter } from 'lucide-react'
 import { toast } from 'sonner'
-import type { PaymentCredit, WeekSetting, User } from '@/types'
+import type { PaymentCredit, Period, User } from '@/types'
 
 interface CreditRow extends PaymentCredit {
   user: User
-  week_info: Pick<WeekSetting, 'title' | 'deadline'>
+  period_info: Pick<Period, 'label' | 'deadline'>
 }
 
 type StatusFilter = 'all' | 'pending' | 'repaid' | 'forgiven'
@@ -134,7 +134,7 @@ export default function AdminCreditsPage() {
               <thead className="bg-background-tertiary/50 text-text-muted border-b border-border">
                 <tr>
                   <th className="px-6 py-4 text-left font-black text-[10px] uppercase tracking-widest">นักศึกษา</th>
-                  <th className="px-6 py-4 text-left font-black text-[10px] uppercase tracking-widest">สัปดาห์</th>
+                  <th className="px-6 py-4 text-left font-black text-[10px] uppercase tracking-widest">งวด</th>
                   <th className="px-6 py-4 text-right font-black text-[10px] uppercase tracking-widest">ยอดค้าง</th>
                   <th className="px-6 py-4 text-center font-black text-[10px] uppercase tracking-widest">สถานะ</th>
                   <th className="px-6 py-4 text-left font-black text-[10px] uppercase tracking-widest">หมายเหตุ</th>
@@ -164,8 +164,7 @@ export default function AdminCreditsPage() {
                         <div className="text-[11px] text-text-muted font-mono">{c.user?.student_id}</div>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="font-medium">W{c.week}</div>
-                        <div className="text-[11px] text-text-muted">{c.week_info?.title}</div>
+                        <div className="font-medium">{c.period_info?.label || '—'}</div>
                       </td>
                       <td className="px-6 py-4 text-right font-bold text-text-primary">{formatCurrency(c.amount)}</td>
                       <td className="px-6 py-4 text-center">
@@ -225,23 +224,32 @@ export default function AdminCreditsPage() {
 // ── Add Credit Modal ─────────────────────────────────────────
 function AddCreditModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const [students, setStudents] = useState<Pick<User, 'id' | 'fullname' | 'student_id' | 'tier'>[]>([])
-  const [weeks, setWeeks] = useState<Pick<WeekSetting, 'week' | 'title'>[]>([])
-  const [form, setForm] = useState({ user_id: '', week: '', amount: '', note: '' })
+  const [periods, setPeriods] = useState<Pick<Period, 'id' | 'label'>[]>([])
+  const [form, setForm] = useState({ user_id: '', period_id: '', amount: '', note: '' })
   const [saving, setSaving] = useState(false)
-  const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
     const load = async () => {
-      const [resStudents, { data: ws }] = await Promise.all([
-        fetch('/api/students').then(r => r.json()),
-        supabase.from('week_settings').select('week, title').order('week'),
-      ])
-      const sortedStudents = (resStudents?.students ?? []).sort((a: Pick<User, 'fullname'>, b: Pick<User, 'fullname'>) => (a.fullname || '').localeCompare(b.fullname || ''))
-      setStudents(sortedStudents)
-      setWeeks(ws ?? [])
+      try {
+        const [resStudents, sRes] = await Promise.all([
+          fetch('/api/students').then(r => r.json()),
+          fetch('/api/semesters').then(r => r.json())
+        ])
+        const sortedStudents = (resStudents?.students ?? []).sort((a: Pick<User, 'fullname'>, b: Pick<User, 'fullname'>) => (a.fullname || '').localeCompare(b.fullname || ''))
+        setStudents(sortedStudents)
+
+        const activeSem = sRes.data?.find((s: any) => s.is_active)
+        if (activeSem) {
+          const pRes = await fetch(`/api/semesters/${activeSem.id}/periods`)
+          const pJson = await pRes.json()
+          setPeriods(pJson.data ?? [])
+        }
+      } catch (err) {
+        console.error('Failed to load add credit modal options', err)
+      }
     }
     load()
-  }, [supabase])
+  }, [])
 
   const handleStudentChange = (userId: string) => {
     const student = students.find(s => s.id === userId)
@@ -252,7 +260,7 @@ function AddCreditModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.user_id || !form.week || !form.amount) {
+    if (!form.user_id || !form.period_id || !form.amount) {
       toast.error('กรุณากรอกข้อมูลให้ครบ')
       return
     }
@@ -263,7 +271,7 @@ function AddCreditModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: form.user_id,
-          week: parseInt(form.week),
+          period_id: form.period_id,
           amount: parseFloat(form.amount),
           note: form.note || null,
         }),
@@ -304,15 +312,15 @@ function AddCreditModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
           </div>
 
           <div>
-            <label className="text-[11px] font-black uppercase tracking-widest text-text-muted mb-1.5 block">สัปดาห์</label>
+            <label className="text-[11px] font-black uppercase tracking-widest text-text-muted mb-1.5 block">งวดการชำระเงิน</label>
             <select
-              value={form.week}
-              onChange={e => setForm(f => ({ ...f, week: e.target.value }))}
+              value={form.period_id}
+              onChange={e => setForm(f => ({ ...f, period_id: e.target.value }))}
               className="w-full px-4 py-3 text-[13px] border border-border rounded-xl bg-background outline-none focus:ring-2 focus:ring-brand/10"
             >
-              <option value="">เลือกสัปดาห์...</option>
-              {weeks.map(w => (
-                <option key={w.week} value={w.week}>W{w.week} — {w.title}</option>
+              <option value="">เลือกงวดการชำระเงิน...</option>
+              {periods.map(p => (
+                <option key={p.id} value={p.id}>{p.label}</option>
               ))}
             </select>
           </div>

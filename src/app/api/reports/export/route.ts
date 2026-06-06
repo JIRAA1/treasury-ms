@@ -24,17 +24,17 @@ export async function GET(request: NextRequest) {
   if (type === 'income') {
     const { data: payments } = await adminClient.from('payments').select('*, user:user_id(fullname, student_id)').eq('status', 'approved')
     const { data: incomes } = await adminClient.from('incomes').select('*, approver:approved_by(fullname)').not('approved_by', 'is', null)
-    const { data: settings } = await adminClient.from('week_settings').select('*').order('week', { ascending: true })
+    const { data: settings } = await adminClient.from('periods').select('*').order('period_order', { ascending: true })
     
     const combinedList: any[] = []
     
     payments?.forEach((p) => {
       const u = p.user as any
-      const s = settings?.find(x => x.week === p.week)
+      const s = settings?.find(x => x.id === p.period_id)
       combinedList.push({
         created_at: new Date(p.created_at),
         type: 'เงินค่าห้องนักศึกษา',
-        title: s?.title || `งวดที่ ${p.week}`,
+        title: s?.label || `งวดที่ ${p.period_id}`,
         payer: u ? `${u.fullname} (${u.student_id})` : 'ไม่ระบุตัวตน',
         amount: p.amount,
         ref: p.trans_ref || 'ชำระด้วยเงินสด'
@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
         created_at,
         repaid_at,
         user:user_id ( fullname, student_id, tier ),
-        week_info:week ( title, deadline )
+        period_info:period_id ( label, deadline )
       `)
       .order('status', { ascending: true })  // pending ก่อน, repaid/forgiven ทีหลัง
       .order('created_at', { ascending: false })
@@ -114,12 +114,12 @@ export async function GET(request: NextRequest) {
 
     const data = (credits || []).map((c) => {
       const u = c.user as any
-      const w = c.week_info as any
+      const w = c.period_info as any
       return {
         'รหัสนักศึกษา': u?.student_id || 'ไม่ระบุ',
         'ชื่อ-นามสกุล': u?.fullname || 'ไม่ระบุ',
         'Tier': u?.tier || 'B',
-        'งวด': w?.title || 'ไม่ระบุ',
+        'งวด': w?.label || 'ไม่ระบุ',
         'กำหนดชำระของงวด': w?.deadline ? new Date(w.deadline).toLocaleDateString('th-TH') : 'ไม่ระบุ',
         'ยอดค้าง (บาท)': c.amount,
         'สถานะ': statusLabel[c.status] || c.status,
@@ -144,7 +144,7 @@ export async function GET(request: NextRequest) {
     // Student summary
     const { data: students } = await adminClient.from('users').select('id, fullname, student_id').eq('role', 'student').order('student_id')
     const { data: payments } = await adminClient.from('payments').select('*, user:user_id(fullname, student_id)').eq('status', 'approved')
-    const { data: settings } = await adminClient.from('week_settings').select('*').order('week', { ascending: true })
+    const { data: settings } = await adminClient.from('periods').select('*').order('period_order', { ascending: true })
 
     const data = (students || []).map((student) => {
       const row: any = {
@@ -153,8 +153,8 @@ export async function GET(request: NextRequest) {
       }
       let total = 0
       settings?.forEach((s) => {
-        const p = payments?.find((pay) => pay.user_id === student.id && pay.week === s.week)
-        row[s.title || `งวดที่ ${s.week}`] = p ? p.amount : 0
+        const p = payments?.find((pay) => pay.user_id === student.id && pay.period_id === s.id)
+        row[s.label || `งวดที่ ${s.period_order}`] = p ? p.amount : 0
         if (p) total += p.amount
       })
       row['รวมทั้งหมด'] = total

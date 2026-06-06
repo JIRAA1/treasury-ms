@@ -22,19 +22,40 @@ export default async function StudentDashboardPage() {
 
   if (!profile) redirect('/bind')
 
+  // Find active semester
+  const { data: activeSemester } = await adminClient
+    .from('semesters')
+    .select('id')
+    .eq('is_active', true)
+    .maybeSingle()
+
+  let periods: any[] = []
+  let periodIds: string[] = []
+  if (activeSemester) {
+    const { data: pData } = await adminClient
+      .from('periods')
+      .select('*')
+      .eq('semester_id', activeSemester.id)
+      .order('period_order', { ascending: true })
+    periods = pData || []
+    periodIds = periods.map(p => p.id)
+  }
+
   const [
     { data: payments },
-    { data: weekSettings },
     { data: expenses },
     { data: settings },
     { data: credits },
   ] = await Promise.all([
-    adminClient.from('payments').select('*').eq('user_id', profile.id).order('week', { ascending: true }),
-    adminClient.from('week_settings').select('*').order('week', { ascending: true }),
+    periodIds.length > 0
+      ? adminClient.from('payments').select('*').eq('user_id', profile.id).in('period_id', periodIds)
+      : { data: [] },
     adminClient.from('expenses').select('*, creator:created_by(fullname)').not('approved_by', 'is', null).order('created_at', { ascending: false }).limit(3),
     adminClient.from('system_settings').select('*'),
     // pending credits for this student
-    adminClient.from('payment_credits').select('*, week_info:week(title)').eq('user_id', profile.id).eq('status', 'pending').order('created_at', { ascending: false }),
+    periodIds.length > 0
+      ? adminClient.from('payment_credits').select('*, period_info:period_id(label)').eq('user_id', profile.id).eq('status', 'pending').in('period_id', periodIds).order('created_at', { ascending: false })
+      : { data: [] },
   ])
 
   const promptPayConfig = {
@@ -52,7 +73,7 @@ export default async function StudentDashboardPage() {
     <StudentDashboard
       profile={profile}
       payments={payments || []}
-      weekSettings={weekSettings || []}
+      periods={periods || []}
       expenses={expenses || []}
       promptPayConfig={promptPayConfig}
       pendingCredits={credits || []}

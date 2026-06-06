@@ -5,7 +5,7 @@ import Topbar from '@/components/layout/Topbar'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { ArrowLeft, User, Calendar, MessageSquare, CreditCard } from 'lucide-react'
 import Link from 'next/link'
-import type { WeekStatus } from '@/types'
+import type { PeriodStatus } from '@/types'
 import StudentDetailClient from './StudentDetailClient'
 
 export const dynamic = 'force-dynamic'
@@ -39,36 +39,44 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
 
   if (!student) notFound()
 
+  const { data: activeSemester } = await adminClient
+    .from('semesters')
+    .select('id, name')
+    .eq('is_active', true)
+    .maybeSingle()
+
+  const activeSemesterId = activeSemester?.id || '00000000-0000-0000-0000-000000000000'
+
+  const { data: periods } = await adminClient
+    .from('periods')
+    .select('*')
+    .eq('semester_id', activeSemesterId)
+    .order('period_order', { ascending: true })
+
+  const periodIds = (periods ?? []).map(p => p.id)
+
   const { data: payments } = await adminClient
     .from('payments')
-    .select('*')
+    .select('*, period:period_id(label, period_order)')
     .eq('user_id', id)
-    .order('week', { ascending: true })
+    .in('period_id', periodIds.length > 0 ? periodIds : ['00000000-0000-0000-0000-000000000000'])
 
-  const { data: weekSettings } = await adminClient
-    .from('week_settings')
-    .select('*')
-    .order('week', { ascending: true })
-
-  const totalCycles = weekSettings?.length ?? 0
+  const totalCycles = periods?.length ?? 0
   const paidCount = payments?.filter(p => p.status === 'approved').length ?? 0
   const pendingCount = payments?.filter(p => p.status === 'pending').length ?? 0
   const rejectedCount = payments?.filter(p => p.status === 'rejected').length ?? 0
   const totalPaid = payments?.filter(p => p.status === 'approved').reduce((s, p) => s + p.amount, 0) ?? 0
   const completionPct = totalCycles > 0 ? Math.round((paidCount / totalCycles) * 100) : 0
 
-  // Build week status array
-  const weekStatuses: (WeekStatus & { title?: string; deadline?: string })[] = (weekSettings ?? []).map(ws => {
-    const payment = payments?.find(p => p.week === ws.week)
+  // Build period status array
+  const periodStatuses: PeriodStatus[] = (periods ?? []).map(p => {
+    const payment = payments?.find(pay => pay.period_id === p.id)
     return {
-      week: ws.week,
-      title: ws.title,
-      deadline: ws.deadline,
+      period: p,
       status: payment?.status === 'approved' ? 'paid'
              : payment?.status === 'pending' ? 'pending'
              : payment?.status === 'rejected' ? 'rejected'
              : 'unpaid',
-      amount: ws.amount ?? 0,
       payment,
     }
   })
@@ -132,7 +140,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
             <div className="pt-2 border-t border-border">
               <StudentDetailClient
                 student={student}
-                weekStatuses={[]}
+                periodStatuses={[]}
                 actorRole={actorProfile.role}
                 profileActionsOnly
               />
@@ -192,7 +200,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
 
           <StudentDetailClient
             student={student}
-            weekStatuses={weekStatuses}
+            periodStatuses={periodStatuses}
             actorRole={actorProfile.role}
           />
         </div>

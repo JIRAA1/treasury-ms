@@ -28,9 +28,6 @@ export function formatDate(date: string | Date): string {
   return `${day} ${month} ${year}`
 }
 
-export function getWeekLabel(week: number): string {
-  return `W${week}`
-}
 
 export function getPaymentStatus(status: string) {
   switch (status) {

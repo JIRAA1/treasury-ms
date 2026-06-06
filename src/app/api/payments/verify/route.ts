@@ -40,20 +40,14 @@ export async function POST(request: NextRequest) {
   // 1. Fetch Payment, User, and Cycle Info
   const { data: payment } = await adminClient
     .from('payments')
-    .select('*, user:user_id(id, line_user_id, fullname)')
+    .select('*, user:user_id(id, line_user_id, fullname), period:period_id(label, period_order)')
     .eq('id', id)
     .single()
 
   if (!payment) return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
 
-  const { data: cycleSetting } = await adminClient
-    .from('week_settings')
-    .select('title')
-    .eq('week', payment.week)
-    .single()
-
   const student = payment.user as any
-  const cycleTitle = cycleSetting?.title || `งวดที่ ${payment.week}`
+  const cycleTitle = (payment as any).period?.label || `งวดที่ ${(payment as any).period?.period_order || '—'}`
   const finalStatus = action === 'notify_only' ? (status || payment.status) : (action === 'approve' ? 'approved' : 'rejected')
   const thaiDate = new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 
@@ -151,7 +145,7 @@ export async function POST(request: NextRequest) {
         .from('payment_credits')
         .select('id')
         .eq('user_id', payment.user_id)
-        .eq('week', payment.week)
+        .eq('period_id', payment.period_id)
         .eq('status', 'pending')
         .maybeSingle()
 

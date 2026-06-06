@@ -15,9 +15,9 @@ export async function POST(request: NextRequest) {
 
   const formData = await request.formData()
   const file = formData.get('file') as File
-  const week = parseInt(formData.get('week') as string)
+  const period_id = formData.get('period_id') as string
 
-  if (!file || !week) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+  if (!file || !period_id) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
   // Server-side validation (prevent bypass of client-side checks)
   const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
@@ -50,26 +50,26 @@ export async function POST(request: NextRequest) {
 
   // 1. Quick Check — prevent double-submit
   const { data: existing } = await adminClient
-    .from('payments').select('id, status').eq('user_id', profile.id).eq('week', week).maybeSingle()
+    .from('payments').select('id, status').eq('user_id', profile.id).eq('period_id', period_id).maybeSingle()
 
   if (existing && existing.status !== 'rejected') {
-    return NextResponse.json({ error: 'คุณได้ส่งสลิปของสัปดาห์นี้ไปแล้ว' }, { status: 409 })
+    return NextResponse.json({ error: 'คุณได้ส่งสลิปของงวดนี้ไปแล้ว' }, { status: 409 })
   }
 
   const { data: nameSetting } = await adminClient.from('system_settings').select('value').eq('key', 'promptpay_name').maybeSingle()
   const expectedName = nameSetting?.value || "ชานน ศ."
-  const { data: weekSetting } = await adminClient
-    .from('week_settings')
-    .select('title, amount, deadline, payment_open_at, payment_close_at, late_fine_amount')
-    .eq('week', week)
+  const { data: periodSetting } = await adminClient
+    .from('periods')
+    .select('label, amount, deadline, open_at, close_at, late_fine_amount')
+    .eq('id', period_id)
     .maybeSingle()
-  const cycleTitle = weekSetting?.title || `งวดที่ ${week}`
+  const cycleTitle = periodSetting?.label || `งวดนี้`
 
   // 2. Payment Window Check — lock if admin has configured open/close times
-  if (weekSetting?.payment_open_at || weekSetting?.payment_close_at) {
+  if (periodSetting?.open_at || periodSetting?.close_at) {
     const now = new Date()
-    const openAt = weekSetting.payment_open_at ? new Date(weekSetting.payment_open_at) : null
-    const closeAt = weekSetting.payment_close_at ? new Date(weekSetting.payment_close_at) : null
+    const openAt = periodSetting.open_at ? new Date(periodSetting.open_at) : null
+    const closeAt = periodSetting.close_at ? new Date(periodSetting.close_at) : null
 
     if (openAt && now < openAt) {
       return NextResponse.json({
@@ -160,14 +160,14 @@ export async function POST(request: NextRequest) {
 
     // Upload file first
     const ext = file.type.split('/')[1]
-    const filename = `${profile.id}/week-${week}-${Date.now()}.${ext}`
+    const filename = `${profile.id}/period-${period_id}-${Date.now()}.${ext}`
     const { error: uploadError } = await adminClient.storage.from('slips').upload(filename, buffer, { contentType: file.type, upsert: true })
     if (uploadError) return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
     const { data: { publicUrl } } = supabase.storage.from('slips').getPublicUrl(filename)
 
     const paymentData = {
       user_id: profile.id,
-      week,
+      period_id,
       amount: 0,           // Unknown until manual review
       trans_ref: null,
       slip_url: publicUrl,
@@ -238,12 +238,12 @@ export async function POST(request: NextRequest) {
     }, { status: 400 })
   }
 
-  // Check if student has pending credit for this week
+  // Check if student has pending credit for this period
   const { data: pendingCredit } = await adminClient
     .from('payment_credits')
     .select('id, amount')
     .eq('user_id', profile.id)
-    .eq('week', week)
+    .eq('period_id', period_id)
     .eq('status', 'pending')
     .maybeSingle()
 
@@ -257,9 +257,9 @@ export async function POST(request: NextRequest) {
   const tierAmount = tierAmounts[profile.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
 
   // Determine if late fine is applicable (only if no credit and it's past deadline)
-  const deadline = weekSetting?.deadline ? new Date(weekSetting.deadline) : null
+  const deadline = periodSetting?.deadline ? new Date(periodSetting.deadline) : null
   const isPastDeadline = deadline ? new Date() > deadline : false
-  const lateFine = (!pendingCredit && isPastDeadline) ? (weekSetting?.late_fine_amount ?? 0) : 0
+  const lateFine = (!pendingCredit && isPastDeadline) ? (periodSetting?.late_fine_amount ?? 0) : 0
   const expectedStudentAmount = tierAmount + lateFine
 
   // 6. Amount Validation — server-side comparison AFTER OCR
@@ -279,7 +279,7 @@ export async function POST(request: NextRequest) {
 
   // 7. Storage & DB (Upload image only after all validations pass!)
   const ext = file.type.split('/')[1]
-  const filename = `${profile.id}/week-${week}-${Date.now()}.${ext}`
+  const filename = `${profile.id}/period-${period_id}-${Date.now()}.${ext}`
   const { error: uploadError } = await adminClient.storage.from('slips').upload(filename, buffer, { contentType: file.type, upsert: true })
   if (uploadError) return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
   const { data: { publicUrl } } = supabase.storage.from('slips').getPublicUrl(filename)
@@ -288,7 +288,7 @@ export async function POST(request: NextRequest) {
   const autoApprove = !!pendingCredit
   const paymentData = {
     user_id: profile.id,
-    week,
+    period_id,
     amount: ocrResult.amount || 0,
     trans_ref: ocrResult.trans_ref,
     slip_url: publicUrl,
