@@ -98,7 +98,7 @@ export default async function HistoryPage({
                 >
                   <t.icon className="w-3.5 h-3.5" />
                   {t.label}
-                  {t.badge > 0 && (
+                  {(t.badge ?? 0) > 0 && (
                     <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center ${isActive ? 'bg-white/20' : 'bg-amber-100 text-amber-700'}`}>
                       {t.badge}
                     </span>
