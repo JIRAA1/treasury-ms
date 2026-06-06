@@ -5,6 +5,7 @@ import KpiCard from '@/components/shared/KpiCard'
 import { formatCurrency, cn } from '@/lib/utils'
 import { FileText, Download, Users, CreditCard, ArrowRight, TrendingUp, Receipt } from 'lucide-react'
 import Link from 'next/link'
+import ReportCharts from '@/components/admin/ReportCharts'
 
 export const metadata = { title: 'รายงาน — TreasuryMS' }
 
@@ -81,6 +82,9 @@ export default async function AdminReportsPage() {
             subVariant={availableBalance >= 0 ? 'positive' : 'danger'} 
           />
         </div>
+
+        {/* Statistical Charts */}
+        <ReportCharts cycleData={cycleData} studentCount={students?.length || 0} />
 
         <div className="grid grid-cols-2 gap-6">
           {/* Cycle Summary */}
