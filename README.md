@@ -1,6 +1,6 @@
-# TreasuryMS — ระบบบริหารจัดการกองกลางสาขา
+# TreasuryMS — ระบบบริหารจัดการกองกลางสาขา คอมพิวเตอร์ศึกษา 69
 
-> ระบบบริหารจัดการการเงินภายในสาขาวิทยาการคอมพิวเตอร์ (Computer Science Branch)  
+> ระบบบริหารจัดการการเงินภายในสาขาคอมพิวเตอร์ศึกษา
 > ออกแบบเพื่อความโปร่งใส (Transparency) และประสิทธิภาพ (Efficiency) อย่างสูงสุด
 
 **Live Demo:** [treasury-ms.vercel.app](https://treasury-ms.vercel.app)
@@ -964,5 +964,5 @@ interface WeekStatus {
 
 ---
 
-*TreasuryMS — Developed by CS Treasury Team*  
-*สร้างเพื่อมาตรฐานความโปร่งใสทางการเงินของสาขาวิทยาการคอมพิวเตอร์*
+*TreasuryMS — Developed by COM_EDU*  
+*สร้างเพื่อมาตรฐานความโปร่งใสทางการเงินของสาขาคอมพิวเตอร์ศึกษา*
