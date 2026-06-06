@@ -17,6 +17,7 @@ import {
   ChevronLeft,
   MessageSquare,
   TrendingUp,
+  ArrowLeftRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { User } from '@/types'
@@ -44,7 +45,7 @@ const adminNav = (pendingCount: number, pendingCredits = 0): NavItem[] => [
   { label: 'รายรับ (แหล่งอื่น)', href: '/admin/incomes', icon: TrendingUp },
   { label: 'บัญชีรายจ่าย', href: '/admin/expenses', icon: Receipt },
   { label: 'บันทึก Credit', href: '/admin/credits', icon: Clock, badge: pendingCredits > 0 ? pendingCredits : undefined },
-  { label: 'ส่งข่าวสาร (Broadcast)', href: '/admin/broadcast', icon: MessageSquare },
+  { label: 'ส่งข่าวสาร', href: '/admin/broadcast', icon: MessageSquare },
   { label: 'รายชื่อนักศึกษา', href: '/admin/students', icon: Users },
   { label: 'รายงานการเงิน', href: '/admin/reports', icon: BarChart3 },
   { label: 'Audit Logs', href: '/admin/audit', icon: Shield },
@@ -75,89 +76,111 @@ export default function Sidebar({
     ? user.fullname.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
     : 'U'
 
-  // Show profile picture only for student view (if we had it, but we don't in db anymore)
-  const showProfilePic = false
-
   return (
-    <aside className="w-full h-full bg-brand flex flex-col shadow-2xl overflow-hidden border-r border-white/5">
-      {/* Logo & Close Button (Mobile) */}
-      <div className="h-[80px] flex items-center justify-between px-6 border-b border-white/5">
+    <aside className="w-full h-full flex flex-col overflow-hidden relative"
+      style={{ background: 'linear-gradient(180deg, #0c1628 0%, #0f172a 60%, #111827 100%)' }}
+    >
+      {/* Subtle background texture */}
+      <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
+        style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, #4f8ef7 0%, transparent 60%), radial-gradient(circle at 80% 20%, #b59410 0%, transparent 50%)' }}
+      />
+
+      {/* Logo */}
+      <div className="relative h-[72px] flex items-center justify-between px-5 border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center p-1.5 shadow-xl">
+          <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-black/30 overflow-hidden flex-shrink-0">
             <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
           <div className="flex flex-col">
-            <span className="text-[15px] font-black text-white tracking-tighter leading-none italic uppercase">Treasury</span>
-            <span className="text-[10px] font-bold text-white/40 tracking-[0.2em] uppercase mt-1">Management</span>
+            <span className="text-[14px] font-black text-white tracking-tight leading-none italic uppercase">Treasury</span>
+            <span className="text-[9px] font-bold text-white/30 tracking-[0.25em] uppercase mt-0.5">Management</span>
           </div>
         </div>
-        <button onClick={closeSidebar} className="lg:hidden p-2 text-white/40 hover:text-white transition-colors">
-          <ChevronLeft className="w-5 h-5" />
+        <button onClick={closeSidebar} className="lg:hidden p-2 text-white/30 hover:text-white/70 transition-colors rounded-lg hover:bg-white/5">
+          <ChevronLeft className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 p-4 overflow-y-auto custom-scrollbar">
-        <div className="space-y-1.5">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
-            const showDot = item.href === '/student/upload' && hasUnpaidWeek
+      {/* Navigation section label */}
+      <div className="px-5 pt-5 pb-2">
+        <span className="text-[9px] font-black uppercase tracking-[0.3em] text-white/20">
+          {isViewingAdmin ? 'Administration' : 'Student Portal'}
+        </span>
+      </div>
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={closeSidebar}
-                className={cn(
-                  'flex items-center gap-3 px-4 py-3.5 rounded-2xl text-[13.5px] font-bold transition-all duration-200 group relative',
+      {/* Nav */}
+      <nav className="flex-1 px-3 overflow-y-auto space-y-0.5 pb-2">
+        {navItems.map((item) => {
+          const Icon = item.icon
+          const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+          const showDot = item.href === '/student/upload' && hasUnpaidWeek
+
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={closeSidebar}
+              className={cn(
+                'relative flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-semibold transition-all duration-150 group',
+                isActive
+                  ? 'bg-white text-brand shadow-lg shadow-black/20'
+                  : 'text-white/45 hover:text-white/80 hover:bg-white/[0.06]'
+              )}
+            >
+              {/* Active left accent */}
+              {isActive && (
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full"
+                  style={{ background: 'linear-gradient(180deg, #b59410, #d4a820)' }}
+                />
+              )}
+
+              <Icon className={cn(
+                'w-[17px] h-[17px] flex-shrink-0 transition-transform duration-150',
+                isActive ? 'text-brand' : 'text-white/30 group-hover:text-white/60 group-hover:scale-110'
+              )} />
+
+              <span className="flex-1 tracking-tight">{item.label}</span>
+
+              {showDot && !isActive && (
+                <span className="w-2 h-2 rounded-full bg-amber-400 pulse-dot" />
+              )}
+              {item.badge !== undefined && (item.badge as number) > 0 && (
+                <span className={cn(
+                  'text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center tabular-nums',
                   isActive
-                    ? 'bg-white text-brand shadow-2xl shadow-white/10'
-                    : 'text-white/50 hover:text-white hover:bg-white/5'
-                )}
-              >
-                {isActive && (
-                  <div className="absolute left-0 w-1 h-6 bg-accent-gold rounded-full" />
-                )}
-                <Icon className={cn("w-[18px] h-[18px] transition-transform group-hover:scale-110", isActive ? "text-brand" : "text-white/30")} />
-                <span className="flex-1 tracking-tight">{item.label}</span>
-                {showDot && !isActive && (
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shadow-lg shadow-amber-400/20" />
-                )}
-                {item.badge !== undefined && (item.badge as number) > 0 && (
-                  <span className={cn(
-                    'text-[10px] font-black px-2 py-0.5 rounded-full min-w-[22px] text-center',
-                    isActive ? 'bg-brand/10 text-brand' : 'bg-accent-emerald text-white'
-                  )}>
-                    {item.badge}
-                  </span>
-                )}
-              </Link>
-            )
-          })}
-        </div>
+                    ? 'bg-brand/10 text-brand'
+                    : 'bg-rose-500 text-white shadow-sm shadow-rose-500/30'
+                )}>
+                  {item.badge}
+                </span>
+              )}
+            </Link>
+          )
+        })}
       </nav>
 
-      {/* Switcher & User */}
-      <div className="p-4 mt-auto space-y-4">
+      {/* Bottom section */}
+      <div className="p-3 space-y-2 border-t border-white/[0.06]">
         {isAdmin && (
           <Link
             href={isViewingAdmin ? '/student/dashboard' : '/admin/overview'}
-            className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl border border-white/10 bg-white/5 text-white text-[11px] font-black uppercase tracking-widest hover:bg-white/10 transition-all active:scale-95"
+            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl border border-white/10 text-white/50 text-[11px] font-bold uppercase tracking-widest hover:text-white/80 hover:bg-white/[0.06] hover:border-white/20 transition-all press-down"
           >
-            {isViewingAdmin ? 'สลับเข้าโหมด Student' : 'สลับเข้าโหมด Admin'}
+            <ArrowLeftRight className="w-3.5 h-3.5" />
+            {isViewingAdmin ? 'Student Mode' : 'Admin Mode'}
           </Link>
         )}
 
-        <div className="bg-white/5 rounded-[1.5rem] p-4 border border-white/5 backdrop-blur-md">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-white/20 to-white/5 flex items-center justify-center border border-white/10 overflow-hidden shadow-inner">
-              <span className="text-white text-[13px] font-black">{initials}</span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[13.5px] font-black text-white truncate tracking-tight">{user?.fullname}</div>
-              <div className="text-[10px] text-white/30 truncate font-mono tracking-tighter uppercase font-bold">{user?.student_id}</div>
-            </div>
+        {/* User profile card */}
+        <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-[12px] font-black text-white"
+            style={{ background: 'linear-gradient(135deg, rgba(181,148,16,0.5), rgba(181,148,16,0.2))', border: '1px solid rgba(181,148,16,0.25)' }}
+          >
+            {initials}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[12.5px] font-bold text-white/85 truncate tracking-tight">{user?.fullname}</div>
+            <div className="text-[9.5px] text-white/30 truncate font-mono uppercase font-bold tracking-tight">{user?.student_id}</div>
           </div>
         </div>
       </div>

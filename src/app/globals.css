@@ -80,26 +80,121 @@
   }
 }
 
-/* Luxury Smooth Animations */
+/* ── Glass & Surface Utilities ─────────────────────────── */
 .glass-panel {
-  @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-sm;
+  background: rgba(255,255,255,0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.3);
+}
+
+.glass-dark {
+  background: rgba(15,23,42,0.75);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.08);
 }
 
 .luxury-shadow {
-  box-shadow: 0 10px 40px -10px rgba(0,0,0,0.04);
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.04),
+              0 20px 60px -10px rgba(0,0,0,0.06),
+              0 1px 3px -1px rgba(0,0,0,0.03);
 }
 
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 5px;
+.card-shadow {
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04),
+              0 4px 16px rgba(0,0,0,0.04);
 }
-::-webkit-scrollbar-track {
-  background: transparent;
+
+.glow-brand {
+  box-shadow: 0 0 0 1px rgba(15,23,42,0.08),
+              0 8px 24px -4px rgba(15,23,42,0.14);
 }
+
+/* ── Gradient Backgrounds ───────────────────────────────── */
+.gradient-brand {
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
+}
+
+.gradient-gold {
+  background: linear-gradient(135deg, #92740a 0%, #d4a820 60%, #b59410 100%);
+}
+
+.gradient-emerald {
+  background: linear-gradient(135deg, #065f46 0%, #059669 100%);
+}
+
+.gradient-surface {
+  background: linear-gradient(180deg, #ffffff 0%, #f8f8fb 100%);
+}
+
+/* ── Micro-animation Utilities ─────────────────────────── */
+.hover-lift {
+  transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1),
+              box-shadow 0.2s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -4px rgba(0,0,0,0.1);
+}
+
+.press-down {
+  transition: transform 0.1s ease;
+}
+.press-down:active {
+  transform: scale(0.97);
+}
+
+/* ── Status Pill Glow ───────────────────────────────────── */
+.status-paid-glow {
+  box-shadow: 0 0 0 1px rgba(6,95,70,0.15), 0 2px 8px rgba(6,95,70,0.12);
+}
+.status-pending-glow {
+  box-shadow: 0 0 0 1px rgba(146,64,14,0.15), 0 2px 8px rgba(146,64,14,0.1);
+}
+
+/* ── Shimmer Loading ────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 37%, #f0f0f0 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+
+/* ── Number Counter Fade-in ─────────────────────────────── */
+@keyframes count-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-count {
+  animation: count-up 0.4s cubic-bezier(0.22,1,0.36,1) both;
+}
+
+/* ── Custom Scrollbar ────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: #e2e8f0;
-  border-radius: 10px;
+  background: #dde0e8;
+  border-radius: 99px;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: #cbd5e1;
+::-webkit-scrollbar-thumb:hover { background: #c4c9d4; }
+
+/* ── Sidebar Active Indicator Pulse ─────────────────────── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.7; transform: scale(1.3); }
+}
+.pulse-dot { animation: pulse-dot 1.8s ease-in-out infinite; }
+
+/* ── Chart Bar Grow ─────────────────────────────────────── */
+@keyframes bar-grow {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+.bar-grow {
+  transform-origin: bottom;
+  animation: bar-grow 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
 }

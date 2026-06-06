@@ -121,20 +121,22 @@ export default async function AdminOverviewPage() {
 
       <div className="p-6 space-y-6">
         {/* KPI Grid — Row 1 */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard 
             label="ยอดคงเหลือ" 
             value={formatCurrency((balance ?? 0) - reserveTarget)} 
-            sub={`หักเงินสำรอง ฿${reserveTarget.toLocaleString()} แล้ว (จากทั้งหมด ${formatCurrency(balance ?? 0)})`} 
+            sub={`หักสำรอง ฿${reserveTarget.toLocaleString()} (รวม ${formatCurrency(balance ?? 0)})`}
+            accentColor="emerald"
           />
           <KpiCard
             label="รอตรวจสอบ"
             value={pendingCount ?? 0}
             sub={(pendingCount ?? 0) > 0 ? 'รอการอนุมัติ' : 'ไม่มีรายการค้าง'}
             subVariant={(pendingCount ?? 0) > 0 ? 'warning' : 'neutral'}
+            accentColor={(pendingCount ?? 0) > 0 ? 'amber' : 'brand'}
           />
-          <KpiCard label="ค่าใช้จ่ายเดือนนี้" value={formatCurrency(monthlyExpenseTotal)} sub="รายจ่ายที่อนุมัติแล้ว" />
-          <KpiCard label="จำนวนนักศึกษา" value={studentCount ?? 0} sub="ทั้งหมดในระบบ" />
+          <KpiCard label="ค่าใช้จ่ายเดือนนี้" value={formatCurrency(monthlyExpenseTotal)} sub="รายจ่ายที่อนุมัติแล้ว" accentColor="red" />
+          <KpiCard label="จำนวนนักศึกษา" value={studentCount ?? 0} sub="ทั้งหมดในระบบ" accentColor="brand" />
         </div>
 
         {/* KPI Grid — Row 2: Tier + Credit + Reserve */}
@@ -235,23 +237,31 @@ export default async function AdminOverviewPage() {
               <div className="text-[26px] font-bold text-text-primary tracking-tight">{formatCurrency(balance ?? 0)}</div>
             </div>
 
-            {/* Weekly Chart */}
+            {/* Period Chart */}
             <div className="bg-background-secondary border border-border rounded-xl p-5">
-              <div className="text-[13px] font-semibold text-text-primary mb-4">อัตราการชำระ 5 งวดล่าสุด</div>
-              <div className="flex items-end gap-2 h-16">
-                {periodRates.map((p, i) => (
-                  <div key={p.id} className="flex-1 flex flex-col items-center gap-1">
-                    <div className="w-full relative">
+              <div className="text-[13px] font-semibold text-text-primary mb-1">อัตราการชำระ 5 งวดล่าสุด</div>
+              <div className="text-[10px] text-text-muted mb-4">{activeSemester?.name ?? '—'}</div>
+              <div className="flex items-end gap-2" style={{ height: '72px' }}>
+                {periodRates.map((p, i) => {
+                  const isLatest = i === periodRates.length - 1
+                  const barH = Math.max((p.rate / 100) * 60, 4)
+                  return (
+                    <div key={p.id} className="flex-1 flex flex-col items-center gap-1.5" title={`${p.label}: ${p.rate}%`}>
+                      <span className="text-[9px] font-bold text-text-muted">{p.rate > 0 ? `${p.rate}%` : ''}</span>
                       <div
-                        className={`w-full rounded-t-sm transition-all ${i === periodRates.length - 1 ? 'bg-brand' : 'bg-background-muted'}`}
-                        style={{ height: `${Math.max((p.rate / 100) * 56, 4)}px` }}
+                        className={`w-full rounded-t-md bar-grow ${
+                          isLatest
+                            ? 'bg-gradient-to-t from-brand to-slate-500'
+                            : 'bg-gradient-to-t from-background-muted to-slate-200'
+                        }`}
+                        style={{ height: `${barH}px`, animationDelay: `${i * 80}ms` }}
                       />
+                      <div className="text-[8.5px] text-text-muted truncate w-full text-center font-medium" title={p.label}>{p.label}</div>
                     </div>
-                    <div className="text-[9px] text-text-muted truncate max-w-[45px] font-medium" title={p.label}>{p.label}</div>
-                  </div>
-                ))}
+                  )
+                })}
                 {periodRates.length === 0 && (
-                  <div className="text-[12px] text-text-muted text-center w-full italic">ยังไม่มีงวดชำระเงิน</div>
+                  <div className="text-[12px] text-text-muted text-center w-full italic self-center">ยังไม่มีงวดชำระเงิน</div>
                 )}
               </div>
             </div>
@@ -265,18 +275,19 @@ export default async function AdminOverviewPage() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <NotificationTrigger />
           {[
-            { label: 'เพิ่มค่าใช้จ่าย', desc: 'บันทึกรายจ่ายสาขา', icon: Plus, href: '/admin/expenses' },
-            { label: 'ส่งออกรายงาน', desc: 'Excel รายงานทางการเงิน', icon: Download, href: '/api/reports/export?type=income' },
+            { label: 'เพิ่มค่าใช้จ่าย', desc: 'บันทึกรายจ่ายสาขา', icon: Plus, href: '/admin/expenses', gradient: 'from-slate-600 to-slate-800' },
+            { label: 'ส่งออกรายงาน', desc: 'Excel รายงานทางการเงิน', icon: Download, href: '/api/reports/export?type=income', gradient: 'from-emerald-600 to-teal-700' },
           ].map((a) => (
             <Link
               key={a.label}
               href={a.href}
-              className="bg-background-secondary border border-border rounded-xl p-4 flex items-center gap-3 hover:border-brand/40 hover:bg-background-tertiary transition-colors"
+              className="group relative bg-background-secondary border border-border rounded-xl p-4 flex items-center gap-3 hover-lift card-shadow overflow-hidden"
             >
-              <div className="w-8 h-8 rounded-lg bg-background-tertiary flex items-center justify-center flex-shrink-0">
+              <div className={`absolute inset-0 bg-gradient-to-br ${a.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-200`} />
+              <div className="w-9 h-9 rounded-lg bg-background-muted flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
                 <a.icon className="w-4 h-4 text-text-secondary" />
               </div>
               <div>
