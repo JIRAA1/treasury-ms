@@ -46,21 +46,26 @@ export async function logAction(
     await _logAction(supabaseOrParams as SupabaseClient, params)
   } else {
     // Called as logAction(params) — legacy, creates own client
-    const { createClient } = await import('@/lib/supabase/server')
-    const supabase = await createClient()
-    await _logAction(supabase, supabaseOrParams as LogParams)
+    await _logAction(null as any, supabaseOrParams as LogParams)
   }
 }
 
 async function _logAction(
-  supabase: SupabaseClient,
+  _supabase: SupabaseClient,
   params: LogParams
 ) {
-  await supabase.from('audit_logs').insert({
+  const { createAdminClient } = await import('@/lib/supabase/admin')
+  const adminClient = createAdminClient()
+  const { error } = await adminClient.from('audit_logs').insert({
     actor_id: params.actorId,
     action: params.action,
     target_id: params.targetId ?? null,
     old_value: params.oldValue ?? null,
     new_value: params.newValue ?? null,
   })
+  
+  if (error) {
+    console.error('[AuditLog Error]', error)
+  }
 }
+
