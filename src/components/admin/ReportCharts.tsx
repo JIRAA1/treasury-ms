@@ -204,7 +204,7 @@ export default function ReportCharts({ cycleData, studentCount }: ReportChartsPr
                   fill="currentColor"
                   className="text-[8.5px] font-bold text-text-muted"
                 >
-                  {c.title ? (c.title.length > 6 ? c.title.substring(0, 5) + '..' : c.title) : `งวด ${c.week}`}
+                  {c.label ? (c.label.length > 6 ? c.label.substring(0, 5) + '..' : c.label) : (c.title ? (c.title.length > 6 ? c.title.substring(0, 5) + '..' : c.title) : `งวด ${c.period_order || c.week || '?'}`)}
                 </text>
               )
             })}
@@ -221,7 +221,7 @@ export default function ReportCharts({ cycleData, studentCount }: ReportChartsPr
             >
               <div className="flex items-center gap-1.5 border-b border-border/80 pb-1 mb-1 text-text-primary">
                 <Calendar className="w-3 h-3 text-brand" />
-                <span>{cycleData[hoveredIncomeIdx].title || `งวดที่ ${cycleData[hoveredIncomeIdx].week}`}</span>
+                <span>{cycleData[hoveredIncomeIdx].label || cycleData[hoveredIncomeIdx].title || `งวดที่ ${cycleData[hoveredIncomeIdx].period_order || cycleData[hoveredIncomeIdx].week || '?'}`}</span>
               </div>
               <div className="space-y-0.5 font-semibold text-text-secondary">
                 <div className="flex justify-between">
@@ -365,7 +365,7 @@ export default function ReportCharts({ cycleData, studentCount }: ReportChartsPr
                   fill="currentColor"
                   className="text-[8.5px] font-bold text-text-muted"
                 >
-                  {c.title ? (c.title.length > 6 ? c.title.substring(0, 5) + '..' : c.title) : `งวด ${c.week}`}
+                  {c.label ? (c.label.length > 6 ? c.label.substring(0, 5) + '..' : c.label) : (c.title ? (c.title.length > 6 ? c.title.substring(0, 5) + '..' : c.title) : `งวด ${c.period_order || c.week || '?'}`)}
                 </text>
               )
             })}
@@ -382,7 +382,7 @@ export default function ReportCharts({ cycleData, studentCount }: ReportChartsPr
             >
               <div className="flex items-center gap-1.5 border-b border-border/80 pb-1 mb-1 text-text-primary">
                 <Info className="w-3.5 h-3.5 text-emerald-600" />
-                <span>{cycleData[hoveredBarIdx].title || `งวดที่ ${cycleData[hoveredBarIdx].week}`}</span>
+                <span>{cycleData[hoveredBarIdx].label || cycleData[hoveredBarIdx].title || `งวดที่ ${cycleData[hoveredBarIdx].period_order || cycleData[hoveredBarIdx].week || '?'}`}</span>
               </div>
               <div className="space-y-0.5 font-semibold text-text-secondary">
                 <div className="flex justify-between">
