@@ -1,15 +1,12 @@
-'use client'
-
 import { cn } from '@/lib/utils'
-import type { LucideIcon } from 'lucide-react'
+import type { ElementType, ReactNode } from 'react'
 
 type EmptyVariant = 'default' | 'success' | 'search' | 'error'
 
 interface EmptyStateProps {
-  icon: LucideIcon
+  icon: ElementType | any
   title: string
   description?: string
-  action?: { label: string; onClick: () => void }
   variant?: EmptyVariant
   className?: string
 }
@@ -50,7 +47,6 @@ export default function EmptyState({
   icon: Icon,
   title,
   description,
-  action,
   variant = 'default',
   className,
 }: EmptyStateProps) {
@@ -88,15 +84,6 @@ export default function EmptyState({
       {description && (
         <div className="text-[12.5px] text-text-muted max-w-[240px] leading-relaxed">{description}</div>
       )}
-      {action && (
-        <button
-          onClick={action.onClick}
-          className="mt-5 inline-flex items-center gap-2 text-[12.5px] font-bold text-white bg-brand hover:bg-brand-hover rounded-xl px-5 py-2.5 transition-all shadow-lg shadow-brand/10 active:scale-95 press-down"
-        >
-          {action.label}
-        </button>
-      )}
-
     </div>
   )
 }
