@@ -86,22 +86,29 @@ export async function POST(
 
     // 2. Handle Upserts
     if (periods.length > 0) {
-      const formattedPeriods = periods.map((p: any) => ({
-        id: p.id || undefined, // database generates uuid if missing
-        semester_id: id,
-        label: p.label,
-        period_order: p.period_order,
-        amount: p.amount ?? 100.00,
-        base_amount: p.base_amount ?? 50.00,
-        late_fine_amount: p.late_fine_amount ?? 0.00,
-        activity_type: p.activity_type || null,
-        activity_extra_amount: p.activity_extra_amount ?? 0,
-        is_separate_collection: p.is_separate_collection ?? false,
-        qr_url: p.qr_url || null,
-        open_at: p.open_at || null,
-        close_at: p.close_at || null,
-        deadline: p.deadline
-      }))
+      const formattedPeriods = periods.map((p: any) => {
+        const periodObj: any = {
+          semester_id: id,
+          label: p.label,
+          period_order: p.period_order,
+          amount: p.amount ?? 100.00,
+          base_amount: p.base_amount ?? 50.00,
+          late_fine_amount: p.late_fine_amount ?? 0.00,
+          activity_type: p.activity_type || null,
+          activity_extra_amount: p.activity_extra_amount ?? 0,
+          is_separate_collection: p.is_separate_collection ?? false,
+          qr_url: p.qr_url || null,
+          open_at: p.open_at || null,
+          close_at: p.close_at || null,
+          deadline: p.deadline
+        }
+        
+        if (p.id) {
+          periodObj.id = p.id
+        }
+        
+        return periodObj
+      })
 
       const { error: upsertError } = await adminClient
         .from('periods')
