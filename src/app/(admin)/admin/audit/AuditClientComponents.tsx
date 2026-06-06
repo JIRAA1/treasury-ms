@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2, ShieldAlert, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { createPortal } from 'react-dom'
 
 interface DeleteLogButtonProps {
   id: string
@@ -54,6 +55,11 @@ export function ClearAllLogsButton() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const handleClearAll = async () => {
     setLoading(true)
@@ -75,19 +81,10 @@ export function ClearAllLogsButton() {
     }
   }
 
-  return (
-    <>
-      <button
-        onClick={() => setShowConfirm(true)}
-        className="flex items-center gap-1.5 border border-red-200 bg-red-50/50 hover:bg-red-50 text-red-700 text-[12.5px] font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-        ล้างประวัติทั้งหมด
-      </button>
-
-      {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs animate-fade-in">
-          <div className="bg-background border border-border w-full max-w-md p-6 rounded-2xl shadow-xl space-y-4 animate-scale-in mx-4">
+  const confirmModal = showConfirm && mounted
+    ? createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs">
+          <div className="bg-background border border-border w-full max-w-md p-6 rounded-2xl shadow-xl space-y-4 mx-4 text-left">
             <div className="flex items-start gap-3.5">
               <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center text-red-600 shrink-0">
                 <ShieldAlert className="w-5.5 h-5.5" />
@@ -118,8 +115,23 @@ export function ClearAllLogsButton() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+        document.body
+      )
+    : null
+
+  return (
+    <>
+      <button
+        onClick={() => setShowConfirm(true)}
+        className="flex items-center gap-1.5 border border-red-200 bg-red-50/50 hover:bg-red-50 text-red-700 text-[12.5px] font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+        ล้างประวัติทั้งหมด
+      </button>
+
+      {confirmModal}
     </>
   )
 }
+
