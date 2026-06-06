@@ -98,7 +98,7 @@ export default function StudentDashboard({
   return (
     <div className="pb-12 bg-background">
       <Topbar
-        title={`สวัสดี, ${profile?.fullname ?? 'นักศึกษา'}`}
+        title={profile?.fullname ?? 'นักศึกษา'}
         subtitle="ภาพรวมระบบการเงินสาขา"
         actions={
           currentPeriodStatus && currentPeriodStatus.status !== 'paid' && currentPeriodStatus.status !== 'pending' && !isLocked ? (
@@ -110,7 +110,7 @@ export default function StudentDashboard({
         }
       />
 
-      <div className="p-3 sm:p-4 md:p-8 space-y-5 md:space-y-8 max-w-7xl mx-auto">
+      <div className="p-2.5 sm:p-4 md:p-8 space-y-4 md:space-y-8 max-w-7xl mx-auto">
         {totalCycles === 0 ? (
           <EmptyState icon={FileText} title="ยังไม่มีกำหนดการชำระเงิน" description="กรุณารอเหรัญญิกเพิ่มงวดการชำระเงิน" />
         ) : (
@@ -125,9 +125,9 @@ export default function StudentDashboard({
               <div className="absolute top-6 left-1/2 -translate-x-1/2 w-[1px] h-20 bg-gradient-to-b from-white/10 to-transparent" />
 
               {/* Inner content */}
-              <div className="relative z-10 p-5 md:p-10">
+              <div className="relative z-10 p-3.5 sm:p-6 md:p-10">
                 {/* Top badges row */}
-                <div className="flex items-center gap-2 flex-wrap mb-5">
+                <div className="flex items-center gap-2 flex-wrap mb-3.5 sm:mb-5">
                   <span className="text-[9px] font-black uppercase tracking-[0.25em] text-white/40 bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg">
                     งวดปัจจุบัน
                   </span>
@@ -163,11 +163,11 @@ export default function StudentDashboard({
                 <div className="flex flex-col md:flex-row md:items-end gap-6 md:gap-10">
                   {/* Left: Period info */}
                   <div className="flex-1">
-                    <h1 className="text-[17px] sm:text-[24px] md:text-[32px] font-black text-white tracking-tight leading-tight mb-2">
+                    <h1 className="text-[15px] sm:text-[22px] md:text-[30px] font-black text-white tracking-tight leading-tight mb-2">
                       {currentPeriod?.label || 'งวดปัจจุบัน'}
                     </h1>
-                    <div className="flex items-center gap-1.5 text-white/50 text-[12px] font-medium">
-                      <Clock className="w-3.5 h-3.5" />
+                    <div className="flex items-center gap-1.5 text-white/50 text-[10px] sm:text-[12px] font-medium">
+                      <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                       <span>กำหนดส่ง: {currentDeadline ? formatDate(currentDeadline) : 'ไม่ระบุ'}</span>
                     </div>
                   </div>
@@ -176,9 +176,9 @@ export default function StudentDashboard({
                   <div className="flex flex-col items-start md:items-end gap-2.5 w-full md:w-auto">
                     {/* Amount */}
                     <div className="text-left md:text-right">
-                      <div className="text-[10px] sm:text-[11px] font-black text-white/40 uppercase tracking-widest mb-1">ยอดที่ต้องชำระ</div>
-                      <div className="text-[26px] sm:text-[38px] md:text-[50px] font-black text-white tracking-tighter leading-none">
-                        <span className="text-[15px] sm:text-[22px] md:text-[28px] text-white/60 mr-1">฿</span>
+                      <div className="text-[9px] sm:text-[11px] font-black text-white/40 uppercase tracking-widest mb-1">ยอดที่ต้องชำระ</div>
+                      <div className="text-[22px] sm:text-[36px] md:text-[48px] font-black text-white tracking-tighter leading-none">
+                        <span className="text-[13px] sm:text-[20px] md:text-[28px] text-white/60 mr-1">฿</span>
                         {currentPeriodStatus.period.amount.toLocaleString()}
                       </div>
                       {(() => {
@@ -186,7 +186,7 @@ export default function StudentDashboard({
                         const finePaid = currentPeriodStatus.period.amount - baseTierAmount
                         if (finePaid > 0 && currentPeriodStatus.status !== 'paid') {
                           return (
-                            <div className="text-[9.5px] sm:text-[10.5px] text-red-300 font-bold mt-1">
+                            <div className="text-[8.5px] sm:text-[10px] text-red-300 font-bold mt-1">
                               รวมค่าปรับ ฿{finePaid.toLocaleString()}
                             </div>
                           )
@@ -216,21 +216,21 @@ export default function StudentDashboard({
                             <>
                               <button
                                 onClick={() => setIsQrModalOpen(true)}
-                                className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 bg-white/10 border border-white/20 text-white text-[11.5px] sm:text-[12px] font-bold px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl hover:bg-white/15 transition-all active:scale-95 backdrop-blur-sm"
+                                className="flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 sm:gap-2 bg-white/10 border border-white/20 text-white text-[10.5px] sm:text-[12px] font-bold px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-xl hover:bg-white/15 transition-all active:scale-95 backdrop-blur-sm"
                               >
                                 <QrCode className="w-4 h-4" />
                                 QR
                               </button>
                               <Link
                                 href="/student/upload"
-                                className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 bg-white text-brand text-[11.5px] sm:text-[12px] font-black px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl hover:bg-white/90 transition-all active:scale-95 shadow-xl shadow-black/20"
+                                className="flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 sm:gap-2 bg-white text-brand text-[10.5px] sm:text-[12px] font-black px-3.5 sm:px-6 py-1.5 sm:py-2.5 rounded-xl hover:bg-white/90 transition-all active:scale-95 shadow-xl shadow-black/20"
                               >
                                 <Upload className="w-4 h-4" />
                                 {currentPeriodStatus.status === 'rejected' ? 'ส่งใหม่' : 'ส่งสลิป'}
                               </Link>
                             </>
                           ) : (
-                            <div className="flex items-center gap-2 py-2 sm:py-2.5 px-4 bg-white/5 border border-white/10 rounded-xl text-[11.5px] sm:text-[12px] font-bold text-white/50 w-full justify-center md:w-auto">
+                            <div className="flex items-center gap-1.5 sm:gap-2 py-1.5 sm:py-2.5 px-3 sm:px-4 bg-white/5 border border-white/10 rounded-xl text-[10.5px] sm:text-[12px] font-bold text-white/50 w-full justify-center md:w-auto">
                               <Lock className="w-4 h-4" />
                               {windowStatus === 'upcoming' ? 'รอเปิดรับสลิป' : 'ปิดรับสลิปแล้ว'}
                             </div>
@@ -238,7 +238,7 @@ export default function StudentDashboard({
                         </>
                       )}
                       {currentPeriodStatus.status === 'pending' && (
-                        <div className="flex items-center justify-center gap-2 py-2 sm:py-2.5 px-5 bg-white/10 border border-white/15 rounded-xl text-[11.5px] sm:text-[12px] font-bold text-white/70 backdrop-blur-sm w-full md:w-auto">
+                        <div className="flex items-center justify-center gap-1.5 sm:gap-2 py-1.5 sm:py-2.5 px-4 sm:px-5 bg-white/10 border border-white/15 rounded-xl text-[10.5px] sm:text-[12px] font-bold text-white/70 backdrop-blur-sm w-full md:w-auto">
                           <Clock className="w-4 h-4" />
                           รออนุมัติสลิป
                         </div>
@@ -299,8 +299,8 @@ export default function StudentDashboard({
             </div>
 
             {/* Grid */}
-            <div className="bg-background-secondary border border-border rounded-2xl md:rounded-[2rem] p-4 sm:p-6 md:p-8 shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+            <div className="bg-background-secondary border border-border rounded-2xl md:rounded-[2rem] p-3 sm:p-6 md:p-8 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-8">
                 <div>
                   <h3 className="text-[17px] font-bold text-text-primary tracking-tight">ภาพรวมการชำระเงิน</h3>
                   <p className="text-[12px] text-text-muted font-medium mt-0.5">สถานะการชำระเงินทั้งหมด {totalCycles} งวดประจำปี</p>
@@ -318,8 +318,8 @@ export default function StudentDashboard({
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
           {/* History */}
-          <div className="bg-background-secondary border border-border rounded-2xl md:rounded-[2rem] p-4 sm:p-6 md:p-8 shadow-sm">
-            <div className="flex items-center justify-between mb-8">
+          <div className="bg-background-secondary border border-border rounded-2xl md:rounded-[2rem] p-3 sm:p-6 md:p-8 shadow-sm">
+            <div className="flex items-center justify-between mb-4 sm:mb-8">
               <h3 className="text-[17px] font-bold text-text-primary tracking-tight">ประวัติล่าสุด</h3>
               <Link href="/student/history" className="flex items-center gap-1 text-[11px] font-bold text-brand uppercase tracking-wider hover:translate-x-1 transition-transform">
                 ดูทั้งหมด <ArrowRight className="w-4 h-4" />
@@ -337,8 +337,8 @@ export default function StudentDashboard({
           </div>
 
           {/* Expenses */}
-          <div className="bg-background-secondary border border-border rounded-2xl md:rounded-[2rem] p-4 sm:p-6 md:p-8 shadow-sm">
-            <div className="flex items-center justify-between mb-8">
+          <div className="bg-background-secondary border border-border rounded-2xl md:rounded-[2rem] p-3 sm:p-6 md:p-8 shadow-sm">
+            <div className="flex items-center justify-between mb-4 sm:mb-8">
               <h3 className="text-[17px] font-bold text-text-primary tracking-tight">รายจ่ายกองกลาง</h3>
               <Link href="/student/transparency" className="flex items-center gap-1 text-[11px] font-bold text-brand uppercase tracking-wider hover:translate-x-1 transition-transform">
                 ดูทั้งหมด <ArrowRight className="w-4 h-4" />

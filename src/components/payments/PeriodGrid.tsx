@@ -40,7 +40,7 @@ const statusConfig: Record<string, {
 
 export default function PeriodGrid({ periods, onPeriodClick, currentPeriodId, className }: PeriodGridProps) {
   return (
-    <div className={cn('grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5', className)}>
+    <div className={cn('grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-1.5 sm:gap-2.5', className)}>
       {periods.map((ps, idx) => {
         const isCurrent = ps.period.id === currentPeriodId
         const cfg = statusConfig[ps.status] ?? statusConfig.unpaid
@@ -53,7 +53,7 @@ export default function PeriodGrid({ periods, onPeriodClick, currentPeriodId, cl
             onClick={() => onPeriodClick?.(ps)}
             style={{ animationDelay: `${idx * 40}ms` }}
             className={cn(
-              'relative border rounded-lg sm:rounded-xl p-2.5 sm:p-3 text-left transition-all duration-200 group',
+              'relative border rounded-lg sm:rounded-xl p-2 sm:p-3 text-left transition-all duration-200 group',
               'hover-lift press-down',
               cfg.cell,
               isCurrent && 'ring-2 ring-brand ring-offset-2 shadow-lg',
@@ -72,16 +72,16 @@ export default function PeriodGrid({ periods, onPeriodClick, currentPeriodId, cl
                 isPaid ? 'text-white/80' : ''
               )} />
               <span className={cn(
-                'text-[9px] font-black uppercase tracking-wider opacity-70',
+                'text-[8px] sm:text-[9px] font-black uppercase tracking-wider opacity-70',
               )}>
                 ฿{(ps.payment?.amount ?? ps.period.amount).toLocaleString()}
               </span>
             </div>
 
-            <div className="text-[11.5px] font-bold truncate leading-tight mb-0.5">
+            <div className="text-[10.5px] sm:text-[11.5px] font-bold truncate leading-tight mb-0.5">
               {ps.period.label}
             </div>
-            <div className={cn('text-[9.5px] opacity-70 font-semibold')}>
+            <div className={cn('text-[8.5px] sm:text-[9.5px] opacity-70 font-semibold')}>
               {isPaid && ps.payment?.note?.includes('เงินสด') ? 'ชำระเงินสด' : cfg.label}
             </div>
           </button>

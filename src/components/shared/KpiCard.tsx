@@ -49,16 +49,16 @@ export default function KpiCard({
   return (
     <div
       className={cn(
-        'relative bg-background-secondary border border-border rounded-xl sm:rounded-2xl p-2.5 sm:p-5 flex flex-col gap-1.5 sm:gap-3',
+        'relative bg-background-secondary border border-border rounded-xl sm:rounded-2xl p-2 sm:p-5 flex flex-col gap-1 sm:gap-3',
         'hover-lift card-shadow overflow-hidden',
         className
       )}
     >
       {/* Accent top bar */}
-      <div className={cn('absolute top-0 inset-x-0 h-[3px] rounded-t-xl sm:rounded-t-2xl bg-gradient-to-r', accentBar[accentColor])} />
+      <div className={cn('absolute top-0 inset-x-0 h-[3px] rounded-t-lg sm:rounded-t-2xl bg-gradient-to-r', accentBar[accentColor])} />
 
       <div className="flex items-start justify-between gap-2">
-        <div className="text-[9.5px] sm:text-[10px] uppercase tracking-[0.2em] font-black text-text-muted leading-tight mt-0.5">
+        <div className="text-[8.5px] sm:text-[10px] uppercase tracking-[0.2em] font-black text-text-muted leading-tight mt-0.5">
           {label}
         </div>
         {Icon && (
@@ -68,13 +68,13 @@ export default function KpiCard({
         )}
       </div>
 
-      <div className="animate-count text-[15px] sm:text-[24px] md:text-[28px] font-black text-text-primary tracking-tighter leading-none">
+      <div className="animate-count text-[13px] sm:text-[24px] md:text-[28px] font-black text-text-primary tracking-tighter leading-none">
         {value}
       </div>
 
-      <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-1.5 sm:pt-2.5 mt-auto">
+      <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-1 sm:pt-2.5 mt-auto">
         {sub && (
-          <span className={cn('text-[8.5px] sm:text-[11px] font-bold tracking-tight line-clamp-1', subVariantClasses[subVariant])}>
+          <span className={cn('text-[8px] sm:text-[11px] font-bold tracking-tight line-clamp-1', subVariantClasses[subVariant])}>
             {sub}
           </span>
         )}

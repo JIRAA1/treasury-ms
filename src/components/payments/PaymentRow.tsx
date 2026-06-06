@@ -10,9 +10,9 @@ interface PaymentRowProps {
 
 export default function PaymentRow({ payment, showWeek = true, className }: PaymentRowProps) {
   return (
-    <div className={cn('flex items-center gap-4 py-3 text-[12.5px]', className)}>
+    <div className={cn('flex items-center gap-2.5 sm:gap-4 py-2 sm:py-3 text-[11.5px] sm:text-[12.5px]', className)}>
       {showWeek && (
-        <div className="w-20 text-[11px] font-semibold text-text-muted flex-shrink-0 truncate">
+        <div className="w-14 sm:w-20 text-[10px] sm:text-[11px] font-semibold text-text-muted flex-shrink-0 truncate">
           {payment.period?.label || '—'}
         </div>
       )}

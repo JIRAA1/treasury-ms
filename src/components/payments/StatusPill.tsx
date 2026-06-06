@@ -42,7 +42,7 @@ const config: Record<StatusVariant, {
 }
 
 const sizeStyles: Record<SizeVariant, { pill: string; icon: string; text: string }> = {
-  sm: { pill: 'px-2.5 py-0.5 gap-1.5',  icon: 'w-3 h-3',    text: 'text-[10.5px]' },
+  sm: { pill: 'px-2 sm:px-2.5 py-0.5 gap-1 sm:gap-1.5',  icon: 'w-2.5 sm:w-3 h-2.5 sm:h-3',    text: 'text-[9.5px] sm:text-[10.5px]' },
   lg: { pill: 'px-3.5 py-1.5 gap-2',    icon: 'w-4 h-4',    text: 'text-[13px]' },
 }
 
