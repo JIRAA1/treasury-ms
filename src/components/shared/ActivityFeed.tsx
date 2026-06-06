@@ -21,11 +21,11 @@ interface ActivityFeedProps {
 }
 
 const typeConfig = {
-  approved: { Icon: CheckCircle, bg: 'bg-emerald-50', color: 'text-emerald-600' },
-  rejected: { Icon: XCircle, bg: 'bg-red-50', color: 'text-red-500' },
-  expense: { Icon: Receipt, bg: 'bg-blue-50', color: 'text-blue-600' },
-  notification: { Icon: Bell, bg: 'bg-amber-50', color: 'text-amber-600' },
-  uploaded: { Icon: Upload, bg: 'bg-background-tertiary', color: 'text-text-secondary' },
+  approved:     { Icon: CheckCircle, bg: 'bg-emerald-500', shadow: 'shadow-emerald-500/25' },
+  rejected:     { Icon: XCircle,     bg: 'bg-red-500',     shadow: 'shadow-red-500/25' },
+  expense:      { Icon: Receipt,     bg: 'bg-blue-500',    shadow: 'shadow-blue-500/25' },
+  notification: { Icon: Bell,        bg: 'bg-amber-500',   shadow: 'shadow-amber-500/25' },
+  uploaded:     { Icon: Upload,      bg: 'bg-slate-500',   shadow: 'shadow-slate-500/20' },
 }
 
 export default function ActivityFeed({ activities, className }: ActivityFeedProps) {
@@ -38,22 +38,43 @@ export default function ActivityFeed({ activities, className }: ActivityFeedProp
   }
 
   return (
-    <div className={cn('divide-y divide-background-tertiary', className)}>
-      {activities.map((activity) => {
-        const { Icon, bg, color } = typeConfig[activity.type]
-        return (
-          <div key={activity.id} className="flex items-center gap-3 py-2.5">
-            <div className={cn('w-7 h-7 rounded-[7px] flex items-center justify-center flex-shrink-0', bg)}>
-              <Icon className={cn('w-3 h-3', color)} />
+    <div className={cn('relative', className)}>
+      {/* Vertical timeline line */}
+      <div className="absolute left-[13px] top-4 bottom-4 w-px bg-gradient-to-b from-border via-border to-transparent" />
+
+      <div className="space-y-0">
+        {activities.map((activity, idx) => {
+          const { Icon, bg, shadow } = typeConfig[activity.type]
+          return (
+            <div
+              key={activity.id}
+              className="relative flex items-start gap-3 py-2.5 pl-1 animate-in fade-in slide-in-from-left-2 duration-300"
+              style={{ animationDelay: `${idx * 50}ms` }}
+            >
+              {/* Icon dot on timeline */}
+              <div className={cn(
+                'w-[26px] h-[26px] rounded-full flex items-center justify-center flex-shrink-0 z-10 shadow-md',
+                bg, shadow
+              )}>
+                <Icon className="w-3 h-3 text-white" />
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 min-w-0 pb-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="text-[12px] font-semibold text-text-primary leading-snug truncate">
+                    {activity.title}
+                  </div>
+                  <div className="text-[9.5px] text-text-disabled flex-shrink-0 font-medium bg-background-muted px-1.5 py-0.5 rounded-md">
+                    {activity.time}
+                  </div>
+                </div>
+                <div className="text-[11px] text-text-muted mt-0.5">{activity.sub}</div>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[11.5px] font-medium text-text-primary truncate">{activity.title}</div>
-              <div className="text-[10.5px] text-text-muted truncate">{activity.sub}</div>
-            </div>
-            <div className="text-[10px] text-text-muted flex-shrink-0">{activity.time}</div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </div>
   )
 }

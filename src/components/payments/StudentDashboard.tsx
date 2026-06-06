@@ -10,7 +10,7 @@ import ExpenseRow from '@/components/expenses/ExpenseRow'
 import EmptyState from '@/components/shared/EmptyState'
 import QrModal from '@/components/payments/QrModal'
 import { formatCurrency, formatDate, getTierConfig } from '@/lib/utils'
-import { FileText, Upload, ArrowRight, AlertCircle, Clock, QrCode, Sparkles, Lock, Calendar, CreditCard } from 'lucide-react'
+import { FileText, Upload, ArrowRight, AlertCircle, Clock, QrCode, Lock, Calendar, CreditCard } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { PeriodStatus, PaymentCredit, Period } from '@/types'
@@ -116,125 +116,133 @@ export default function StudentDashboard({
         ) : (
           <>
             {/* Hero Card */}
-            <div className="relative group overflow-hidden rounded-[2rem] bg-brand shadow-2xl shadow-brand/10">
-              <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:scale-110 transition-transform duration-700">
-                <Sparkles className="w-32 h-32 text-white" />
-              </div>
-              <div className="bg-white m-[1px] rounded-[1.9rem] p-6 md:p-10 flex flex-col md:flex-row md:items-center gap-6 md:gap-8 relative z-10">
-                <div className="flex-1 space-y-3">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted bg-background-muted px-2.5 py-1 rounded-lg border border-border">งวดปัจจุบัน</span>
-                    {/* Tier Badge */}
-                    {(() => {
-                      const tierCfg = getTierConfig(profile?.tier ?? 'B')
-                      const amountVal = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierCfg.amount
-                      return (
-                        <span className={`text-[10px] font-black px-2.5 py-1 rounded-lg border ${tierCfg.color} ${tierCfg.bg} ${tierCfg.border}`}>
-                          Tier {profile?.tier ?? 'B'} · ฿{amountVal}/สัปดาห์
-                        </span>
-                      )
-                    })()}
-                    {profile?.tier === 'C' && (
-                      <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-100 px-2.5 py-1 rounded-lg font-bold">
-                        ลดหย่อนชั่วคราว
+            <div className="relative overflow-hidden rounded-[2rem] gradient-brand shadow-2xl">
+              {/* Decorative geometric shapes */}
+              <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full opacity-[0.07]"
+                style={{ background: 'radial-gradient(circle, #b59410 0%, transparent 70%)' }} />
+              <div className="absolute bottom-0 left-0 w-64 h-32 opacity-[0.05]"
+                style={{ background: 'radial-gradient(ellipse at bottom left, #4f8ef7 0%, transparent 60%)' }} />
+              <div className="absolute top-6 left-1/2 -translate-x-1/2 w-[1px] h-20 bg-gradient-to-b from-white/10 to-transparent" />
+
+              {/* Inner content */}
+              <div className="relative z-10 p-6 md:p-10">
+                {/* Top badges row */}
+                <div className="flex items-center gap-2 flex-wrap mb-5">
+                  <span className="text-[9px] font-black uppercase tracking-[0.25em] text-white/40 bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg">
+                    งวดปัจจุบัน
+                  </span>
+                  {(() => {
+                    const tierCfg = getTierConfig(profile?.tier ?? 'B')
+                    const amountVal = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierCfg.amount
+                    return (
+                      <span className="text-[9px] font-black px-2.5 py-1 rounded-lg border border-white/10 bg-white/5 text-white/60">
+                        Tier {profile?.tier ?? 'B'} · ฿{amountVal}/สัปดาห์
                       </span>
-                    )}
-                    {isOverdue && currentPeriodStatus.status !== 'paid' && (
-                      <span className="flex items-center gap-1 text-[10px] bg-red-50 text-red-600 px-2.5 py-1 rounded-lg border border-red-100 font-bold uppercase">
-                        <AlertCircle className="w-3 h-3" />
-                        เกินกำหนด
-                      </span>
-                    )}
-                    {windowStatus === 'upcoming' && (
-                      <span className="flex items-center gap-1 text-[10px] bg-amber-50 text-amber-600 px-2.5 py-1 rounded-lg border border-amber-100 font-bold uppercase">
-                        <Calendar className="w-3 h-3" />
-                        จะเปิดรับในวันที่ {currentPeriod?.open_at ? formatThaiDate(new Date(currentPeriod.open_at)) : ''}
-                      </span>
-                    )}
-                    {windowStatus === 'closed' && (
-                      <span className="flex items-center gap-1 text-[10px] bg-red-50 text-red-600 px-2.5 py-1 rounded-lg border border-red-100 font-bold uppercase">
-                        <Lock className="w-3 h-3" />
-                        ปิดรับสลิปแล้ว
-                      </span>
-                    )}
-                  </div>
-                  
-                  <div>
-                    <h1 className="text-[24px] md:text-[32px] font-bold text-text-primary tracking-tight leading-tight">
+                    )
+                  })()}
+                  {isOverdue && currentPeriodStatus.status !== 'paid' && (
+                    <span className="flex items-center gap-1 text-[9px] bg-red-500/20 text-red-300 px-2.5 py-1 rounded-lg border border-red-400/20 font-black uppercase">
+                      <AlertCircle className="w-2.5 h-2.5" />
+                      เกินกำหนด
+                    </span>
+                  )}
+                  {windowStatus === 'upcoming' && (
+                    <span className="flex items-center gap-1 text-[9px] bg-amber-500/20 text-amber-300 px-2.5 py-1 rounded-lg border border-amber-400/20 font-black uppercase">
+                      <Calendar className="w-2.5 h-2.5" />
+                      รอเปิด
+                    </span>
+                  )}
+                  {windowStatus === 'closed' && (
+                    <span className="flex items-center gap-1 text-[9px] bg-red-500/20 text-red-300 px-2.5 py-1 rounded-lg border border-red-400/20 font-black uppercase">
+                      <Lock className="w-2.5 h-2.5" />
+                      ปิดรับสลิป
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col md:flex-row md:items-end gap-6 md:gap-10">
+                  {/* Left: Period info */}
+                  <div className="flex-1">
+                    <h1 className="text-[26px] md:text-[34px] font-black text-white tracking-tight leading-tight mb-2">
                       {currentPeriod?.label || 'งวดปัจจุบัน'}
                     </h1>
-                    <div className="flex items-center gap-2 text-text-muted mt-1 font-medium text-[13px]">
-                      <Clock className="w-4 h-4" />
+                    <div className="flex items-center gap-1.5 text-white/50 text-[12px] font-medium">
+                      <Clock className="w-3.5 h-3.5" />
                       <span>กำหนดส่ง: {currentDeadline ? formatDate(currentDeadline) : 'ไม่ระบุ'}</span>
                     </div>
                   </div>
 
-                  <StatusPill 
-                    status={
-                      currentPeriodStatus.status === 'paid' ? 'paid'
-                      : currentPeriodStatus.status === 'pending' ? 'pending'
-                      : currentPeriodStatus.status === 'rejected' ? 'rejected'
-                      : 'unpaid'
-                    } 
-                    note={currentPeriodStatus.payment?.note}
-                  />
-                </div>
-                
-                <div className="hidden md:block w-px h-20 bg-border mx-2" />
-                
-                <div className="flex flex-col items-start md:items-end gap-1">
-                  <div className="text-[11px] font-bold text-text-muted uppercase tracking-widest">ยอดที่ต้องชำระ</div>
-                  <div className="text-[32px] md:text-[44px] font-bold text-brand tracking-tighter leading-none">
-                    ฿{currentPeriodStatus.period.amount.toLocaleString()}
-                  </div>
-                  {/* Late Fine Notice */}
-                  {(() => {
-                    const baseTierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
-                    const finePaid = currentPeriodStatus.period.amount - baseTierAmount
-                    if (finePaid > 0 && currentPeriodStatus.status !== 'paid') {
-                      return (
-                        <div className="text-[10px] text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-lg font-bold mt-1 mb-2">
-                          รวมค่าปรับจ่ายล่าช้า ฿{finePaid.toLocaleString()}
-                        </div>
-                      )
-                    }
-                    return <div className="mb-4" />
-                  })()}
-                  
-                  <div className="flex items-center gap-2 w-full md:w-auto">
-                    {currentPeriodStatus.status !== 'paid' && currentPeriodStatus.status !== 'pending' && (
-                      <>
-                        {!isLocked ? (
-                          <>
-                            <button
-                              onClick={() => setIsQrModalOpen(true)}
-                              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 bg-background border border-border text-text-primary text-[12px] font-bold px-4 py-2.5 rounded-xl hover:bg-background-tertiary transition-all active:scale-95 shadow-sm"
-                            >
-                              <QrCode className="w-4 h-4" />
-                              ดู QR
-                            </button>
-                            <Link
-                              href="/student/upload"
-                              className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 bg-brand text-white text-[12px] font-bold px-6 py-2.5 rounded-xl hover:bg-brand-hover transition-all active:scale-95 shadow-lg shadow-brand/20"
-                            >
-                              <Upload className="w-4 h-4" />
-                              {currentPeriodStatus.status === 'rejected' ? 'ส่งใหม่' : 'ส่งสลิป'}
-                            </Link>
-                          </>
-                        ) : (
-                          <div className="flex items-center gap-2 py-2 px-4 bg-background-tertiary rounded-xl border border-border text-[13px] font-bold text-text-muted">
-                            <Lock className="w-4 h-4" />
-                            {windowStatus === 'upcoming' ? 'รอเปิดรับสลิป' : 'ปิดรับสลิปแล้ว'}
-                          </div>
-                        )}
-                      </>
-                    )}
-                    {currentPeriodStatus.status === 'pending' && (
-                      <div className="bg-blue-50 text-blue-700 px-5 py-2.5 rounded-xl border border-blue-100 text-[13px] font-bold flex items-center gap-2">
-                        <Clock className="w-4 h-4" />
-                        รอเหรัญญิกตรวจสอบ
+                  {/* Right: Amount + status + CTA */}
+                  <div className="flex flex-col items-start md:items-end gap-3">
+                    {/* Amount */}
+                    <div className="text-right">
+                      <div className="text-[11px] font-black text-white/40 uppercase tracking-widest mb-1">ยอดที่ต้องชำระ</div>
+                      <div className="text-[40px] md:text-[52px] font-black text-white tracking-tighter leading-none">
+                        <span className="text-[22px] md:text-[28px] text-white/60 mr-1">฿</span>
+                        {currentPeriodStatus.period.amount.toLocaleString()}
                       </div>
-                    )}
+                      {(() => {
+                        const baseTierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
+                        const finePaid = currentPeriodStatus.period.amount - baseTierAmount
+                        if (finePaid > 0 && currentPeriodStatus.status !== 'paid') {
+                          return (
+                            <div className="text-[10px] text-red-300 font-bold mt-1">
+                              รวมค่าปรับ ฿{finePaid.toLocaleString()}
+                            </div>
+                          )
+                        }
+                        return null
+                      })()}
+                    </div>
+
+                    {/* Status pill */}
+                    <StatusPill 
+                      status={
+                        currentPeriodStatus.status === 'paid' ? 'paid'
+                        : currentPeriodStatus.status === 'pending' ? 'pending'
+                        : currentPeriodStatus.status === 'rejected' ? 'rejected'
+                        : 'unpaid'
+                      } 
+                      note={currentPeriodStatus.payment?.note}
+                      size="lg"
+                    />
+
+                    {/* CTA buttons */}
+                    <div className="flex items-center gap-2 w-full md:w-auto">
+                      {currentPeriodStatus.status !== 'paid' && currentPeriodStatus.status !== 'pending' && (
+                        <>
+                          {!isLocked ? (
+                            <>
+                              <button
+                                onClick={() => setIsQrModalOpen(true)}
+                                className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 bg-white/10 border border-white/20 text-white text-[12px] font-bold px-4 py-2.5 rounded-xl hover:bg-white/15 transition-all active:scale-95 backdrop-blur-sm"
+                              >
+                                <QrCode className="w-4 h-4" />
+                                QR
+                              </button>
+                              <Link
+                                href="/student/upload"
+                                className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 bg-white text-brand text-[12px] font-black px-6 py-2.5 rounded-xl hover:bg-white/90 transition-all active:scale-95 shadow-xl shadow-black/20"
+                              >
+                                <Upload className="w-4 h-4" />
+                                {currentPeriodStatus.status === 'rejected' ? 'ส่งใหม่' : 'ส่งสลิป'}
+                              </Link>
+                            </>
+                          ) : (
+                            <div className="flex items-center gap-2 py-2.5 px-4 bg-white/5 border border-white/10 rounded-xl text-[12px] font-bold text-white/50">
+                              <Lock className="w-4 h-4" />
+                              {windowStatus === 'upcoming' ? 'รอเปิดรับสลิป' : 'ปิดรับสลิปแล้ว'}
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {currentPeriodStatus.status === 'pending' && (
+                        <div className="flex items-center gap-2 py-2.5 px-5 bg-white/10 border border-white/15 rounded-xl text-[12px] font-bold text-white/70 backdrop-blur-sm">
+                          <Clock className="w-4 h-4" />
+                          รอเหรัญญิกตรวจสอบ
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

@@ -6,6 +6,7 @@ import { useUIStore } from '@/store/uiStore'
 import type { User } from '@/types'
 import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
+import ErrorBoundary from '@/components/shared/ErrorBoundary'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -46,9 +47,12 @@ export default function AppShell({ children, role, user = null, pendingCount = 0
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <main className="flex-1 overflow-y-auto">
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </main>
       </div>
     </div>
   )
 }
+

@@ -2,14 +2,30 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Bell, Check, Trash2, Loader2, X } from 'lucide-react'
-import { cn, formatDate } from '@/lib/utils'
-import { toast } from 'sonner'
+import { Bell, Loader2, CheckCheck, Info, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { formatDistanceToNow } from 'date-fns'
+import { th } from 'date-fns/locale'
+
+const typeConfig: Record<string, { icon: typeof Info; bg: string; color: string }> = {
+  info:    { icon: Info,          bg: 'bg-blue-50',    color: 'text-blue-500' },
+  warning: { icon: AlertTriangle, bg: 'bg-amber-50',   color: 'text-amber-500' },
+  success: { icon: CheckCircle,   bg: 'bg-emerald-50', color: 'text-emerald-600' },
+  error:   { icon: XCircle,       bg: 'bg-red-50',     color: 'text-red-500' },
+}
+
+function timeAgo(iso: string) {
+  try {
+    return formatDistanceToNow(new Date(iso), { locale: th, addSuffix: true })
+  } catch {
+    return '—'
+  }
+}
 
 export default function InAppNotifications() {
-  const [isOpen, setIsOpen] = useState(false)
+  const [isOpen, setIsOpen]           = useState(false)
   const [notifications, setNotifications] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading]         = useState(true)
   const supabase = createClient()
 
   const fetchNotifications = useCallback(async () => {
@@ -22,12 +38,10 @@ export default function InAppNotifications() {
       .or(`id.eq.${user.id},student_id.eq.${user.user_metadata?.student_id || 'NONE'}`)
       .maybeSingle()
 
-    const targetUserId = profile?.id || user.id
-
     const { data } = await supabase
       .from('notifications')
       .select('*')
-      .eq('user_id', targetUserId)
+      .eq('user_id', profile?.id || user.id)
       .order('created_at', { ascending: false })
       .limit(20)
 
@@ -37,98 +51,139 @@ export default function InAppNotifications() {
 
   useEffect(() => {
     fetchNotifications()
-    
-    // Subscribe to new notifications
     const channel = supabase
-      .channel('schema-db-changes')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => {
-        fetchNotifications()
-      })
+      .channel('notif-changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, fetchNotifications)
       .subscribe()
-
     return () => { supabase.removeChannel(channel) }
   }, [supabase, fetchNotifications])
 
   const markAsRead = async (id: string) => {
     await supabase.from('notifications').update({ is_read: true }).eq('id', id)
-    setNotifications(notifications.map(n => n.id === id ? { ...n, is_read: true } : n))
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n))
   }
 
   const markAllAsRead = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-
-    const { data: profile } = await supabase
-      .from('users')
-      .select('id')
-      .or(`id.eq.${user.id},student_id.eq.${user.user_metadata?.student_id || 'NONE'}`)
-      .maybeSingle()
-
-    const targetUserId = profile?.id || user.id
-
-    await supabase.from('notifications').update({ is_read: true }).eq('user_id', targetUserId).eq('is_read', false)
-    setNotifications(notifications.map(n => ({ ...n, is_read: true })))
+    const { data: profile } = await supabase.from('users').select('id')
+      .or(`id.eq.${user.id},student_id.eq.${user.user_metadata?.student_id || 'NONE'}`).maybeSingle()
+    await supabase.from('notifications').update({ is_read: true })
+      .eq('user_id', profile?.id || user.id).eq('is_read', false)
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
   }
 
   const unreadCount = notifications.filter(n => !n.is_read).length
+  const hasUnread = unreadCount > 0
 
   return (
     <div className="relative">
-      <button 
+      {/* Bell button */}
+      <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 text-text-muted hover:text-text-primary hover:bg-background-tertiary rounded-xl transition-all active:scale-95"
+        className="relative w-9 h-9 flex items-center justify-center rounded-xl text-text-muted hover:text-text-primary hover:bg-background-muted transition-all active:scale-95"
+        aria-label="การแจ้งเตือน"
       >
-        <Bell className="w-5 h-5" />
-        {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-black flex items-center justify-center rounded-full border-2 border-background-secondary shadow-sm">
-            {unreadCount}
-          </span>
+        <Bell className={cn('w-[18px] h-[18px] transition-transform', isOpen && 'scale-90')} />
+
+        {hasUnread && (
+          <>
+            {/* Pulse ring */}
+            <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5">
+              <span className="absolute inset-0 rounded-full bg-red-400 opacity-60 animate-ping" />
+              <span className="relative flex w-2.5 h-2.5 rounded-full bg-red-500 items-center justify-center border border-white">
+                {unreadCount <= 9 && (
+                  <span className="text-[7px] font-black text-white leading-none">{unreadCount}</span>
+                )}
+              </span>
+            </span>
+          </>
         )}
       </button>
 
+      {/* Dropdown */}
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-40 lg:hidden" onClick={() => setIsOpen(false)} />
-          <div className="absolute right-0 mt-3 w-80 bg-background-secondary border border-border rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-right">
-            <div className="p-4 border-b border-border flex items-center justify-between bg-background-tertiary/20">
-              <h4 className="text-[13px] font-bold text-text-primary uppercase tracking-tight italic">แจ้งเตือน</h4>
-              {unreadCount > 0 && (
-                <button onClick={markAllAsRead} className="text-[10px] font-bold text-brand hover:underline uppercase tracking-wider">อ่านทั้งหมด</button>
-              )}
-            </div>
-
-            <div className="max-h-[350px] overflow-y-auto custom-scrollbar">
-              {loading ? (
-                <div className="p-8 text-center"><Loader2 className="w-5 h-5 animate-spin mx-auto text-brand" /></div>
-              ) : notifications.length === 0 ? (
-                <div className="p-12 text-center text-text-muted italic text-[12px]">ไม่มีการแจ้งเตือนในขณะนี้</div>
-              ) : (
-                <div className="divide-y divide-border">
-                  {notifications.map((n) => (
-                    <div 
-                      key={n.id} 
-                      className={cn(
-                        "p-4 transition-colors hover:bg-background-tertiary/50 relative group",
-                        !n.is_read && "bg-brand/[0.02]"
-                      )}
-                      onClick={() => markAsRead(n.id)}
-                    >
-                      {!n.is_read && <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-brand" />}
-                      <div className="flex justify-between items-start mb-1">
-                        <span className={cn("text-[13px] font-bold", !n.is_read ? "text-text-primary" : "text-text-secondary")}>
-                          {n.title}
-                        </span>
-                        <span className="text-[9.5px] text-text-disabled font-medium uppercase">{formatDate(new Date(n.created_at))}</span>
-                      </div>
-                      <p className="text-[12px] text-text-muted leading-relaxed">{n.message}</p>
-                    </div>
-                  ))}
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <div className="absolute right-0 mt-2 w-[340px] z-50 animate-in fade-in zoom-in-95 duration-150 origin-top-right">
+            <div className="bg-background-secondary border border-border rounded-2xl shadow-2xl overflow-hidden"
+              style={{ boxShadow: '0 20px 60px -10px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.04)' }}
+            >
+              {/* Header */}
+              <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px] font-black text-text-primary uppercase tracking-tight">แจ้งเตือน</span>
+                  {hasUnread && (
+                    <span className="text-[9px] font-black bg-red-500 text-white px-1.5 py-0.5 rounded-full">
+                      {unreadCount}
+                    </span>
+                  )}
                 </div>
-              )}
-            </div>
+                {hasUnread && (
+                  <button
+                    onClick={markAllAsRead}
+                    className="flex items-center gap-1 text-[10px] font-bold text-text-muted hover:text-brand transition-colors"
+                  >
+                    <CheckCheck className="w-3 h-3" />
+                    อ่านทั้งหมด
+                  </button>
+                )}
+              </div>
 
-            <div className="p-3 bg-background-tertiary/50 border-t border-border text-center">
-              <p className="text-[10px] text-text-disabled font-bold uppercase tracking-widest">ข้อมูลย้อนหลัง 20 รายการล่าสุด</p>
+              {/* List */}
+              <div className="max-h-[360px] overflow-y-auto">
+                {loading ? (
+                  <div className="py-12 flex items-center justify-center">
+                    <Loader2 className="w-5 h-5 animate-spin text-text-muted" />
+                  </div>
+                ) : notifications.length === 0 ? (
+                  <div className="py-14 text-center">
+                    <div className="w-10 h-10 bg-background-muted rounded-full flex items-center justify-center mx-auto mb-3">
+                      <Bell className="w-5 h-5 text-text-disabled" />
+                    </div>
+                    <p className="text-[12px] text-text-muted font-medium">ไม่มีการแจ้งเตือน</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border/50">
+                    {notifications.map((n, idx) => {
+                      const cfg = typeConfig[n.type] ?? typeConfig.info
+                      const TypeIcon = cfg.icon
+                      return (
+                        <button
+                          key={n.id}
+                          onClick={() => markAsRead(n.id)}
+                          className={cn(
+                            'w-full text-left flex items-start gap-3 px-4 py-3.5 transition-colors hover:bg-background-muted/60 relative',
+                            !n.is_read && 'bg-brand/[0.025]'
+                          )}
+                          style={{ animationDelay: `${idx * 30}ms` }}
+                        >
+                          {!n.is_read && (
+                            <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-r-full bg-brand" />
+                          )}
+                          <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5', cfg.bg)}>
+                            <TypeIcon className={cn('w-3.5 h-3.5', cfg.color)} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className={cn('text-[12.5px] font-semibold truncate', !n.is_read ? 'text-text-primary' : 'text-text-secondary')}>
+                              {n.title}
+                            </div>
+                            <p className="text-[11.5px] text-text-muted leading-snug mt-0.5 line-clamp-2">{n.message}</p>
+                            <div className="text-[10px] text-text-disabled mt-1 font-medium">{timeAgo(n.created_at)}</div>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-4 py-2.5 border-t border-border bg-background-tertiary/40">
+                <p className="text-[9.5px] text-text-disabled font-bold uppercase tracking-widest text-center">
+                  ย้อนหลัง 20 รายการล่าสุด
+                </p>
+              </div>
             </div>
           </div>
         </>
