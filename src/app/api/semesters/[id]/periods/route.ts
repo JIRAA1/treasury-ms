@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse as NextServerResponse } from 'next/server'
 import { logAction } from '@/lib/audit'
+import { randomUUID } from 'crypto'
 
 export async function GET(
   request: NextRequest,
@@ -105,6 +106,8 @@ export async function POST(
         
         if (p.id) {
           periodObj.id = p.id
+        } else {
+          periodObj.id = randomUUID()
         }
         
         return periodObj
