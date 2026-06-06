@@ -14,10 +14,12 @@ export default async function StudentDashboardPage() {
 
   const adminClient = createAdminClient()
 
+  const studentId = authUser.user_metadata?.student_id || 'UNKNOWN'
+
   const { data: profile } = await adminClient
     .from('users')
     .select('*')
-    .or(`id.eq.${authUser.id},student_id.eq.${authUser.user_metadata.student_id}`)
+    .or(`id.eq.${authUser.id},student_id.eq.${studentId}`)
     .maybeSingle()
 
   if (!profile) redirect('/bind')

@@ -27,11 +27,13 @@ export default async function HistoryPage({
 
   const adminClient = createAdminClient()
   
+  const studentId = authUser.user_metadata?.student_id || 'UNKNOWN'
+
   // Robust profile lookup to get the correct database ID
   const { data: profile } = await adminClient
     .from('users')
     .select('id')
-    .or(`id.eq.${authUser.id},student_id.eq.${authUser.user_metadata.student_id}`)
+    .or(`id.eq.${authUser.id},student_id.eq.${studentId}`)
     .maybeSingle()
 
   if (!profile) redirect('/bind')

@@ -18,10 +18,12 @@ export default async function TransparencyPage() {
 
   const adminClient = createAdminClient()
 
+  const studentId = authUser.user_metadata?.student_id || 'UNKNOWN'
+
   const { data: profile } = await adminClient
     .from('users')
     .select('id')
-    .or(`id.eq.${authUser.id},student_id.eq.${authUser.user_metadata.student_id}`)
+    .or(`id.eq.${authUser.id},student_id.eq.${studentId}`)
     .maybeSingle()
 
   if (!profile) redirect('/bind')

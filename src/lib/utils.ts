@@ -19,13 +19,19 @@ export function formatCurrency(amount: number): string {
     .replace("฿", "฿")
 }
 
-export function formatDate(date: string | Date): string {
-  const d = new Date(date)
-  // Thai Buddhist year is CE + 543
-  const day = format(d, "d")
-  const month = format(d, "MMM", { locale: th })
-  const year = d.getFullYear() + 543
-  return `${day} ${month} ${year}`
+export function formatDate(date: string | Date | null | undefined): string {
+  if (!date) return "—"
+  try {
+    const d = new Date(date)
+    if (isNaN(d.getTime())) return "—"
+    // Thai Buddhist year is CE + 543
+    const day = format(d, "d")
+    const month = format(d, "MMM", { locale: th })
+    const year = d.getFullYear() + 543
+    return `${day} ${month} ${year}`
+  } catch {
+    return "—"
+  }
 }
 
 
