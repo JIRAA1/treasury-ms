@@ -99,7 +99,7 @@ export default async function TransparencyPage() {
       <div>
         <Topbar title="ความโปร่งใส" subtitle="รายงานการเงินสาขา — ข้อมูล Real-time" />
 
-        <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-8 pb-12">
+        <div className="p-3 sm:p-4 md:p-8 max-w-3xl mx-auto space-y-5 md:space-y-8 pb-12">
           {/* Badge */}
           <div className="flex items-center gap-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-[12px] font-bold border border-emerald-100">
@@ -109,24 +109,24 @@ export default async function TransparencyPage() {
           </div>
 
           {/* Summary Card */}
-          <div className="relative group overflow-hidden rounded-[2rem] bg-text-primary shadow-2xl shadow-black/10">
-            <div className="relative z-10 bg-text-primary m-[1px] rounded-[1.9rem] p-6 md:p-10">
+          <div className="relative group overflow-hidden rounded-2xl md:rounded-[2rem] bg-text-primary shadow-2xl shadow-black/10">
+            <div className="relative z-10 bg-text-primary m-[1px] rounded-[1.4rem] md:rounded-[1.9rem] p-5 md:p-10">
               <div className="text-white/70 text-[13px] font-medium mb-1 font-bold">ยอดเงินคงเหลือ (หักเงินสำรองแล้ว)</div>
-              <div className="text-[38px] md:text-[42px] font-bold tracking-tight leading-none mb-6 text-white">
+              <div className="text-[26px] sm:text-[34px] md:text-[42px] font-bold tracking-tight leading-none mb-6 text-white">
                 {formatCurrency(availableBalance)}
               </div>
-              <div className="grid grid-cols-3 gap-4 border-t border-white/10 pt-6">
+              <div className="grid grid-cols-3 gap-2 md:gap-4 border-t border-white/10 pt-6">
                 <div>
-                  <div className="text-white/50 text-[10px] uppercase tracking-wider font-bold mb-1">รายรับทั้งหมด</div>
-                  <div className="text-[14px] md:text-[16px] font-bold text-emerald-400">+{formatCurrency(totalIncome)}</div>
+                  <div className="text-white/50 text-[9px] sm:text-[10px] uppercase tracking-wider font-bold mb-1">รายรับทั้งหมด</div>
+                  <div className="text-[11.5px] sm:text-[14px] md:text-[16px] font-bold text-emerald-400">+{formatCurrency(totalIncome)}</div>
                 </div>
                 <div>
-                  <div className="text-white/50 text-[10px] uppercase tracking-wider font-bold mb-1">รายจ่ายทั้งหมด</div>
-                  <div className="text-[14px] md:text-[16px] font-bold text-red-400">-{formatCurrency(totalExpense)}</div>
+                  <div className="text-white/50 text-[9px] sm:text-[10px] uppercase tracking-wider font-bold mb-1">รายจ่ายทั้งหมด</div>
+                  <div className="text-[11.5px] sm:text-[14px] md:text-[16px] font-bold text-red-400">-{formatCurrency(totalExpense)}</div>
                 </div>
                 <div>
-                  <div className="text-white/50 text-[10px] uppercase tracking-wider font-bold mb-1">เงินสำรอง</div>
-                  <div className="text-[14px] md:text-[16px] font-bold text-amber-400">{formatCurrency(reserveTarget)}</div>
+                  <div className="text-white/50 text-[9px] sm:text-[10px] uppercase tracking-wider font-bold mb-1">เงินสำรอง</div>
+                  <div className="text-[11.5px] sm:text-[14px] md:text-[16px] font-bold text-amber-400">{formatCurrency(reserveTarget)}</div>
                 </div>
               </div>
             </div>
@@ -134,7 +134,7 @@ export default async function TransparencyPage() {
           </div>
 
           {/* Income by Cycle */}
-          <div className="bg-background-secondary border border-border rounded-[2rem] overflow-hidden shadow-sm">
+          <div className="bg-background-secondary border border-border rounded-2xl md:rounded-[2rem] overflow-hidden shadow-sm">
             <div className="px-6 py-4 border-b border-border bg-background-tertiary/50 flex justify-between items-center">
               <h2 className="font-bold text-text-primary text-[15px]">รายรับจากนักศึกษา (ตามงวด)</h2>
               <div className="text-[12px] text-text-muted">รวม: {formatCurrency(totalStudentIncome)}</div>
@@ -173,7 +173,7 @@ export default async function TransparencyPage() {
           </div>
 
           {/* Other Incomes */}
-          <div className="bg-background-secondary border border-border rounded-[2rem] overflow-hidden shadow-sm">
+          <div className="bg-background-secondary border border-border rounded-2xl md:rounded-[2rem] overflow-hidden shadow-sm">
             <div className="px-6 py-4 border-b border-border bg-background-tertiary/50 flex justify-between items-center">
               <h2 className="font-bold text-text-primary text-[15px]">รายรับอื่นๆ (เงินสนับสนุน/กิจกรรม)</h2>
               <div className="text-[12px] text-text-muted">รวม: {formatCurrency(totalOtherIncome)}</div>
@@ -201,7 +201,7 @@ export default async function TransparencyPage() {
           </div>
 
           {/* Expenses List */}
-          <div className="bg-background-secondary border border-border rounded-[2rem] overflow-hidden shadow-sm">
+          <div className="bg-background-secondary border border-border rounded-2xl md:rounded-[2rem] overflow-hidden shadow-sm">
             <div className="px-6 py-4 border-b border-border bg-background-tertiary/50 flex justify-between items-center">
               <h2 className="font-bold text-text-primary text-[15px]">รายการค่าใช้จ่าย</h2>
               <div className="text-[12px] text-text-muted">รวม: {formatCurrency(totalExpense)}</div>

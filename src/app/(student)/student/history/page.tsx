@@ -104,17 +104,17 @@ export default async function HistoryPage({
       <div>
         <Topbar title="ประวัติการชำระเงิน" subtitle={`${payments.length} รายการชำระ · ${credits.length} รายการ Credit`} />
 
-        <div className="p-6 max-w-2xl">
+        <div className="p-3 sm:p-4 md:p-6 max-w-2xl">
           {/* Summary row */}
-          <div className="grid grid-cols-3 gap-3 mb-6">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-5">
             {[
               { label: 'ชำระแล้ว', value: payments.filter((p) => p.status === 'approved').length, color: 'text-emerald-600' },
               { label: 'รอตรวจสอบ', value: payments.filter((p) => p.status === 'pending').length, color: 'text-amber-600' },
               { label: 'ถูกปฏิเสธ', value: payments.filter((p) => p.status === 'rejected').length, color: 'text-red-500' },
             ].map((s) => (
-              <div key={s.label} className="bg-background-secondary border border-border rounded-xl p-4 text-center shadow-sm">
-                <div className={`text-[20px] font-bold ${s.color}`}>{s.value}</div>
-                <div className="text-[11px] text-text-muted mt-0.5">{s.label}</div>
+              <div key={s.label} className="bg-background-secondary border border-border rounded-xl p-2.5 sm:p-4 text-center shadow-sm">
+                <div className={`text-[16px] sm:text-[20px] font-bold ${s.color}`}>{s.value}</div>
+                <div className="text-[9.5px] sm:text-[11px] text-text-muted mt-0.5">{s.label}</div>
               </div>
             ))}
           </div>
@@ -148,7 +148,7 @@ export default async function HistoryPage({
 
           {/* Payments Tab */}
           {tab === 'payments' && (
-            <div className="bg-background-secondary border border-border rounded-xl overflow-hidden shadow-sm">
+            <div className="bg-background-secondary border border-border rounded-xl md:rounded-2xl overflow-hidden shadow-sm">
               <div className="px-5 py-3.5 border-b border-border flex items-center justify-between bg-background-tertiary/20">
                 <div className="text-[13px] font-semibold text-text-primary uppercase tracking-tight">รายการทั้งหมด</div>
                 <div className="text-[12px] text-text-muted font-medium">รวมที่ชำระ: <span className="font-bold text-emerald-600">{formatCurrency(totalApproved)}</span></div>
@@ -192,7 +192,7 @@ export default async function HistoryPage({
                 </div>
               )}
 
-              <div className="bg-background-secondary border border-border rounded-xl overflow-hidden shadow-sm">
+              <div className="bg-background-secondary border border-border rounded-xl md:rounded-2xl overflow-hidden shadow-sm">
                 <div className="px-5 py-3.5 border-b border-border bg-background-tertiary/20">
                   <div className="text-[13px] font-semibold text-text-primary uppercase tracking-tight">ประวัติ Credit</div>
                 </div>

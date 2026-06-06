@@ -132,7 +132,7 @@ export default function UploadPage() {
     <div>
       <Topbar title="ส่งสลิปการชำระเงิน" subtitle="อัปโหลดหลักฐานการโอนเงิน" />
 
-      <div className="p-4 md:p-6 max-w-xl">
+      <div className="p-3 sm:p-4 md:p-6 max-w-xl">
         {loading ? (
           <UploadPageLoading />
         ) : unpaidCycles.length === 0 ? (

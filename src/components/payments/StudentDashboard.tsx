@@ -110,13 +110,13 @@ export default function StudentDashboard({
         }
       />
 
-      <div className="p-4 md:p-8 space-y-8 max-w-7xl mx-auto">
+      <div className="p-3 sm:p-4 md:p-8 space-y-5 md:space-y-8 max-w-7xl mx-auto">
         {totalCycles === 0 ? (
           <EmptyState icon={FileText} title="ยังไม่มีกำหนดการชำระเงิน" description="กรุณารอเหรัญญิกเพิ่มงวดการชำระเงิน" />
         ) : (
           <>
             {/* Hero Card */}
-            <div className="relative overflow-hidden rounded-[2rem] gradient-brand shadow-2xl">
+            <div className="relative overflow-hidden rounded-2xl md:rounded-[2rem] gradient-brand shadow-2xl">
               {/* Decorative geometric shapes */}
               <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full opacity-[0.07]"
                 style={{ background: 'radial-gradient(circle, #b59410 0%, transparent 70%)' }} />
@@ -125,7 +125,7 @@ export default function StudentDashboard({
               <div className="absolute top-6 left-1/2 -translate-x-1/2 w-[1px] h-20 bg-gradient-to-b from-white/10 to-transparent" />
 
               {/* Inner content */}
-              <div className="relative z-10 p-6 md:p-10">
+              <div className="relative z-10 p-5 md:p-10">
                 {/* Top badges row */}
                 <div className="flex items-center gap-2 flex-wrap mb-5">
                   <span className="text-[9px] font-black uppercase tracking-[0.25em] text-white/40 bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg">
@@ -163,7 +163,7 @@ export default function StudentDashboard({
                 <div className="flex flex-col md:flex-row md:items-end gap-6 md:gap-10">
                   {/* Left: Period info */}
                   <div className="flex-1">
-                    <h1 className="text-[26px] md:text-[34px] font-black text-white tracking-tight leading-tight mb-2">
+                    <h1 className="text-[21px] sm:text-[26px] md:text-[34px] font-black text-white tracking-tight leading-tight mb-2">
                       {currentPeriod?.label || 'งวดปัจจุบัน'}
                     </h1>
                     <div className="flex items-center gap-1.5 text-white/50 text-[12px] font-medium">
@@ -177,8 +177,8 @@ export default function StudentDashboard({
                     {/* Amount */}
                     <div className="text-right">
                       <div className="text-[11px] font-black text-white/40 uppercase tracking-widest mb-1">ยอดที่ต้องชำระ</div>
-                      <div className="text-[40px] md:text-[52px] font-black text-white tracking-tighter leading-none">
-                        <span className="text-[22px] md:text-[28px] text-white/60 mr-1">฿</span>
+                      <div className="text-[32px] sm:text-[40px] md:text-[52px] font-black text-white tracking-tighter leading-none">
+                        <span className="text-[18px] sm:text-[22px] md:text-[28px] text-white/60 mr-1">฿</span>
                         {currentPeriodStatus.period.amount.toLocaleString()}
                       </div>
                       {(() => {
@@ -291,14 +291,14 @@ export default function StudentDashboard({
             )}
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+            <div className="grid grid-cols-3 gap-2 md:gap-6">
               <KpiCard label="จ่ายแล้ว" value={`${paidCount}/${totalCycles}`} sub={formatCurrency(totalPaid)} subVariant="positive" />
               <KpiCard label="รอตรวจ" value={pendingCount} sub="รายการค้างอนุมัติ" subVariant="warning" />
               <KpiCard label="ยอดค้าง" value={unpaidCount} sub="จำนวนงวดที่เหลือ" subVariant="danger" />
             </div>
 
             {/* Grid */}
-            <div className="bg-background-secondary border border-border rounded-[2rem] p-6 md:p-8 shadow-sm">
+            <div className="bg-background-secondary border border-border rounded-2xl md:rounded-[2rem] p-4 sm:p-6 md:p-8 shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
                 <div>
                   <h3 className="text-[17px] font-bold text-text-primary tracking-tight">ภาพรวมการชำระเงิน</h3>
@@ -317,7 +317,7 @@ export default function StudentDashboard({
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
           {/* History */}
-          <div className="bg-background-secondary border border-border rounded-[2rem] p-6 md:p-8 shadow-sm">
+          <div className="bg-background-secondary border border-border rounded-2xl md:rounded-[2rem] p-4 sm:p-6 md:p-8 shadow-sm">
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-[17px] font-bold text-text-primary tracking-tight">ประวัติล่าสุด</h3>
               <Link href="/student/history" className="flex items-center gap-1 text-[11px] font-bold text-brand uppercase tracking-wider hover:translate-x-1 transition-transform">
@@ -336,7 +336,7 @@ export default function StudentDashboard({
           </div>
 
           {/* Expenses */}
-          <div className="bg-background-secondary border border-border rounded-[2rem] p-6 md:p-8 shadow-sm">
+          <div className="bg-background-secondary border border-border rounded-2xl md:rounded-[2rem] p-4 sm:p-6 md:p-8 shadow-sm">
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-[17px] font-bold text-text-primary tracking-tight">รายจ่ายกองกลาง</h3>
               <Link href="/student/transparency" className="flex items-center gap-1 text-[11px] font-bold text-brand uppercase tracking-wider hover:translate-x-1 transition-transform">

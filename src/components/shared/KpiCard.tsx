@@ -49,7 +49,7 @@ export default function KpiCard({
   return (
     <div
       className={cn(
-        'relative bg-background-secondary border border-border rounded-2xl p-5 flex flex-col gap-3',
+        'relative bg-background-secondary border border-border rounded-2xl p-3.5 sm:p-5 flex flex-col gap-2 sm:gap-3',
         'hover-lift card-shadow overflow-hidden',
         className
       )}
@@ -58,29 +58,29 @@ export default function KpiCard({
       <div className={cn('absolute top-0 inset-x-0 h-[3px] rounded-t-2xl bg-gradient-to-r', accentBar[accentColor])} />
 
       <div className="flex items-start justify-between gap-2">
-        <div className="text-[10px] uppercase tracking-[0.2em] font-black text-text-muted leading-tight mt-0.5">
+        <div className="text-[9.5px] sm:text-[10px] uppercase tracking-[0.2em] font-black text-text-muted leading-tight mt-0.5">
           {label}
         </div>
         {Icon && (
-          <div className={cn('w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0', iconBg[accentColor])}>
-            <Icon className="w-4 h-4" />
+          <div className={cn('w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0', iconBg[accentColor])}>
+            <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </div>
         )}
       </div>
 
-      <div className="animate-count text-[28px] font-black text-text-primary tracking-tighter leading-none">
+      <div className="animate-count text-[20px] sm:text-[24px] md:text-[28px] font-black text-text-primary tracking-tighter leading-none">
         {value}
       </div>
 
-      <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-2.5 mt-auto">
+      <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-2 sm:pt-2.5 mt-auto">
         {sub && (
-          <span className={cn('text-[11px] font-bold tracking-tight', subVariantClasses[subVariant])}>
+          <span className={cn('text-[9.5px] sm:text-[11px] font-bold tracking-tight line-clamp-1', subVariantClasses[subVariant])}>
             {sub}
           </span>
         )}
         {trend && (
           <div className={cn(
-            'flex items-center gap-1 text-[10.5px] font-semibold',
+            'flex items-center gap-1 text-[9.5px] sm:text-[10.5px] font-semibold flex-shrink-0',
             trend.direction === 'up' ? 'text-emerald-600' :
             trend.direction === 'down' ? 'text-red-600' : 'text-text-muted'
           )}>
