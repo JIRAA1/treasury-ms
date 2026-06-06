@@ -13,6 +13,21 @@ export const revalidate = 0
 
 export const metadata = { title: 'ประวัติการชำระ — TreasuryMS' }
 
+// pattern ที่ปลอดภัยสำหรับทุก query ใน Server Component
+async function safeQuery<T>(queryFn: () => Promise<{ data: T | null; error: any }>) {
+  try {
+    const { data, error } = await queryFn()
+    if (error) {
+      console.error('[safeQuery]', error)
+      return null
+    }
+    return data
+  } catch (e) {
+    console.error('[safeQuery] threw:', e)
+    return null
+  }
+}
+
 export default async function HistoryPage({
   searchParams,
 }: {
@@ -21,62 +36,69 @@ export default async function HistoryPage({
   const { tab = 'payments' } = await searchParams
 
   const supabase = await createClient()
-  const { data: { user: authUser } } = await supabase.auth.getUser()
-  if (!authUser) redirect('/login')
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
   const adminClient = createAdminClient()
   
   try {
-    const studentId = authUser.user_metadata?.student_id || 'UNKNOWN'
+    const studentId = user.user_metadata?.student_id || 'UNKNOWN'
 
-    // Robust profile lookup to get the correct database ID
-    const { data: profile } = await adminClient
+    // ✅ ดึง profile.id จากตาราง users ก่อนเสมอ
+    const { data: profile, error: profileError } = await adminClient
       .from('users')
-      .select('id')
-      .or(`id.eq.${authUser.id},student_id.eq.${studentId}`)
-      .maybeSingle()
+      .select('id, fullname, tier')
+      .or(`id.eq.${user.id},student_id.eq.${studentId}`)
+      .single()
 
-    if (!profile) redirect('/bind')
+    // ✅ guard ถ้า profile หาไม่เจอ — อย่า throw, redirect แทน
+    if (profileError || !profile) {
+      console.error('[HistoryPage] Profile not found:', profileError)
+      redirect('/bind') 
+    }
 
-    const [paymentsRes, creditsRes, weekRes] = await Promise.all([
-      adminClient
+    // ✅ ใช้ profile.id แทน user.id ตลอด + ใช้ safeQuery
+    const paymentsData = await safeQuery(async () =>
+      await adminClient
         .from('payments')
         .select('id, user_id, period_id, week, amount, trans_ref, slip_url, status, note, verified_at, created_at, period:period_id(label, period_order)')
         .eq('user_id', profile.id)
-        .order('created_at', { ascending: false }),
-      adminClient
+        .order('created_at', { ascending: false })
+    )
+
+    const creditsData = await safeQuery(async () =>
+      await adminClient
         .from('payment_credits')
         .select('id, user_id, period_id, week, amount, status, repaid_at, note, created_by, created_at, period_info:period_id(label, deadline)')
         .eq('user_id', profile.id)
-        .order('created_at', { ascending: false }),
-      adminClient
-        .from('week_settings')
-        .select('week, title'),
-    ])
+        .order('created_at', { ascending: false })
+    )
 
-    if (paymentsRes.error) console.error('[HistoryPage] payments error:', paymentsRes.error)
-    if (creditsRes.error) console.error('[HistoryPage] credits error:', creditsRes.error)
+    const weekRes = await safeQuery(async () => 
+      await adminClient.from('week_settings').select('week, title')
+    )
 
     const weekMap: Record<number, string> = {}
-    for (const w of weekRes.data || []) weekMap[w.week] = w.title
+    for (const w of weekRes || []) weekMap[w.week] = w.title
 
     // Attach week label as period fallback for old records without period_id
-    const payments = (paymentsRes.data || []).map((p: any) => ({
+    const payments = (paymentsData || []).map((p: any) => ({
       ...p,
       period: p.period ?? (p.week ? { label: weekMap[p.week] ?? `สัปดาห์ ${p.week}`, period_order: p.week } : null),
     }))
-    const credits = (creditsRes.data || []).map((c: any) => ({
+    
+    const credits = (creditsData || []).map((c: any) => ({
       ...c,
       period_info: c.period_info ?? (c.week ? { label: weekMap[c.week] ?? `สัปดาห์ ${c.week}`, deadline: null } : null),
     }))
 
     const totalApproved = payments
-      .filter((p) => p.status === 'approved')
-      .reduce((s, p) => s + (p.amount || 0), 0)
+      .filter((p: any) => p.status === 'approved')
+      .reduce((s: number, p: any) => s + (p.amount || 0), 0)
     
     const pendingCreditsTotal = credits
-      .filter((c) => c.status === 'pending')
-      .reduce((s, c) => s + (c.amount || 0), 0)
+      .filter((c: any) => c.status === 'pending')
+      .reduce((s: number, c: any) => s + (c.amount || 0), 0)
 
     return (
       <div>
