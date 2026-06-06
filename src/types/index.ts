@@ -57,7 +57,8 @@ export interface WeekSetting {
 export interface PaymentCredit {
   id: string
   user_id: string
-  period_id: string
+  period_id: string | null
+  week: number
   amount: number
   status: 'pending' | 'repaid' | 'forgiven'
   repaid_at: string | null
@@ -66,14 +67,15 @@ export interface PaymentCredit {
   created_by: string | null
   created_at: string
   user?: User
-  period?: Period
-  period_info?: Pick<Period, 'label' | 'deadline'>
+  period?: Period | null
+  period_info?: Pick<Period, 'label' | 'deadline'> | null
 }
 
 export interface Payment {
   id: string
   user_id: string
-  period_id: string
+  period_id: string | null
+  week: number
   amount: number
   trans_ref: string | null
   slip_url: string | null
@@ -82,7 +84,7 @@ export interface Payment {
   created_at: string
   note?: string | null
   user?: User
-  period?: Period
+  period?: Pick<Period, 'label' | 'period_order'> | null
 }
 
 export interface Expense {

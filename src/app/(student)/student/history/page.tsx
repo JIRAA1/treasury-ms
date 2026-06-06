@@ -38,21 +38,37 @@ export default async function HistoryPage({
 
     if (!profile) redirect('/bind')
 
-    const [paymentsRes, creditsRes] = await Promise.all([
+    const [paymentsRes, creditsRes, weekRes] = await Promise.all([
       adminClient
         .from('payments')
-        .select('*, period:period_id(label, period_order)')
+        .select('id, user_id, period_id, week, amount, trans_ref, slip_url, status, note, verified_at, created_at, period:period_id(label, period_order)')
         .eq('user_id', profile.id)
         .order('created_at', { ascending: false }),
       adminClient
         .from('payment_credits')
-        .select('*, period_info:period_id(label, deadline)')
+        .select('id, user_id, period_id, week, amount, status, repaid_at, note, created_by, created_at, period_info:period_id(label, deadline)')
         .eq('user_id', profile.id)
         .order('created_at', { ascending: false }),
+      adminClient
+        .from('week_settings')
+        .select('week, title'),
     ])
 
-    const payments = paymentsRes.data || []
-    const credits = creditsRes.data || []
+    if (paymentsRes.error) console.error('[HistoryPage] payments error:', paymentsRes.error)
+    if (creditsRes.error) console.error('[HistoryPage] credits error:', creditsRes.error)
+
+    const weekMap: Record<number, string> = {}
+    for (const w of weekRes.data || []) weekMap[w.week] = w.title
+
+    // Attach week label as period fallback for old records without period_id
+    const payments = (paymentsRes.data || []).map((p: any) => ({
+      ...p,
+      period: p.period ?? (p.week ? { label: weekMap[p.week] ?? `สัปดาห์ ${p.week}`, period_order: p.week } : null),
+    }))
+    const credits = (creditsRes.data || []).map((c: any) => ({
+      ...c,
+      period_info: c.period_info ?? (c.week ? { label: weekMap[c.week] ?? `สัปดาห์ ${c.week}`, deadline: null } : null),
+    }))
 
     const totalApproved = payments
       .filter((p) => p.status === 'approved')
