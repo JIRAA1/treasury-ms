@@ -102,7 +102,7 @@ export default function StudentDashboard({
         subtitle="ภาพรวมระบบการเงินสาขา"
         actions={
           currentPeriodStatus && currentPeriodStatus.status !== 'paid' && currentPeriodStatus.status !== 'pending' && !isLocked ? (
-            <Link href="/student/upload" className="flex items-center gap-2 bg-brand text-white text-[12px] font-bold px-4 py-2 rounded-xl hover:bg-brand-hover transition-all shadow-lg shadow-brand/10 active:scale-95">
+            <Link href="/student/upload" className="flex items-center gap-1.5 sm:gap-2 bg-brand text-white text-[12px] font-bold px-2.5 sm:px-4 py-2 rounded-xl hover:bg-brand-hover transition-all shadow-lg shadow-brand/10 active:scale-95">
               <Upload className="w-4 h-4" />
               <span className="hidden sm:inline">ส่งสลิป</span>
             </Link>
@@ -163,7 +163,7 @@ export default function StudentDashboard({
                 <div className="flex flex-col md:flex-row md:items-end gap-6 md:gap-10">
                   {/* Left: Period info */}
                   <div className="flex-1">
-                    <h1 className="text-[21px] sm:text-[26px] md:text-[34px] font-black text-white tracking-tight leading-tight mb-2">
+                    <h1 className="text-[17px] sm:text-[24px] md:text-[32px] font-black text-white tracking-tight leading-tight mb-2">
                       {currentPeriod?.label || 'งวดปัจจุบัน'}
                     </h1>
                     <div className="flex items-center gap-1.5 text-white/50 text-[12px] font-medium">
@@ -173,12 +173,12 @@ export default function StudentDashboard({
                   </div>
 
                   {/* Right: Amount + status + CTA */}
-                  <div className="flex flex-col items-start md:items-end gap-3">
+                  <div className="flex flex-col items-start md:items-end gap-2.5 w-full md:w-auto">
                     {/* Amount */}
-                    <div className="text-right">
-                      <div className="text-[11px] font-black text-white/40 uppercase tracking-widest mb-1">ยอดที่ต้องชำระ</div>
-                      <div className="text-[32px] sm:text-[40px] md:text-[52px] font-black text-white tracking-tighter leading-none">
-                        <span className="text-[18px] sm:text-[22px] md:text-[28px] text-white/60 mr-1">฿</span>
+                    <div className="text-left md:text-right">
+                      <div className="text-[10px] sm:text-[11px] font-black text-white/40 uppercase tracking-widest mb-1">ยอดที่ต้องชำระ</div>
+                      <div className="text-[26px] sm:text-[38px] md:text-[50px] font-black text-white tracking-tighter leading-none">
+                        <span className="text-[15px] sm:text-[22px] md:text-[28px] text-white/60 mr-1">฿</span>
                         {currentPeriodStatus.period.amount.toLocaleString()}
                       </div>
                       {(() => {
@@ -186,7 +186,7 @@ export default function StudentDashboard({
                         const finePaid = currentPeriodStatus.period.amount - baseTierAmount
                         if (finePaid > 0 && currentPeriodStatus.status !== 'paid') {
                           return (
-                            <div className="text-[10px] text-red-300 font-bold mt-1">
+                            <div className="text-[9.5px] sm:text-[10.5px] text-red-300 font-bold mt-1">
                               รวมค่าปรับ ฿{finePaid.toLocaleString()}
                             </div>
                           )
@@ -205,6 +205,7 @@ export default function StudentDashboard({
                       } 
                       note={currentPeriodStatus.payment?.note}
                       size="lg"
+                      className="md:text-[13px] md:px-3.5 md:py-1.5 text-[10.5px] px-2.5 py-0.5"
                     />
 
                     {/* CTA buttons */}
@@ -215,21 +216,21 @@ export default function StudentDashboard({
                             <>
                               <button
                                 onClick={() => setIsQrModalOpen(true)}
-                                className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 bg-white/10 border border-white/20 text-white text-[12px] font-bold px-4 py-2.5 rounded-xl hover:bg-white/15 transition-all active:scale-95 backdrop-blur-sm"
+                                className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 bg-white/10 border border-white/20 text-white text-[11.5px] sm:text-[12px] font-bold px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl hover:bg-white/15 transition-all active:scale-95 backdrop-blur-sm"
                               >
                                 <QrCode className="w-4 h-4" />
                                 QR
                               </button>
                               <Link
                                 href="/student/upload"
-                                className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 bg-white text-brand text-[12px] font-black px-6 py-2.5 rounded-xl hover:bg-white/90 transition-all active:scale-95 shadow-xl shadow-black/20"
+                                className="flex-1 md:flex-none inline-flex items-center justify-center gap-2 bg-white text-brand text-[11.5px] sm:text-[12px] font-black px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl hover:bg-white/90 transition-all active:scale-95 shadow-xl shadow-black/20"
                               >
                                 <Upload className="w-4 h-4" />
                                 {currentPeriodStatus.status === 'rejected' ? 'ส่งใหม่' : 'ส่งสลิป'}
                               </Link>
                             </>
                           ) : (
-                            <div className="flex items-center gap-2 py-2.5 px-4 bg-white/5 border border-white/10 rounded-xl text-[12px] font-bold text-white/50">
+                            <div className="flex items-center gap-2 py-2 sm:py-2.5 px-4 bg-white/5 border border-white/10 rounded-xl text-[11.5px] sm:text-[12px] font-bold text-white/50 w-full justify-center md:w-auto">
                               <Lock className="w-4 h-4" />
                               {windowStatus === 'upcoming' ? 'รอเปิดรับสลิป' : 'ปิดรับสลิปแล้ว'}
                             </div>
@@ -237,9 +238,9 @@ export default function StudentDashboard({
                         </>
                       )}
                       {currentPeriodStatus.status === 'pending' && (
-                        <div className="flex items-center gap-2 py-2.5 px-5 bg-white/10 border border-white/15 rounded-xl text-[12px] font-bold text-white/70 backdrop-blur-sm">
+                        <div className="flex items-center justify-center gap-2 py-2 sm:py-2.5 px-5 bg-white/10 border border-white/15 rounded-xl text-[11.5px] sm:text-[12px] font-bold text-white/70 backdrop-blur-sm w-full md:w-auto">
                           <Clock className="w-4 h-4" />
-                          รอเหรัญญิกตรวจสอบ
+                          รออนุมัติสลิป
                         </div>
                       )}
                     </div>
@@ -293,8 +294,8 @@ export default function StudentDashboard({
             {/* KPI Cards */}
             <div className="grid grid-cols-3 gap-2 md:gap-6">
               <KpiCard label="จ่ายแล้ว" value={`${paidCount}/${totalCycles}`} sub={formatCurrency(totalPaid)} subVariant="positive" />
-              <KpiCard label="รอตรวจ" value={pendingCount} sub="รายการค้างอนุมัติ" subVariant="warning" />
-              <KpiCard label="ยอดค้าง" value={unpaidCount} sub="จำนวนงวดที่เหลือ" subVariant="danger" />
+              <KpiCard label="รอตรวจ" value={pendingCount} sub="รออนุมัติ" subVariant="warning" />
+              <KpiCard label="ยอดค้าง" value={unpaidCount} sub="ยังไม่จ่าย" subVariant="danger" />
             </div>
 
             {/* Grid */}

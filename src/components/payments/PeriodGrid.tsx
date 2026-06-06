@@ -53,7 +53,7 @@ export default function PeriodGrid({ periods, onPeriodClick, currentPeriodId, cl
             onClick={() => onPeriodClick?.(ps)}
             style={{ animationDelay: `${idx * 40}ms` }}
             className={cn(
-              'relative border rounded-xl p-3 text-left transition-all duration-200 group',
+              'relative border rounded-lg sm:rounded-xl p-2.5 sm:p-3 text-left transition-all duration-200 group',
               'hover-lift press-down',
               cfg.cell,
               isCurrent && 'ring-2 ring-brand ring-offset-2 shadow-lg',
