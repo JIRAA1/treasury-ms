@@ -189,6 +189,12 @@
 }
 .pulse-dot { animation: pulse-dot 1.8s ease-in-out infinite; }
 
+/* ── Icon Float (EmptyState) ────────────────────────────── */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-6px); }
+}
+
 /* ── Chart Bar Grow ─────────────────────────────────────── */
 @keyframes bar-grow {
   from { transform: scaleY(0); }
