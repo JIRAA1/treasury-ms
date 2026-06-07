@@ -15,7 +15,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { title, message, filters, targetWeek, sendLine, sendInApp } = await request.json()
+  const body = await request.json()
+  const { title, message, filters, targetPeriodId, sendLine, sendInApp } = body
 
   if (!message || !filters || filters.length === 0) {
     return NextResponse.json({ error: 'Missing message or filters' }, { status: 400 })
@@ -31,11 +32,11 @@ export async function POST(request: NextRequest) {
 
   // 2. Fetch payments for filtering if needed
   let paymentMap = new Map<string, string>() // userId -> status
-  if (targetWeek) {
+  if (body.targetPeriodId) {
     const { data: payments } = await adminClient
       .from('payments')
       .select('user_id, status')
-      .eq('week', targetWeek)
+      .eq('period_id', body.targetPeriodId)
     
     payments?.forEach(p => paymentMap.set(p.user_id, p.status))
   }
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
   await logAction({
     actorId: profile?.id || user.id,
     action: 'broadcast_sent',
-    newValue: { title, message, filters, targetWeek, recipientCount: targetStudents.length, results }
+    newValue: { title, message, filters, targetPeriodId, recipientCount: targetStudents.length, results }
   })
 
   return NextResponse.json({

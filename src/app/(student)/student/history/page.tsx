@@ -61,7 +61,7 @@ export default async function HistoryPage({
     const paymentsData = await safeQuery(async () =>
       await adminClient
         .from('payments')
-        .select('id, user_id, period_id, week, amount, trans_ref, slip_url, status, note, verified_at, created_at, period:period_id(label, period_order)')
+        .select('id, user_id, period_id, amount, trans_ref, slip_url, status, note, verified_at, created_at, period:period_id(label, period_order)')
         .eq('user_id', profile.id)
         .order('created_at', { ascending: false })
     )
@@ -69,20 +69,20 @@ export default async function HistoryPage({
     const creditsData = await safeQuery(async () =>
       await adminClient
         .from('payment_credits')
-        .select('id, user_id, period_id, week, amount, status, repaid_at, note, created_by, created_at, period_info:period_id(label, deadline)')
+        .select('id, user_id, period_id, amount, status, repaid_at, note, created_by, created_at, period_info:period_id(label, deadline)')
         .eq('user_id', profile.id)
         .order('created_at', { ascending: false })
     )
 
-    // Attach period label fallback for old records without period_id
+    // Attach period label fallback for old records if needed (though period_id should now always be present)
     const payments = (paymentsData || []).map((p: any) => ({
       ...p,
-      period: p.period ?? (p.week ? { label: `สัปดาห์ ${p.week}`, period_order: p.week } : null),
+      period: p.period ?? { label: 'ไม่ระบุงวด', period_order: 0 },
     }))
-    
+
     const credits = (creditsData || []).map((c: any) => ({
       ...c,
-      period_info: c.period_info ?? (c.week ? { label: `สัปดาห์ ${c.week}`, deadline: null } : null),
+      period_info: c.period_info ?? { label: 'ไม่ระบุงวด', deadline: null },
     }))
 
     const totalApproved = payments
