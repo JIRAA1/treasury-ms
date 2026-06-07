@@ -174,19 +174,29 @@ export default function AdminStudentsPage() {
   const fetchData = useCallback(async () => {
     try {
       const [
-        { data: settings },
         { data: users },
         { data: payments },
         { data: sysSettings },
+        { data: semesters },
       ] = await Promise.all([
-        supabase.from('week_settings').select('week'),
         supabase.from('users').select('id, fullname, student_id, line_user_id, tier, tier_note').eq('role', 'student'),
         supabase.from('payments').select('user_id, status'),
         supabase.from('system_settings').select('key, value').eq('key', 'tier_c_max_quota'),
+        supabase.from('semesters').select('id').eq('is_active', true).maybeSingle(),
       ])
 
-      setTotalCycles(settings?.length || 0)
       setTierCQuota(parseInt(sysSettings?.[0]?.value ?? '5', 10))
+
+      // Count periods in active semester
+      let periodCount = 0
+      if ((semesters as any)?.id) {
+        const { count } = await supabase
+          .from('periods')
+          .select('*', { count: 'exact', head: true })
+          .eq('semester_id', (semesters as any).id)
+        periodCount = count ?? 0
+      }
+      setTotalCycles(periodCount)
 
       const studentData = (users || []).map((u) => {
         const userPayments = payments?.filter((p) => p.user_id === u.id) || []

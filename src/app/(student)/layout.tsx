@@ -36,16 +36,33 @@ export default async function StudentLayout({ children }: { children: React.Reac
     }
   }
 
-  // Check for unpaid cycles (Dynamic based on settings)
-  const { data: settings } = await admin.from('week_settings').select('week')
-  const { data: payments } = await admin
-    .from('payments')
-    .select('week, status')
-    .eq('user_id', profile.id)
+  // Check for unpaid cycles — use active semester periods
+  const { data: activeSemester } = await admin
+    .from('semesters')
+    .select('id')
+    .eq('is_active', true)
+    .maybeSingle()
 
-  const hasUnpaidCycle = (settings || []).some(
-    (s) => !payments?.find((p) => p.week === s.week && (p.status === 'approved' || p.status === 'pending'))
-  )
+  let hasUnpaidCycle = false
+  if (activeSemester) {
+    const { data: periods } = await admin
+      .from('periods')
+      .select('id')
+      .eq('semester_id', activeSemester.id)
+
+    if (periods && periods.length > 0) {
+      const periodIds = periods.map((p) => p.id)
+      const { data: payments } = await admin
+        .from('payments')
+        .select('period_id, status')
+        .eq('user_id', profile.id)
+        .in('period_id', periodIds)
+
+      hasUnpaidCycle = periods.some(
+        (p) => !payments?.find((pay) => pay.period_id === p.id && (pay.status === 'approved' || pay.status === 'pending'))
+      )
+    }
+  }
 
   return (
     <AppShell role={profile.role} user={profile as User} hasUnpaidWeek={hasUnpaidCycle}>

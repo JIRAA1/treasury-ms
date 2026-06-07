@@ -15,17 +15,18 @@ import {
 import { toast } from 'sonner'
 import { useDialog } from '@/components/shared/GlobalDialog'
 
-interface WeekSetting {
-  week: number
-  title: string
+interface Period {
+  id: string
+  label: string
+  period_order: number
 }
 
-export default function BroadcastClient({ weekSettings }: { weekSettings: WeekSetting[] }) {
+export default function BroadcastClient({ periods }: { periods: Period[] }) {
   const dialog = useDialog()
   const [loading, setLoading] = useState(false)
   const [title, setTitle] = useState('')
   const [message, setMessage] = useState('')
-  const [targetWeek, setTargetWeek] = useState<number | ''>('')
+  const [targetPeriodId, setTargetPeriodId] = useState<string>('')
   const [filters, setFilters] = useState<string[]>(['all'])
   const [sendLine, setSendLine] = useState(true)
   const [sendInApp, setSendInApp] = useState(true)
@@ -73,7 +74,7 @@ export default function BroadcastClient({ weekSettings }: { weekSettings: WeekSe
               title,
               message,
               filters,
-              targetWeek: targetWeek || null,
+              targetPeriodId: targetPeriodId || null,
               sendLine,
               sendInApp
             })
@@ -157,15 +158,15 @@ export default function BroadcastClient({ weekSettings }: { weekSettings: WeekSe
             <div className="space-y-6">
               {/* Week Selector */}
               <div>
-                <label className="block text-[11px] font-black uppercase tracking-widest text-text-muted mb-2">อ้างอิงสถานะจากงวดที่</label>
+                <label className="block text-[11px] font-black uppercase tracking-widest text-text-muted mb-2">อ้างอิงสถานะจากงวด</label>
                 <select
-                  value={targetWeek}
-                  onChange={(e) => setTargetWeek(e.target.value ? parseInt(e.target.value) : '')}
+                  value={targetPeriodId}
+                  onChange={(e) => setTargetPeriodId(e.target.value)}
                   className="w-full bg-background border border-border rounded-xl px-4 py-2.5 text-[14px] font-bold text-text-primary outline-none focus:ring-2 focus:ring-brand/10 transition-all appearance-none"
                 >
-                  <option value="">-- เลือกงวดที่ต้องการ (ถ้าไม่เลือกจะใช้อ้างอิงทุกงวด) --</option>
-                  {weekSettings.map(w => (
-                    <option key={w.week} value={w.week}>{w.title || `งวดที่ ${w.week}`}</option>
+                  <option value="">-- เลือกงวด (ถ้าไม่เลือกจะอ้างอิงทุกงวด) --</option>
+                  {periods.map(p => (
+                    <option key={p.id} value={p.id}>{p.label}</option>
                   ))}
                 </select>
                 <p className="text-[11px] text-text-muted mt-1.5 ml-1">หากระบุงวด ระบบจะกรองนักศึกษาตามสถานะการจ่ายเงินของงวดนั้น</p>

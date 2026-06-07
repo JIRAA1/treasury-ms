@@ -14,11 +14,20 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // Fetch data
-  const { data: weekSettings } = await adminClient
-    .from('week_settings')
-    .select('week, title, amount')
-    .order('week', { ascending: true })
+  // Fetch periods from active semester
+  const { data: activeSemester } = await adminClient
+    .from('semesters')
+    .select('id, name')
+    .eq('is_active', true)
+    .maybeSingle()
+
+  const { data: periods } = activeSemester
+    ? await adminClient
+        .from('periods')
+        .select('id, label, period_order, amount')
+        .eq('semester_id', activeSemester.id)
+        .order('period_order', { ascending: true })
+    : { data: [] }
 
   const { data: students } = await adminClient
     .from('users')
@@ -28,9 +37,9 @@ export async function GET() {
 
   const { data: payments } = await adminClient
     .from('payments')
-    .select('user_id, week, status, amount')
+    .select('user_id, period_id, status, amount')
 
-  if (!weekSettings || !students) {
+  if (!periods || !students) {
     return NextResponse.json({ error: 'Failed to fetch data' }, { status: 500 })
   }
 
@@ -38,15 +47,15 @@ export async function GET() {
   const BOM = '\uFEFF' // UTF-8 BOM for Excel compatibility
 
   // Header row
-  const weekHeaders = weekSettings.map(w => `"${w.title || `งวดที่ ${w.week}`}"`)
-  const headerRow = ['ลำดับ', 'รหัสนักศึกษา', 'ชื่อ-นามสกุล', ...weekHeaders, 'จ่ายแล้ว (งวด)', 'รอตรวจ (งวด)', 'ค้างชำระ (งวด)'].join(',')
+  const periodHeaders = (periods || []).map(p => `"${p.label}"`)
+  const headerRow = ['ลำดับ', 'รหัสนักศึกษา', 'ชื่อ-นามสกุล', ...periodHeaders, 'จ่ายแล้ว (งวด)', 'รอตรวจ (งวด)', 'ค้างชำระ (งวด)'].join(',')
 
   // Data rows
   const rows = students.map((student, idx) => {
     const studentPayments = (payments ?? []).filter(p => p.user_id === student.id)
 
-    const weekCells = weekSettings.map(w => {
-      const p = studentPayments.find(pay => pay.week === w.week)
+    const periodCells = (periods || []).map(period => {
+      const p = studentPayments.find(pay => pay.period_id === period.id)
       if (!p) return '"ยังไม่จ่าย"'
       if (p.status === 'approved') return '"จ่ายแล้ว"'
       if (p.status === 'pending') return '"รอตรวจ"'
@@ -56,13 +65,13 @@ export async function GET() {
 
     const paidCount = studentPayments.filter(p => p.status === 'approved').length
     const pendingCount = studentPayments.filter(p => p.status === 'pending').length
-    const unpaidCount = weekSettings.length - studentPayments.filter(p => p.status === 'approved' || p.status === 'pending').length
+    const unpaidCount = (periods || []).length - studentPayments.filter(p => p.status === 'approved' || p.status === 'pending').length
 
     return [
       idx + 1,
       `"${student.student_id}"`,
       `"${student.fullname}"`,
-      ...weekCells,
+      ...periodCells,
       paidCount,
       pendingCount,
       unpaidCount,
@@ -73,7 +82,8 @@ export async function GET() {
 
   const now = new Date()
   const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
-  const filename = `payments_export_${dateStr}.csv`
+  const semName = activeSemester?.name?.replace(/\//g, '-') ?? 'export'
+  const filename = `payments_${semName}_${dateStr}.csv`
 
   return new NextResponse(csv, {
     status: 200,
@@ -83,3 +93,4 @@ export async function GET() {
     },
   })
 }
+

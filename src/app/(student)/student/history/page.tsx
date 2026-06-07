@@ -74,22 +74,15 @@ export default async function HistoryPage({
         .order('created_at', { ascending: false })
     )
 
-    const weekRes = await safeQuery(async () => 
-      await adminClient.from('week_settings').select('week, title')
-    )
-
-    const weekMap: Record<number, string> = {}
-    for (const w of weekRes || []) weekMap[w.week] = w.title
-
-    // Attach week label as period fallback for old records without period_id
+    // Attach period label fallback for old records without period_id
     const payments = (paymentsData || []).map((p: any) => ({
       ...p,
-      period: p.period ?? (p.week ? { label: weekMap[p.week] ?? `สัปดาห์ ${p.week}`, period_order: p.week } : null),
+      period: p.period ?? (p.week ? { label: `สัปดาห์ ${p.week}`, period_order: p.week } : null),
     }))
     
     const credits = (creditsData || []).map((c: any) => ({
       ...c,
-      period_info: c.period_info ?? (c.week ? { label: weekMap[c.week] ?? `สัปดาห์ ${c.week}`, deadline: null } : null),
+      period_info: c.period_info ?? (c.week ? { label: `สัปดาห์ ${c.week}`, deadline: null } : null),
     }))
 
     const totalApproved = payments
