@@ -14,26 +14,9 @@ CREATE TABLE public.users (
   tier_note text,
   CONSTRAINT users_pkey PRIMARY KEY (id)
 );
-CREATE TABLE public.week_settings (
-  week integer NOT NULL,
-  title text NOT NULL,
-  deadline timestamp with time zone NOT NULL,
-  amount numeric DEFAULT 100.00,
-  start_date timestamp with time zone DEFAULT now(),
-  qr_url text,
-  payment_open_at timestamp with time zone,
-  payment_close_at timestamp with time zone,
-  activity_type text CHECK (activity_type = ANY (ARRAY['small'::text, 'medium'::text, 'large'::text])),
-  activity_extra_amount numeric DEFAULT 0,
-  is_separate_collection boolean DEFAULT false,
-  base_amount numeric DEFAULT 50.00,
-  late_fine_amount numeric DEFAULT 0.00,
-  CONSTRAINT week_settings_pkey PRIMARY KEY (week)
-);
 CREATE TABLE public.payments (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
-  week integer NOT NULL,
   amount numeric NOT NULL,
   trans_ref text UNIQUE,
   slip_url text,
@@ -43,10 +26,10 @@ CREATE TABLE public.payments (
   created_at timestamp with time zone DEFAULT now(),
   verified_by_api boolean DEFAULT true,
   file_hash text,
-  period_id uuid,
+  period_id uuid NOT NULL,
   CONSTRAINT payments_pkey PRIMARY KEY (id),
+  CONSTRAINT payments_user_period_unique UNIQUE (user_id, period_id),
   CONSTRAINT payments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
-  CONSTRAINT payments_week_fkey FOREIGN KEY (week) REFERENCES public.week_settings(week),
   CONSTRAINT payments_period_id_fkey FOREIGN KEY (period_id) REFERENCES public.periods(id)
 );
 CREATE TABLE public.expenses (
@@ -105,7 +88,6 @@ CREATE TABLE public.incomes (
 CREATE TABLE public.payment_credits (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
-  week integer NOT NULL,
   amount numeric NOT NULL,
   status text NOT NULL DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'repaid'::text, 'forgiven'::text])),
   repaid_at timestamp with time zone,
@@ -113,10 +95,9 @@ CREATE TABLE public.payment_credits (
   note text,
   created_by uuid,
   created_at timestamp with time zone DEFAULT now(),
-  period_id uuid,
+  period_id uuid NOT NULL,
   CONSTRAINT payment_credits_pkey PRIMARY KEY (id),
   CONSTRAINT payment_credits_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
-  CONSTRAINT payment_credits_week_fkey FOREIGN KEY (week) REFERENCES public.week_settings(week),
   CONSTRAINT payment_credits_period_id_fkey FOREIGN KEY (period_id) REFERENCES public.periods(id)
 );
 CREATE TABLE public.semesters (
