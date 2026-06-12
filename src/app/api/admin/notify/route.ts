@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { sendBulkReminder, sendLineMessage } from '@/lib/line'
 import { logAction } from '@/lib/audit'
+import { calculateLateFine } from '@/lib/fine'
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
@@ -119,7 +120,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ sent: 0, failed: 0, message: `นักศึกษาทุกคนชำระ "${cycleTitle}" ครบถ้วนแล้ว` })
     }
 
-    // 4. Send Notifications (In-App & LINE)
+    // 4. Fetch pending credits for fine exemption check (bulk, per period)
+    const { data: pendingCredits } = await adminClient
+      .from('payment_credits')
+      .select('user_id')
+      .eq('period_id', period_id!)
+      .eq('status', 'pending')
+
+    const pendingCreditUserIds = new Set(pendingCredits?.map(c => c.user_id) || [])
+
+    // 5. Send Notifications (In-App & LINE)
     const notifs = unpaidStudents.map(s => ({
       user_id: s.id,
       title: 'งวดปัจจุบันกำหนดส่ง',
@@ -139,17 +149,31 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    const now = new Date()
     const results = await sendBulkReminder(lineTargets.map((s) => {
       const studentAmount = tierAmounts[s.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
-      return { 
-        lineUserId: s.line_user_id!, 
+      // คำนวณค่าปรับรายบุคคล — ถ้ามี pending credit → exempt (ไม่ปรับ)
+      const hasPendingCredit = pendingCreditUserIds.has(s.id)
+      const fineAmount = calculateLateFine(
+        {
+          deadline: cycleSetting.deadline,
+          fine_type: cycleSetting.fine_type ?? 'flat',
+          fine_rate: cycleSetting.fine_rate ?? 0,
+          fine_cap: cycleSetting.fine_cap ?? null,
+          fine_grace_days: cycleSetting.fine_grace_days ?? 0,
+          late_fine_amount: cycleSetting.late_fine_amount ?? 0,
+        },
+        now,
+        hasPendingCredit
+      )
+      return {
+        lineUserId: s.line_user_id!,
         periodLabel: cycleTitle,
         amount: studentAmount,
         deadline,
         openDate: cycleSetting.open_at ? thaiDateStr(cycleSetting.open_at) : undefined,
         closeDate: cycleSetting.close_at ? thaiDateStr(cycleSetting.close_at) : undefined,
-        // fineAmount ไม่ได้คำนวณใน bulk reminder (ขึ้นกับ tier+วันที่จ่ายจริงของแต่ละคน)
-        // สามารถเพิ่มในอนาคตโดยคำนวณ calculateLateFine() ต่อคน
+        fineAmount: fineAmount > 0 ? fineAmount : undefined,
       }
     }))
     

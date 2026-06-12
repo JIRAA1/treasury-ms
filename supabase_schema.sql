@@ -130,5 +130,23 @@ CREATE TABLE public.periods (
   deadline timestamp with time zone NOT NULL,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT periods_pkey PRIMARY KEY (id),
-  CONSTRAINT periods_semester_id_fkey FOREIGN KEY (semester_id) REFERENCES public.semesters(id)
+  CONSTRAINT periods_semester_id_fkey FOREIGN KEY (semester_id) REFERENCES public.semesters(id) ON DELETE CASCADE,
+  CONSTRAINT periods_semester_order_unique UNIQUE (semester_id, period_order)
 );
+
+-- Only one active semester at a time
+-- NOTE: Run this after creating the semesters table
+CREATE UNIQUE INDEX IF NOT EXISTS semesters_one_active_idx
+  ON public.semesters (is_active)
+  WHERE is_active = true;
+
+-- ============================================================
+-- Stored Procedure: assign_tier_c_safe
+-- Purpose: Atomic Tier C assignment to prevent race condition
+--          when two admins assign Tier C simultaneously
+-- HOW TO DEPLOY: Run migration_tier_c_rpc.sql in Supabase SQL Editor
+-- ============================================================
+-- CREATE OR REPLACE FUNCTION assign_tier_c_safe(p_user_id UUID, p_max_quota INT)
+-- RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER AS $$ ... $$;
+-- GRANT EXECUTE ON FUNCTION assign_tier_c_safe(UUID, INT) TO service_role;
+-- (See migration_tier_c_rpc.sql for full implementation)

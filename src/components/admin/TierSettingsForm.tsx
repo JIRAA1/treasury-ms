@@ -83,7 +83,7 @@ export default function TierSettingsForm({
     <div className="space-y-6">
       {/* Tier Amounts */}
       <div>
-        <h3 className="text-[12px] font-black uppercase tracking-widest text-text-muted mb-4">ค่าบำรุงรายสัปดาห์ (บาท)</h3>
+        <h3 className="text-[12px] font-black uppercase tracking-widest text-text-muted mb-4">ค่าบำรุงรายงวด (บาท)</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {tierFields.map((f) => (
             <div key={f.key} className={`${f.bg} ${f.border} border rounded-2xl p-4`}>
