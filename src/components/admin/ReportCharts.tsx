@@ -116,8 +116,11 @@ export default function ReportCharts({ cycleData, studentCount }: ReportChartsPr
   const getYPercent = (v: number) => PT + CH - (Math.min(100, Math.max(0, v)) / 100) * CH
   const percentTicks = [0, 25, 50, 75, 100]
 
-  // Bar width: evenly spaced, capped so they don't touch
-  const barW = Math.max(12, Math.min(40, (CW / cycleData.length) * 0.5))
+  // ─── Column-based X for bars (fixes edge overflow) ───────────────────
+  // Each period gets an equal column; bar is centered in its column
+  const colW = CW / Math.max(1, cycleData.length)
+  const getBarX = (i: number) => PL + (i + 0.5) * colW  // center of column i
+  const barW = Math.max(14, Math.min(44, colW * 0.52))
 
   // ─── Tooltip position clamp (keeps inside SVG) ─────────────────────
   const tooltipX = (i: number, chartW: number) => {
@@ -381,27 +384,34 @@ export default function ReportCharts({ cycleData, studentCount }: ReportChartsPr
 
             {/* Bars */}
             {cycleData.map((c, i) => {
-              const xCenter = getX(i)
+              const xCenter = getBarX(i)    // column-center
               const bx = xCenter - barW / 2
               const rate = completionRates[i]
-              const y = getYPercent(rate)
-              const bh = Math.max(2, PT + CH - y)
+              const barTop = getYPercent(rate)
+              const barBottom = PT + CH
+              const bh = Math.max(3, barBottom - barTop)
               const hov = hoveredBarIdx === i
+
+              // Label: inside bar if tall enough, above bar otherwise
+              const insideBar = bh >= 24
+              const labelY = insideBar
+                ? barTop + bh / 2 + 3.5       // vertically centered inside
+                : Math.max(PT + 10, barTop - 5) // just above bar, clamped to top
 
               return (
                 <g key={i}>
-                  {/* Invisible hover area */}
+                  {/* Invisible hover zone — full column height */}
                   <rect
-                    x={xCenter - (CW / cycleData.length) / 2}
+                    x={PL + i * colW}
                     y={PT}
-                    width={CW / cycleData.length}
+                    width={colW}
                     height={CH}
                     fill="transparent"
                     className="cursor-pointer"
                     onMouseEnter={() => setHoveredBarIdx(i)}
                     onMouseLeave={() => setHoveredBarIdx(null)}
                   />
-                  {/* Track (background) */}
+                  {/* Track (background) — only chart inner area */}
                   <rect
                     x={bx} y={PT}
                     width={barW} height={CH}
@@ -411,44 +421,44 @@ export default function ReportCharts({ cycleData, studentCount }: ReportChartsPr
                   />
                   {/* Actual Bar */}
                   <rect
-                    x={bx} y={y}
+                    x={bx} y={barTop}
                     width={barW} height={bh}
                     rx={5} ry={5}
                     fill={hov ? 'url(#rptBarGradHov)' : 'url(#rptBarGrad)'}
                     style={{ transition: 'fill 100ms' }}
                     className="pointer-events-none"
                   />
-                  {/* % label above bar */}
+                  {/* % label — inside bar (white) or above bar (colored) */}
                   <text
                     x={xCenter}
-                    y={Math.max(PT + 11, y - 4)}
+                    y={labelY}
                     textAnchor="middle"
-                    fill="currentColor"
-                    className={hov ? 'text-emerald-600' : 'text-text-secondary'}
+                    fill={insideBar ? '#ffffff' : (hov ? '#059669' : 'currentColor')}
+                    className={!insideBar ? 'text-text-secondary' : ''}
                     style={{ fontSize: 8.5, fontWeight: 800, transition: 'fill 100ms' }}
                   >
                     {rate}%
                   </text>
-                  {/* paidCount inside bar (only if tall enough) */}
-                  {bh > 18 && (
+                  {/* paidCount: bottom of bar, only when bar is very tall */}
+                  {bh > 32 && (
                     <text
                       x={xCenter}
-                      y={PT + CH - 5}
+                      y={barBottom - 5}
                       textAnchor="middle"
-                      fill="#ffffff"
-                      style={{ fontSize: 8, fontWeight: 900 }}
-                      className="pointer-events-none select-none opacity-90"
+                      fill="rgba(255,255,255,0.80)"
+                      style={{ fontSize: 7.5, fontWeight: 900 }}
+                      className="pointer-events-none select-none"
                     >
-                      {c.paidCount}
+                      {c.paidCount} คน
                     </text>
                   )}
                 </g>
               )
             })}
 
-            {/* X-axis labels */}
+            {/* X-axis labels — column-centered */}
             {cycleData.map((c, i) => {
-              const x = getX(i)
+              const x = getBarX(i)
               const parts = shortLabel(c).split('\n')
               return (
                 <g key={i}>
@@ -475,6 +485,7 @@ export default function ReportCharts({ cycleData, studentCount }: ReportChartsPr
             const idx = hoveredBarIdx
             const item = cycleData[idx]
             const rate = completionRates[idx]
+            const xCenter = getBarX(idx)
             return (
               <div
                 className="absolute z-30 bg-background border border-border rounded-xl p-2.5 shadow-xl pointer-events-none text-left text-[10.5px] font-bold"
