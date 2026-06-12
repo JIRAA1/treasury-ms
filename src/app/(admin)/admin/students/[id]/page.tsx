@@ -71,15 +71,19 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
   // Build period status array
   const periodStatuses: PeriodStatus[] = (periods ?? []).map(p => {
     const payment = payments?.find(pay => pay.period_id === p.id)
+    const status = payment?.status === 'approved' ? 'paid'
+                 : payment?.status === 'pending' ? 'pending'
+                 : payment?.status === 'rejected' ? 'rejected'
+                 : 'unpaid'
     return {
       period: p,
-      status: payment?.status === 'approved' ? 'paid'
-             : payment?.status === 'pending' ? 'pending'
-             : payment?.status === 'rejected' ? 'rejected'
-             : 'unpaid',
+      status,
+      // Use actual payment amount if approved, otherwise use period.amount as default display
+      amount: payment?.status === 'approved' ? (payment?.amount ?? p.amount) : p.amount,
       payment,
     }
   })
+
 
   return (
     <div>

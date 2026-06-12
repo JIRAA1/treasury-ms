@@ -8,6 +8,7 @@ import EmptyState from '@/components/shared/EmptyState'
 import UploadPageLoading from './loading'
 import { CheckCircle2, Clock, Lock, Calendar, ChevronRight, QrCode, Upload } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { calculateLateFine, formatFineDescription } from '@/lib/fine'
 
 interface PaymentPeriod {
   id: string
@@ -18,6 +19,7 @@ interface PaymentPeriod {
   open_at?: string | null
   close_at?: string | null
   qr_url?: string | null
+  fineDescription?: string
 }
 
 type WindowStatus = 'open' | 'upcoming' | 'closed' | 'noWindow'
@@ -72,7 +74,7 @@ export default function UploadPage() {
           { data: sysSettings },
           { data: pendingCredits }
         ] = await Promise.all([
-          supabase.from('periods').select('id, label, amount, deadline, open_at, close_at, late_fine_amount, qr_url').order('period_order', { ascending: true }),
+          supabase.from('periods').select('id, label, amount, deadline, open_at, close_at, late_fine_amount, fine_type, fine_rate, fine_cap, fine_grace_days, qr_url').order('period_order', { ascending: true }),
           supabase.from('payments').select('period_id, status').eq('user_id', targetUserId),
           supabase.from('system_settings').select('*'),
           supabase.from('payment_credits').select('period_id').eq('user_id', targetUserId).eq('status', 'pending')
@@ -92,10 +94,29 @@ export default function UploadPage() {
           const p = payments?.find(pay => pay.period_id === s.id)
           if (!p || p.status === 'rejected') {
             const hasPendingCredit = pendingCreditPeriodIds.has(s.id)
-            const deadline = s.deadline ? new Date(s.deadline) : null
-            const isPastDeadline = deadline ? new Date() > deadline : false
-            const lateFine = (!hasPendingCredit && isPastDeadline) ? (s.late_fine_amount ?? 0) : 0
+            const lateFine = calculateLateFine(
+              {
+                deadline: s.deadline,
+                fine_type: s.fine_type ?? 'flat',
+                fine_rate: s.fine_rate ?? 0,
+                fine_cap: s.fine_cap ?? null,
+                fine_grace_days: s.fine_grace_days ?? 0,
+                late_fine_amount: s.late_fine_amount ?? 0,
+              },
+              new Date(),
+              hasPendingCredit
+            )
             const expectedAmount = tierAmount + lateFine
+            const fineDescription = lateFine > 0
+              ? formatFineDescription({
+                  deadline: s.deadline,
+                  fine_type: s.fine_type ?? 'flat',
+                  fine_rate: s.fine_rate ?? 0,
+                  fine_cap: s.fine_cap ?? null,
+                  fine_grace_days: s.fine_grace_days ?? 0,
+                  late_fine_amount: s.late_fine_amount ?? 0,
+                })
+              : undefined
 
             unpaid.push({
               id: s.id,
@@ -106,6 +127,7 @@ export default function UploadPage() {
               open_at: s.open_at ?? null,
               close_at: s.close_at ?? null,
               qr_url: s.qr_url ?? null,
+              fineDescription,
             })
           }
         })

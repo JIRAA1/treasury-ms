@@ -16,7 +16,9 @@ import {
   GripVertical,
   Clock,
   HelpCircle,
+  AlertTriangle,
 } from 'lucide-react'
+import { formatFineDescription } from '@/lib/fine'
 
 interface Period {
   id?: string
@@ -26,6 +28,10 @@ interface Period {
   amount: number
   base_amount: number
   late_fine_amount: number
+  fine_type: 'flat' | 'daily' | 'per_period'
+  fine_rate: number
+  fine_cap: number | null
+  fine_grace_days: number
   activity_type: 'small' | 'medium' | 'large' | null
   activity_extra_amount: number
   is_separate_collection: boolean
@@ -141,6 +147,10 @@ export default function PeriodManagerPage() {
       amount: 100,
       base_amount: 50,
       late_fine_amount: 0,
+      fine_type: 'flat',
+      fine_rate: 0,
+      fine_cap: null,
+      fine_grace_days: 0,
       activity_type: null,
       activity_extra_amount: 0,
       is_separate_collection: false,
@@ -347,15 +357,96 @@ export default function PeriodManagerPage() {
                   />
                 </div>
 
-                {/* Late Fine */}
-                <div>
-                  <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted mb-1.5">ค่าปรับล่าช้า (฿)</label>
-                  <input
-                    type="number"
-                    value={p.late_fine_amount}
-                    onChange={(e) => updatePeriod(index, 'late_fine_amount', parseFloat(e.target.value) || 0)}
-                    className="w-full bg-background border border-border rounded-xl px-3 py-2 text-[13px] font-black text-red-600 text-right outline-none focus:ring-2 focus:ring-brand/10 transition-all"
-                  />
+                {/* Fine Settings Panel */}
+                <div className="col-span-full">
+                  <div className="border border-red-100 bg-red-50/30 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-red-700 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3" />
+                        ตั้งค่าปรับล่าช้า (Late Fine)
+                      </label>
+                      {/* Preview badge */}
+                      {((p.fine_rate ?? 0) > 0 || (p.late_fine_amount ?? 0) > 0) && (
+                        <span className="text-[10px] bg-red-100 text-red-700 font-bold px-2.5 py-1 rounded-full border border-red-200">
+                          {formatFineDescription({
+                            deadline: p.deadline || new Date().toISOString(),
+                            fine_type: p.fine_type ?? 'flat',
+                            fine_rate: p.fine_rate ?? 0,
+                            fine_cap: p.fine_cap ?? null,
+                            fine_grace_days: p.fine_grace_days ?? 0,
+                            late_fine_amount: p.late_fine_amount ?? 0,
+                          })}
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {/* Fine Type */}
+                      <div>
+                        <label className="block text-[9px] font-black uppercase tracking-widest text-text-muted mb-1">รูปแบบ</label>
+                        <select
+                          value={p.fine_type ?? 'flat'}
+                          onChange={(e) => updatePeriod(index, 'fine_type', e.target.value)}
+                          className="w-full bg-background border border-border rounded-xl px-3 py-2 text-[12px] font-bold text-text-primary outline-none focus:ring-2 focus:ring-brand/10 transition-all"
+                        >
+                          <option value="flat">ปรับครั้งเดียว</option>
+                          <option value="daily">ปรับรายวัน</option>
+                          <option value="per_period">ปรับรายงวด</option>
+                        </select>
+                      </div>
+                      {/* Fine Rate */}
+                      <div>
+                        <label className="block text-[9px] font-black uppercase tracking-widest text-text-muted mb-1">
+                          {(p.fine_type ?? 'flat') === 'daily' ? '฿/วัน' : (p.fine_type ?? 'flat') === 'per_period' ? '฿/งวด' : 'ยอด (฿)'}
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-text-muted">฿</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={p.fine_type === 'flat' ? (p.late_fine_amount ?? 0) : (p.fine_rate ?? 0)}
+                            onChange={(e) => {
+                              const v = parseFloat(e.target.value) || 0
+                              if ((p.fine_type ?? 'flat') === 'flat') {
+                                updatePeriod(index, 'late_fine_amount', v)
+                              } else {
+                                updatePeriod(index, 'fine_rate', v)
+                              }
+                            }}
+                            className="w-full pl-6 pr-2 bg-background border border-border rounded-xl py-2 text-[13px] font-black text-red-600 text-right outline-none focus:ring-2 focus:ring-brand/10 transition-all"
+                          />
+                        </div>
+                      </div>
+                      {/* Fine Cap */}
+                      <div>
+                        <label className="block text-[9px] font-black uppercase tracking-widest text-text-muted mb-1">สูงสุด (฿, เว้น = ไม่จำกัด)</label>
+                        <div className="relative">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] text-text-muted">฿</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={p.fine_cap ?? ''}
+                            placeholder="ไม่จำกัด"
+                            onChange={(e) => updatePeriod(index, 'fine_cap', e.target.value ? parseFloat(e.target.value) : null)}
+                            className="w-full pl-6 pr-2 bg-background border border-border rounded-xl py-2 text-[13px] font-bold text-text-primary text-right outline-none focus:ring-2 focus:ring-brand/10 transition-all"
+                          />
+                        </div>
+                      </div>
+                      {/* Grace Days */}
+                      <div>
+                        <label className="block text-[9px] font-black uppercase tracking-widest text-text-muted mb-1">Grace (วัน)</label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min="0"
+                            value={p.fine_grace_days ?? 0}
+                            onChange={(e) => updatePeriod(index, 'fine_grace_days', parseInt(e.target.value) || 0)}
+                            className="w-full px-3 bg-background border border-border rounded-xl py-2 text-[13px] font-bold text-text-primary text-right outline-none focus:ring-2 focus:ring-brand/10 transition-all"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-text-muted">วัน</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Deadline */}

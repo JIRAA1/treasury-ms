@@ -7,6 +7,7 @@ import { extractQRCode } from '@/lib/qr'
 import { sendLineMessage, sendAdminAlert } from '@/lib/line'
 import { parseSlipQR } from '@/lib/slip-qr'
 import { createHash } from 'crypto'
+import { calculateLateFine } from '@/lib/fine'
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
   const expectedName = nameSetting?.value || "ชานน ศ."
   const { data: periodSetting } = await adminClient
     .from('periods')
-    .select('label, amount, deadline, open_at, close_at, late_fine_amount')
+    .select('label, amount, deadline, open_at, close_at, late_fine_amount, fine_type, fine_rate, fine_cap, fine_grace_days')
     .eq('id', period_id)
     .maybeSingle()
   const cycleTitle = periodSetting?.label || `งวดนี้`
@@ -257,9 +258,18 @@ export async function POST(request: NextRequest) {
   const tierAmount = tierAmounts[profile.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
 
   // Determine if late fine is applicable (only if no credit and it's past deadline)
-  const deadline = periodSetting?.deadline ? new Date(periodSetting.deadline) : null
-  const isPastDeadline = deadline ? new Date() > deadline : false
-  const lateFine = (!pendingCredit && isPastDeadline) ? (periodSetting?.late_fine_amount ?? 0) : 0
+  const lateFine = calculateLateFine(
+    {
+      deadline: periodSetting?.deadline || new Date().toISOString(),
+      fine_type: periodSetting?.fine_type ?? 'flat',
+      fine_rate: periodSetting?.fine_rate ?? 0,
+      fine_cap: periodSetting?.fine_cap ?? null,
+      fine_grace_days: periodSetting?.fine_grace_days ?? 0,
+      late_fine_amount: periodSetting?.late_fine_amount ?? 0,
+    },
+    new Date(),
+    !!pendingCredit
+  )
   const expectedStudentAmount = tierAmount + lateFine
 
   // 6. Amount Validation — server-side comparison AFTER OCR

@@ -116,6 +116,11 @@ CREATE TABLE public.periods (
   amount numeric DEFAULT 100.00,
   base_amount numeric DEFAULT 50.00,
   late_fine_amount numeric DEFAULT 0.00,
+  -- Flexible fine system (backward-compat: fine_type='flat' uses late_fine_amount)
+  fine_type text NOT NULL DEFAULT 'flat'::text CHECK (fine_type = ANY (ARRAY['flat'::text, 'daily'::text, 'per_period'::text])),
+  fine_rate numeric NOT NULL DEFAULT 0,
+  fine_cap numeric DEFAULT NULL,
+  fine_grace_days integer NOT NULL DEFAULT 0,
   activity_type text CHECK (activity_type = ANY (ARRAY['small'::text, 'medium'::text, 'large'::text])),
   activity_extra_amount numeric DEFAULT 0,
   is_separate_collection boolean DEFAULT false,

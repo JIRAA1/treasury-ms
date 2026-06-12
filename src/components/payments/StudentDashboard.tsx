@@ -10,6 +10,7 @@ import ExpenseRow from '@/components/expenses/ExpenseRow'
 import EmptyState from '@/components/shared/EmptyState'
 import QrModal from '@/components/payments/QrModal'
 import { formatCurrency, formatDate, getTierConfig } from '@/lib/utils'
+import { calculateLateFine, formatFineDescription } from '@/lib/fine'
 import { FileText, Upload, ArrowRight, AlertCircle, Clock, QrCode, Lock, Calendar, CreditCard } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -53,10 +54,19 @@ export default function StudentDashboard({
     // ตรวจสอบว่านักศึกษามีเครดิตค้างจ่าย (ผ่อนผัน) ในงวดนี้หรือไม่
     const hasPendingCredit = pendingCredits.some((c) => c.period_id === period.id && c.status === 'pending')
 
-    // คำนวณค่าปรับ (ถ้าไม่มีเครดิต และชำระเลยกำหนดส่ง)
-    const deadline = period.deadline ? new Date(period.deadline) : null
-    const isPastDeadline = deadline ? new Date() > deadline : false
-    const lateFine = (!hasPendingCredit && isPastDeadline) ? (period.late_fine_amount ?? 0) : 0
+    // คำนวณค่าปรับด้วย shared utility
+    const lateFine = calculateLateFine(
+      {
+        deadline: period.deadline,
+        fine_type: period.fine_type ?? 'flat',
+        fine_rate: period.fine_rate ?? 0,
+        fine_cap: period.fine_cap ?? null,
+        fine_grace_days: period.fine_grace_days ?? 0,
+        late_fine_amount: period.late_fine_amount ?? 0,
+      },
+      new Date(),
+      hasPendingCredit
+    )
     const expectedAmount = tierAmount + lateFine
 
     return {
@@ -179,15 +189,23 @@ export default function StudentDashboard({
                       <div className="text-[9px] sm:text-[11px] font-black text-white/40 uppercase tracking-widest mb-1">ยอดที่ต้องชำระ</div>
                       <div className="text-[22px] sm:text-[36px] md:text-[48px] font-black text-white tracking-tighter leading-none">
                         <span className="text-[13px] sm:text-[20px] md:text-[28px] text-white/60 mr-1">฿</span>
-                        {currentPeriodStatus.period.amount.toLocaleString()}
+                        {currentPeriodStatus.amount.toLocaleString()}
                       </div>
                       {(() => {
                         const baseTierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
-                        const finePaid = currentPeriodStatus.period.amount - baseTierAmount
+                        const finePaid = currentPeriodStatus.amount - baseTierAmount
                         if (finePaid > 0 && currentPeriodStatus.status !== 'paid') {
+                          const fineDesc = formatFineDescription({
+                            deadline: currentPeriod?.deadline || new Date().toISOString(),
+                            fine_type: currentPeriod?.fine_type ?? 'flat',
+                            fine_rate: currentPeriod?.fine_rate ?? 0,
+                            fine_cap: currentPeriod?.fine_cap ?? null,
+                            fine_grace_days: currentPeriod?.fine_grace_days ?? 0,
+                            late_fine_amount: currentPeriod?.late_fine_amount ?? 0,
+                          })
                           return (
                             <div className="text-[8.5px] sm:text-[10px] text-red-300 font-bold mt-1">
-                              รวมค่าปรับ ฿{finePaid.toLocaleString()}
+                              รวมค่าปรับ ฿{finePaid.toLocaleString()} · {fineDesc}
                             </div>
                           )
                         }
@@ -364,7 +382,7 @@ export default function StudentDashboard({
           promptPayId={promptPayConfig.promptpay_id}
           promptPayName={promptPayConfig.promptpay_name}
           title={currentPeriod?.label || `งวดปัจจุบัน`}
-          amount={currentPeriodStatus.period.amount}
+          amount={currentPeriodStatus.amount}
         />
       )}
     </div>

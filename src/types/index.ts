@@ -28,6 +28,11 @@ export interface Period {
   amount: number
   base_amount: number
   late_fine_amount: number
+  // Flexible fine system
+  fine_type: 'flat' | 'daily' | 'per_period'
+  fine_rate: number
+  fine_cap: number | null
+  fine_grace_days: number
   activity_type: 'small' | 'medium' | 'large' | null
   activity_extra_amount: number
   is_separate_collection: boolean
@@ -127,6 +132,8 @@ export interface AuditLog {
 export interface PeriodStatus {
   period: Period
   status: 'paid' | 'pending' | 'unpaid' | 'rejected'
+  /** ยอดที่ปรับตาม tier + ค่าปรับ (tier-adjusted amount) */
+  amount: number
   payment?: Payment
 }
 
