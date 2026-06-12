@@ -1,67 +1,150 @@
-# TreasuryMS — แผนปรับปรุงและแก้ไขระบบ (Improvement Plan)
+# TreasuryMS — Detailed Tech Spec & Improvement Plan
 
-> **วันที่สร้าง:** วันศุกร์ที่ 12 มิถุนายน 2569
-> **สร้างจาก:** การตรวจสอบโครงสร้างโปรเจกต์หลังการทำ Period Refactor และ Tier/Credit System
-
-เอกสารนี้รวบรวมจุดที่ควรปรับปรุง แก้ไข และต่อยอด เพื่อให้ระบบ TreasuryMS สมบูรณ์และพร้อมใช้งานจริงแบบ 100% โดยแบ่งระดับความสำคัญออกเป็น 3 ระดับ
+> **สถานะโปรเจกต์ปัจจุบัน:** ผ่านการทำ Period Refactor และสร้างระบบ Tier/Credit แล้ว
+> **เป้าหมายของเอกสารนี้:** เป็นคู่มือระดับ Technical Spec เจาะลึกถึงระดับ Code, Query และ Database Management เพื่อนำไปสู่ระบบที่สมบูรณ์ 100% ไม่มี Edge Cases
 
 ---
 
-## 🔴 Phase 1: บั๊กและ Logic ที่ควรแก้ด่วน (High Priority)
-*ต้องทำก่อนที่จะเริ่มใช้งานเทอมใหม่ เพื่อป้องกันข้อมูลผิดพลาดและข้อมูลปนกัน*
+## 🔴 PHASE 1: Critical Bug Fixes (ต้องแก้ก่อนเริ่มใช้งานจริง)
 
-### 1.1 แก้ไขการคำนวณความคืบหน้าในหน้า Admin Students
-*   **ไฟล์:** `src/app/(admin)/admin/students/page.tsx`
-*   **ปัญหา:** ระบบดึงข้อมูลการชำระเงิน (Payments) ของนักศึกษา *ทุกเทอมในอดีต* มานับรวมกัน ทำให้สถานะ "จำนวนงวดที่จ่ายแล้ว" (weeksPaid / periodsPaid) ผิดพลาดเมื่อขึ้นเทอมใหม่
-*   **สิ่งที่ต้องทำ:** แก้ไข Query ให้ดึงข้อมูล Payment เฉพาะที่ผูกกับ `period_id` ใน `active_semester` ปัจจุบันเท่านั้น
+### 1.1 แก้ไข Query นับความคืบหน้านักศึกษา (Admin Students Page)
+**📍 ไฟล์:** `src/app/(admin)/admin/students/page.tsx`
+**🔥 ปัญหา:** ระบบคำนวณ `paidCount` (จำนวนงวดที่จ่ายแล้ว) จากตาราง `payments` ทั้งหมดในอดีต เมื่อขึ้นเทอมใหม่ นักศึกษาจะมียอดจ่ายแล้วติดมาด้วย
+**🛠️ วิธีแก้ไข (Implementation):**
+1. **เปลี่ยน Query การดึง Payments ของนักศึกษา:** ต้อง `!inner` join กับตาราง `periods` เพื่อเช็คว่า Payment นั้นอยู่ใน `active_semester` เท่านั้น
+```typescript
+// โค้ดเดิมที่ผิดพลาด:
+// const { data: allPayments } = await supabase.from('payments').select('user_id, status')
 
-### 1.2 แก้ไขการคำนวณกราฟเป้าหมายรายรับ (Target Income)
-*   **ไฟล์:** `src/components/admin/ReportCharts.tsx`
-*   **ปัญหา:** เส้นเป้าหมาย (Target) ในกราฟคำนวณแบบเหมาจ่าย (`studentCount * period.amount`) ซึ่งไม่รองรับระบบ Tier (A, B, C) ที่จ่ายไม่เท่ากัน ทำให้เส้นเป้าหมายสูงเกินจริง
-*   **สิ่งที่ต้องทำ:** เปลี่ยนวิธีคำนวณเป้าหมายรายงวด โดยอิงจากจำนวนนักศึกษาในแต่ละ Tier คูณด้วยเรทของ Tier นั้นๆ (ดึงค่าจาก `system_settings`)
+// โค้ดใหม่ที่ถูกต้อง:
+const { data: activeSemester } = await supabase.from('semesters').select('id').eq('is_active', true).single()
 
-### 1.3 แก้ไข Race Condition ในการจำกัดโควต้า Tier C
-*   **ไฟล์:** `src/app/api/students/[id]/tier/route.ts`
-*   **ปัญหา:** การเช็คว่า "โควต้า Tier C เต็มหรือยัง" ทำแบบอ่านแล้วค่อยเขียน (Select then Update) ในกรณีที่มีแอดมินหลายคนทำงานพร้อมกัน อาจทำให้โควต้าทะลุเกินที่ตั้งไว้ได้
-*   **สิ่งที่ต้องทำ:** เปลี่ยนไปใช้ Database Transaction หรือสร้าง Postgres Function (`RPC`) เพื่อล็อกแถว (Row-level lock) ขณะทำการนับและอัปเดต
-
----
-
-## 🟡 Phase 2: ทำความสะอาดโค้ดเก่า (Refactor & Cleanup)
-*ลดความซับซ้อน ป้องกันข้อผิดพลาดในอนาคต (Tech Debt)*
-
-### 2.1 ลบ Type และตัวแปรระบบ Week เดิมที่ตกค้าง
-*   **ไฟล์:** `src/types/index.ts`
-*   **สิ่งที่ต้องทำ:**
-    *   ลบ Interface `WeekSetting` ออก
-    *   ลบ property `week: number` ออกจาก Interface `Payment` และ `PaymentCredit` (เพราะ Database ใช้ `period_id` แล้ว)
-    *   ตรวจสอบและลบไฟล์ Component เก่าๆ ที่ไม่ได้ใช้แล้ว (เช่น `WeekSettingsForm` ถ้ามี)
-
-### 2.2 เปลี่ยนการ Hardcode ค่า Tier ให้ดึงจาก Database
-*   **ไฟล์:** `src/lib/utils.ts` (และที่อื่นๆ ที่เกี่ยวข้อง)
-*   **ปัญหา:** มีการ Hardcode ค่าจำนวนเงินของ Tier ทิ้งไว้ในโค้ดฝั่ง Frontend/Utils
-*   **สิ่งที่ต้องทำ:** ทำฟังก์ชันให้ดึงค่า Tier (`tier_a_amount`, `tier_b_amount`, `tier_c_amount`) มาจาก `system_settings` เสมอ เพื่อให้การแก้ไขในหน้า Settings ของแอดมินมีผลทันที
-
-### 2.3 ตรวจสอบตรรกะค่าปรับรายวัน (Daily Fine)
-*   **ไฟล์:** `src/lib/fine.ts`
-*   **ปัญหา:** ฟังก์ชัน `calculateLateFine` ปัจจุบันใช้ `Math.floor()` ในการคำนวณจำนวนวันที่สาย ซึ่งอาจทำให้การส่งช้าไม่ถึง 24 ชั่วโมง (เช่น 23 ชั่วโมง) ไม่ถูกคิดค่าปรับ
-*   **สิ่งที่ต้องทำ:** คุยกับทีมเพื่อสรุป Business Logic หากต้องการให้เลยกำหนดแม้แต่นาทีเดียวถือว่าสาย 1 วัน ควรเปลี่ยนเป็น `Math.ceil()`
+const { data: currentSemesterPayments } = await supabase
+  .from('payments')
+  .select(`
+    user_id,
+    status,
+    period!inner(semester_id)
+  `)
+  .eq('period.semester_id', activeSemester.id)
+  .eq('status', 'approved')
+```
+2. นำ `currentSemesterPayments` มาจัดกลุ่ม (Group By `user_id`) แทนนับจากทั้งหมด
 
 ---
 
-## 🔵 Phase 3: ฟีเจอร์เพิ่มเติมและ UI/UX (Enhancements)
-*เพิ่มความสะดวกในการใช้งานของ Admin และ นักศึกษา*
+### 1.2 แก้ไขสูตรคำนวณเส้นเป้าหมายในกราฟ (Target Income Chart)
+**📍 ไฟล์:** `src/components/admin/ReportCharts.tsx`
+**🔥 ปัญหา:** เส้นประเป้าหมายใช้สูตร `studentCount * period.amount` (ทุกคนจ่ายเท่ากัน) ซึ่งผิดเพราะระบบมี Tier A/B/C ที่เรทไม่เท่ากัน
+**🛠️ วิธีแก้ไข (Implementation):**
+1. ในฝั่ง Server (เช่น `page.tsx` ที่เรียก Component นี้) ต้องส่งข้อมูลโครงสร้างของ Tier มาด้วย
+```typescript
+interface TierBreakdown {
+  countA: number;
+  countB: number;
+  countC: number;
+}
+```
+2. แก้ไขสูตรใน `ReportCharts.tsx` เปลี่ยนจาก:
+```typescript
+// เดิม
+const t = studentCount * c.amount; 
 
-### 3.1 หน้า Statement ประวัติรายบุคคลสำหรับ Admin
-*   **รายละเอียด:** ปัจจุบัน Admin ดูภาพรวมและเปลี่ยน Tier ได้ แต่อาจจะดูประวัติการจ่ายเงินทั้งหมด, หนี้ค้าง (Credits), และค่าปรับสะสม ของนักศึกษา *รายบุคคล* ได้ยาก
-*   **สิ่งที่ควรทำ:** สร้างหน้าต่างหรือ Drawer (เปิดจาก `admin/students/[id]`) ที่แสดง Statement ของนักศึกษาคนนั้นๆ อย่างละเอียด
+// ใหม่ (สมมติว่าดึงเรทจาก Database ได้แล้ว หรือรับผ่าน Props)
+const baseAmount = c.base_amount; // ดึงจาก Period
+const t = (countA * tierA_Rate) + (countB * tierB_Rate) + (countC * tierC_Rate);
+```
+*หมายเหตุ: ต้องคำนึงถึง `base_amount` ที่อาจเปลี่ยนไปในแต่ละงวดด้วย (ถ้า Tier คิดเป็นส่วนลดจาก base)*
 
-### 3.2 ระบบเปลี่ยนผ่านภาคเรียน (Semester Transition)
-*   **รายละเอียด:** เมื่อจบเทอม (End of Semester) ควรมีระบบจัดการข้อมูลค้างเก่า
-*   **สิ่งที่ควรทำ:**
-    *   ปุ่ม "สรุปปิดเทอม"
-    *   ระบบยกยอดเงินคงเหลือของระบบไปเป็นยอดยกมาในเทอมถัดไป (ถ้าต้องการ)
-    *   ระบบจัดการหนี้คงค้าง (Payment Credits) ของเทอมเก่า ว่าจะยกไปเทอมใหม่หรือเคลียร์ทิ้ง
+---
 
-### 3.3 การแจ้งเตือน (Notifications) ปรับปรุง
-*   **รายละเอียด:** ตรวจสอบสคริปต์การส่ง LINE ให้รองรับข้อความที่แสดงชื่อ "งวด" (Period Label) ได้อย่างถูกต้อง และแจ้งเตือนเมื่อมีการติดค่าปรับ
+### 1.3 แก้ไข Race Condition การแย่งโควต้า Tier C
+**📍 ไฟล์:** `src/app/api/students/[id]/tier/route.ts` และ SQL Database
+**🔥 ปัญหา:** ถ้าโควต้าตั้งไว้ 5 คน มีแอดมิน 2 คนกดเปลี่ยน Tier ให้นักศึกษา 2 คนพร้อมกัน โค้ดที่ดึงมาเช็ค (Select) อาจจะเห็นว่าเพิ่งมี 4 คน จึงสั่ง Update ทั้งคู่ ทำให้กลายเป็น 6/5
+**🛠️ วิธีแก้ไข (Implementation):**
+ต้องย้าย Logic ไปไว้ที่ Database ระดับ Transaction ป้องกันการเขียนทับ
+1. **สร้าง Postgres RPC Function:**
+```sql
+CREATE OR REPLACE FUNCTION assign_tier_c_safe(p_user_id UUID, p_max_quota INT)
+RETURNS BOOLEAN AS $$
+DECLARE
+  current_c_count INT;
+BEGIN
+  -- ล็อกตาราง/แถวที่จำเป็น (Optional แต่ดี)
+  -- เช็คจำนวนปัจจุบัน
+  SELECT COUNT(*) INTO current_c_count FROM public.users WHERE tier = 'C';
+  
+  IF current_c_count >= p_max_quota THEN
+    RETURN FALSE; -- โควต้าเต็ม
+  END IF;
+
+  -- อัปเดตข้อมูล
+  UPDATE public.users SET tier = 'C' WHERE id = p_user_id;
+  RETURN TRUE; -- สำเร็จ
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+```
+2. **ฝั่ง API (`route.ts`):** เรียกใช้งาน `supabase.rpc('assign_tier_c_safe', { p_user_id: id, p_max_quota: quota })` แทนการ `UPDATE` ตรงๆ
+
+---
+
+## 🟡 PHASE 2: Code & Tech Debt Cleanup (ทำความสะอาดระบบ)
+
+### 2.1 กำจัด Legacy 'Week' Types & DB Columns
+**📍 ไฟล์:** `src/types/index.ts` และ DB
+**🛠️ วิธีแก้ไข:**
+1. ลบ Interface `WeekSetting` ออกให้หมด
+2. ใน Interface `Payment` และ `PaymentCredit` ให้ลบ `week: number` ออก (ใช้แค่ `period_id`)
+3. **ตรวจสอบ Database:** ตรวจดูว่า `ALTER TABLE payments DROP COLUMN week;` ได้รันไปหรือยัง ถ้ายังให้รันเพื่อลบให้เกลี้ยง
+
+### 2.2 เปลี่ยนค่า Hardcode Tier เป็น Dynamic (System Settings)
+**📍 ไฟล์:** `src/lib/utils.ts` หรือจุดที่มีการใช้ `tierAmount`
+**🔥 ปัญหา:** โค้ดอาจมีการเขียน `const amount = tier === 'A' ? 120 : ...` ไว้ลึกๆ ใน Component
+**🛠️ วิธีแก้ไข:**
+1. ดึง `tier_a_amount`, `tier_b_amount`, `tier_c_amount` จากตาราง `system_settings` ตอนโหลดหน้า Dashboard / Upload
+2. สร้าง React Context หรือ Zustand Store ชื่อ `useSystemStore` เพื่อเก็บค่า Config เหล่านี้ให้ดึงใช้ได้ทั่วแอป โดยไม่ต้องยิง API ใหม่ทุกครั้ง
+
+### 2.3 ปรับจูน Daily Fine Logic (ค่าปรับรายวัน)
+**📍 ไฟล์:** `src/lib/fine.ts`
+**🛠️ วิธีแก้ไข:**
+เปลี่ยน `Math.floor` เป็น `Math.ceil` ถ้าต้องการบังคับว่าช้า 1 นาทีถือว่าช้า 1 วัน (หรือตามข้อตกลงธุรกิจ)
+```typescript
+// เดิม
+const daysLate = Math.floor((now.getTime() - graceEnd.getTime()) / msPerDay)
+
+// ใหม่ (ตัวอย่างการปัดขึ้น)
+const daysLate = Math.ceil((now.getTime() - graceEnd.getTime()) / msPerDay)
+```
+
+---
+
+## 🔵 PHASE 3: Feature Enhancements (ยกระดับการใช้งาน)
+
+### 3.1 Individual Student Statement (ใบแจ้งหนี้รายบุคคล)
+**📍 ไฟล์เป้าหมาย:** `src/app/(admin)/admin/students/[id]/statement/page.tsx`
+**💡 แนวคิด:** 
+แอดมินคลิกที่ชื่อนักศึกษา จะเปิดหน้าแสดงข้อมูล:
+1. **ประวัติการจ่าย (Payment History):** งวดที่ 1 จ่ายแล้ว, งวดที่ 2 ขาดจ่าย (แสดงค่าปรับที่วิ่งอยู่)
+2. **เครดิตค้าง (Pending Credits):** ยอดที่เคยผ่อนผันไว้ และยังไม่ได้ชำระคืน
+3. **ปุ่ม Actions:** "แจ้งหนี้ผ่าน LINE ส่วนตัว", "ยกยอดหนี้ (Forgive)"
+
+### 3.2 Semester End Transition (ระบบปิดเทอม)
+**📍 ไฟล์เป้าหมาย:** `src/app/api/semesters/end/route.ts`
+**💡 แนวคิด:**
+เมื่อแอดมินสร้าง Semester ใหม่ และกด "ปิดเทอมเก่า":
+1. ระบบบันทึก `total_balance` สุดท้ายของเทอมเก่าไว้เป็นหลักฐาน
+2. (Optional) ถ้านักศึกษามีหนี้ `payment_credits` ค้างอยู่ ระบบจะโคลนหนี้นั้นข้ามไปยังเทอมใหม่ หรือเก็บไว้ในโหมด "หนี้สะสมข้ามเทอม" 
+3. รีเซ็ตสถานะนักศึกษาทุกคนให้เริ่มนับใหม่สำหรับงวดในเทอมใหม่
+
+### 3.3 Dynamic LINE Notifications
+**📍 ไฟล์:** `src/lib/line.ts`
+**💡 แนวคิด:**
+อัปเดตฟังก์ชัน `sendPaymentReminder` และ `sendPaymentApproved`
+*   แทนที่จะส่งว่า "ค่าส่วนกลางสัปดาห์ที่ {week}" 
+*   ให้ส่งค่า `{period_label}` เข้าไปแทน เช่น "ค่าส่วนกลาง {เดือน กรกฎาคม}" หรือ "งวด {ค่ากีฬาสี}"
+*   รวมถึงแนบข้อความ **ค่าปรับ ณ ปัจจุบัน (ถ้ามี)** ไปใน LINE Reminder ด้วย เพื่อกระตุ้นการจ่ายเงิน
+
+---
+
+**สรุปแผน:**
+หากทำตามแผนด้านบน TreasuryMS จะเป็นระบบที่ **Scale ได้รองรับหลายปีการศึกษา** **มีความถูกต้องทางการเงินระดับ Transaction** และ **UI/UX สะดวกต่อคนคุมเงินที่สุด** ครับ
