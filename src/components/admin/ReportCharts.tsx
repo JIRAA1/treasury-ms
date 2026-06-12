@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { formatCurrency } from '@/lib/utils'
-import { TrendingUp, Percent, Info, Calendar } from 'lucide-react'
+import { TrendingUp, Percent, Info, Calendar, AlertTriangle } from 'lucide-react'
 
 interface CycleDataItem {
   week?: number
@@ -12,6 +12,8 @@ interface CycleDataItem {
   amount: number
   collected: number
   paidCount: number
+  pendingCount?: number
+  rate?: number
 }
 
 interface ReportChartsProps {
@@ -19,270 +21,357 @@ interface ReportChartsProps {
   studentCount: number
 }
 
+/** Smart number formatter for Y-axis ticks */
+function fmtTick(v: number): string {
+  if (v === 0) return '฿0'
+  if (v >= 1_000_000) return `฿${(v / 1_000_000).toFixed(1)}M`
+  if (v >= 1_000) return `฿${Math.round(v / 1_000)}k`
+  return `฿${Math.round(v)}`
+}
+
+/** Shorten long labels for X-axis */
+function shortLabel(item: CycleDataItem): string {
+  const raw = item.label || item.title || `งวด ${item.period_order ?? item.week ?? '?'}`
+  // Try to extract a short form — e.g. "งวดที่ 1" → "งวด 1"
+  const numMatch = raw.match(/(\d+)/)
+  if (numMatch) return `งวด\n${numMatch[1]}`
+  if (raw.length <= 6) return raw
+  return raw.substring(0, 5) + '…'
+}
+
+/** Round up to a "nice" number for chart scale */
+function niceMax(val: number): number {
+  if (val <= 0) return 100
+  const magnitude = Math.pow(10, Math.floor(Math.log10(val)))
+  return Math.ceil(val / magnitude) * magnitude
+}
+
 export default function ReportCharts({ cycleData, studentCount }: ReportChartsProps) {
   const [hoveredIncomeIdx, setHoveredIncomeIdx] = useState<number | null>(null)
   const [hoveredBarIdx, setHoveredBarIdx] = useState<number | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   if (cycleData.length === 0) return null
 
-  // Chart Dimensions (Compact)
-  const width = 400
-  const height = 170
-  const paddingLeft = 45
-  const paddingRight = 15
-  const paddingTop = 25
-  const paddingBottom = 25
+  // ─── Chart Dimensions ─────────────────────────────────────────────
+  const W = 460
+  const H = 200
+  const PL = 52   // left padding (Y-axis labels)
+  const PR = 16   // right
+  const PT = 20   // top
+  const PB = 36   // bottom (X-axis labels)
 
-  const chartWidth = width - paddingLeft - paddingRight
-  const chartHeight = height - paddingTop - paddingBottom
+  const CW = W - PL - PR   // chart inner width
+  const CH = H - PT - PB   // chart inner height
 
-  // Coordinates helpers
-  const getX = (index: number) => {
-    if (cycleData.length <= 1) return paddingLeft + chartWidth / 2
-    return paddingLeft + (index / (cycleData.length - 1)) * chartWidth
+  // ─── X positions ─────────────────────────────────────────────────
+  const getX = (i: number) => {
+    if (cycleData.length <= 1) return PL + CW / 2
+    return PL + (i / (cycleData.length - 1)) * CW
   }
 
-  // 1. Income Chart Scaling
-  const maxCollected = Math.max(...cycleData.map(c => c.collected), 100)
-  const maxTarget = Math.max(...cycleData.map(c => studentCount * c.amount), 100)
-  const maxVal = Math.max(maxCollected, maxTarget)
+  // ─── Income Chart ─────────────────────────────────────────────────
+  // Filter out absurd target values caused by wrong period.amount
+  const validTargets = cycleData
+    .map(c => studentCount * c.amount)
+    .filter(v => v > 0 && v < 10_000_000) // cap: 10M sanity check
 
-  const getYIncome = (value: number) => {
-    return paddingTop + chartHeight - (value / maxVal) * chartHeight
+  const maxCollected = Math.max(...cycleData.map(c => c.collected), 1)
+  const maxTarget = validTargets.length > 0 ? Math.max(...validTargets) : 0
+  const rawMax = Math.max(maxCollected, maxTarget)
+  const maxVal = niceMax(rawMax)
+
+  const getYIncome = (value: number) => PT + CH - Math.max(0, Math.min(1, value / maxVal)) * CH
+
+  // Smooth polyline points
+  const collectedPoints = cycleData
+    .map((c, i) => `${getX(i)},${getYIncome(c.collected)}`)
+    .join(' ')
+
+  const areaPoints =
+    `${getX(0)},${PT + CH} ` +
+    collectedPoints +
+    ` ${getX(cycleData.length - 1)},${PT + CH}`
+
+  const targetPoints = cycleData
+    .map((c, i) => {
+      const t = studentCount * c.amount
+      // If target is 0 or insane, use collected as fallback to keep line flat
+      const safeT = t > 0 && t < 10_000_000 ? t : c.collected
+      return `${getX(i)},${getYIncome(safeT)}`
+    })
+    .join(' ')
+
+  // Y-axis ticks — 5 nice steps from 0 to maxVal
+  const TICK_COUNT = 5
+  const incomeTicks = Array.from({ length: TICK_COUNT }, (_, i) =>
+    Math.round((maxVal / (TICK_COUNT - 1)) * i)
+  )
+
+  // ─── Completion Bar Chart ──────────────────────────────────────────
+  const completionRates = cycleData.map(c =>
+    studentCount > 0 ? Math.round((c.paidCount / studentCount) * 100) : 0
+  )
+
+  const getYPercent = (v: number) => PT + CH - (Math.min(100, Math.max(0, v)) / 100) * CH
+  const percentTicks = [0, 25, 50, 75, 100]
+
+  // Bar width: evenly spaced, capped so they don't touch
+  const barW = Math.max(12, Math.min(40, (CW / cycleData.length) * 0.5))
+
+  // ─── Tooltip position clamp (keeps inside SVG) ─────────────────────
+  const tooltipX = (i: number, chartW: number) => {
+    const pct = ((getX(i) - PL) / CW) * 100
+    // Flip tooltip to left side when near right edge
+    return pct > 65 ? 'auto' : `${Math.max(2, (getX(i) / W) * 100 - 20)}%`
+  }
+  const tooltipRight = (i: number) => {
+    const pct = ((getX(i) - PL) / CW) * 100
+    return pct > 65 ? `${Math.max(2, 100 - (getX(i) / W) * 100 - 20)}%` : 'auto'
   }
 
-  // Line & Area points
-  const incomeLinePoints = cycleData.map((c, i) => `${getX(i)},${getYIncome(c.collected)}`).join(' ')
-  const incomeAreaPoints = cycleData.length > 0 
-    ? `${getX(0)},${paddingTop + chartHeight} ` + 
-      incomeLinePoints + 
-      ` ${getX(cycleData.length - 1)},${paddingTop + chartHeight}`
-    : ''
-
-  const targetLinePoints = cycleData.map((c, i) => `${getX(i)},${getYIncome(studentCount * c.amount)}`).join(' ')
-
-  const yIncomeTicks = Array.from({ length: 4 }, (_, i) => (maxVal / 3) * i)
-
-  // 2. Completion Chart Scaling
-  const getYPercent = (value: number) => {
-    return paddingTop + chartHeight - (value / 100) * chartHeight
-  }
-  const completionRates = cycleData.map(c => {
-    const rate = studentCount > 0 ? (c.paidCount / studentCount) * 100 : 0
-    return Math.round(rate)
-  })
-
-  const yPercentTicks = [0, 50, 100]
+  // Check if target is unreliable (all 0 or identical to collected)
+  const targetUnreliable = validTargets.length === 0 || validTargets.every(v => v === maxCollected)
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* 1. Income Trend Chart Card */}
-      <div className="bg-background-secondary border border-border rounded-3xl p-5 shadow-sm flex flex-col justify-between">
-        <div>
-          <div className="flex justify-between items-start mb-2">
-            <div>
-              <h4 className="text-[13.5px] font-bold text-text-primary flex items-center gap-1.5">
-                <TrendingUp className="w-4 h-4 text-brand" />
-                เปรียบเทียบรายรับกับยอดเป้าหมาย
-              </h4>
-              <p className="text-[11px] text-text-muted mt-0.5 font-medium">เส้นรายรับที่จ่ายจริงเทียบกับเป้าหมายตามงวด</p>
-            </div>
-          </div>
-          {/* Legend */}
-          <div className="flex items-center gap-4 text-[10px] font-bold text-text-muted mb-4">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-brand inline-block" />
-              <span>รายรับจริง (Collected)</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-4 h-0.5 border-t border-dashed border-text-muted/60 inline-block" />
-              <span>เป้าหมาย (Target)</span>
-            </div>
-          </div>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      {/* ── 1. Income Trend Line Chart ──────────────────────────────── */}
+      <div className="bg-background-secondary border border-border rounded-2xl p-5 shadow-sm">
+        <div className="mb-3">
+          <h4 className="text-[13px] font-bold text-text-primary flex items-center gap-1.5">
+            <TrendingUp className="w-4 h-4 text-brand" />
+            รายรับจริงเทียบเป้าหมายรายงวด
+          </h4>
+          <p className="text-[11px] text-text-muted mt-0.5">ยอดที่เก็บได้จริงเทียบกับยอดเป้าหมายตามงวด</p>
         </div>
 
-        {/* SVG Canvas Area Chart */}
-        <div className="relative w-full">
-          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
+        {/* Legend */}
+        <div className="flex items-center gap-4 text-[10px] font-semibold text-text-muted mb-3 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-1.5 rounded-full bg-brand inline-block" />
+            <span>รายรับจริง</span>
+          </div>
+          {!targetUnreliable && (
+            <div className="flex items-center gap-1.5">
+              <span className="w-5 border-t border-dashed border-slate-400 inline-block" />
+              <span>เป้าหมาย</span>
+            </div>
+          )}
+          {targetUnreliable && (
+            <div className="flex items-center gap-1 text-amber-500">
+              <AlertTriangle className="w-3 h-3" />
+              <span className="text-[9px]">เป้าหมายไม่พร้อมใช้ (multi-tier)</span>
+            </div>
+          )}
+        </div>
+
+        {/* SVG */}
+        <div className="relative w-full overflow-hidden">
+          <svg
+            viewBox={`0 0 ${W} ${H}`}
+            className="w-full"
+            style={{ height: 'auto', display: 'block' }}
+          >
             <defs>
-              <linearGradient id="incAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#b59410" stopOpacity="0.2" />
+              <linearGradient id="rptAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#b59410" stopOpacity="0.18" />
                 <stop offset="100%" stopColor="#b59410" stopOpacity="0.0" />
               </linearGradient>
+              <clipPath id="rptChartClip">
+                <rect x={PL} y={PT - 4} width={CW} height={CH + 8} />
+              </clipPath>
             </defs>
 
-            {/* Gridlines */}
-            {yIncomeTicks.map((val, i) => {
+            {/* Y-axis ticks + gridlines */}
+            {incomeTicks.map((val, i) => {
               const y = getYIncome(val)
               return (
-                <g key={i} className="opacity-40">
+                <g key={i}>
                   <line
-                    x1={paddingLeft}
-                    y1={y}
-                    x2={width - paddingRight}
-                    y2={y}
+                    x1={PL} y1={y} x2={W - PR} y2={y}
                     stroke="currentColor"
-                    className="text-border"
-                    strokeWidth="0.75"
-                    strokeDasharray="3 3"
+                    className="text-border/50"
+                    strokeWidth={i === 0 ? 1 : 0.75}
+                    strokeDasharray={i === 0 ? undefined : '3 3'}
                   />
                   <text
-                    x={paddingLeft - 6}
-                    y={y + 3}
+                    x={PL - 5} y={y + 3.5}
                     textAnchor="end"
                     fill="currentColor"
-                    className="text-[8.5px] font-black text-text-muted"
+                    className="text-text-muted"
+                    style={{ fontSize: 8.5, fontWeight: 700 }}
                   >
-                    {val >= 1000 ? `฿${Math.round(val / 1000)}k` : `฿${Math.round(val)}`}
+                    {fmtTick(val)}
                   </text>
                 </g>
               )
             })}
 
-            {/* Area */}
-            <polygon points={incomeAreaPoints} fill="url(#incAreaGrad)" />
+            {/* Area fill (clipped) */}
+            <g clipPath="url(#rptChartClip)">
+              <polygon points={areaPoints} fill="url(#rptAreaGrad)" />
+            </g>
 
-            {/* Target Dashed Line */}
-            <polyline
-              points={targetLinePoints}
-              fill="none"
-              stroke="currentColor"
-              className="text-text-muted/50"
-              strokeWidth="1.5"
-              strokeDasharray="4 4"
-            />
+            {/* Target dashed line */}
+            {!targetUnreliable && (
+              <polyline
+                points={targetPoints}
+                fill="none"
+                stroke="#94a3b8"
+                strokeWidth="1.5"
+                strokeDasharray="4 3"
+                clipPath="url(#rptChartClip)"
+              />
+            )}
 
-            {/* Collected Actual Line */}
+            {/* Collected line */}
             <polyline
-              points={incomeLinePoints}
+              points={collectedPoints}
               fill="none"
               stroke="#b59410"
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
+              clipPath="url(#rptChartClip)"
             />
 
-            {/* Data Points hover circles */}
+            {/* Hover circles + invisible hit areas */}
             {cycleData.map((c, i) => {
               const x = getX(i)
               const y = getYIncome(c.collected)
-              const isHovered = hoveredIncomeIdx === i
-
+              const hov = hoveredIncomeIdx === i
               return (
                 <g key={i}>
-                  <circle
-                    cx={x}
-                    cy={y}
-                    r="12"
-                    fill="transparent"
-                    className="cursor-pointer"
+                  <circle cx={x} cy={y} r={14} fill="transparent" className="cursor-pointer"
                     onMouseEnter={() => setHoveredIncomeIdx(i)}
                     onMouseLeave={() => setHoveredIncomeIdx(null)}
                   />
-                  <circle
-                    cx={x}
-                    cy={y}
-                    r={isHovered ? "5" : "3"}
-                    fill="var(--background-secondary, #ffffff)"
+                  <circle cx={x} cy={y} r={hov ? 5.5 : 3.5}
+                    fill="var(--color-background-secondary, #fff)"
                     stroke="#b59410"
-                    strokeWidth={isHovered ? "3" : "1.5"}
-                    className="transition-all duration-100 pointer-events-none"
+                    strokeWidth={hov ? 2.5 : 1.5}
+                    style={{ transition: 'r 80ms, stroke-width 80ms' }}
+                    className="pointer-events-none"
                   />
                 </g>
               )
             })}
 
-            {/* X Labels */}
+            {/* X-axis labels — two-line in SVG */}
             {cycleData.map((c, i) => {
               const x = getX(i)
+              const parts = shortLabel(c).split('\n')
               return (
-                <text
-                  key={i}
-                  x={x}
-                  y={paddingTop + chartHeight + 14}
-                  textAnchor="middle"
-                  fill="currentColor"
-                  className="text-[8.5px] font-bold text-text-muted"
-                >
-                  {c.label ? (c.label.length > 6 ? c.label.substring(0, 5) + '..' : c.label) : (c.title ? (c.title.length > 6 ? c.title.substring(0, 5) + '..' : c.title) : `งวด ${c.period_order || c.week || '?'}`)}
-                </text>
+                <g key={i}>
+                  {parts.map((line, li) => (
+                    <text
+                      key={li}
+                      x={x}
+                      y={PT + CH + 14 + li * 11}
+                      textAnchor="middle"
+                      fill="currentColor"
+                      className="text-text-muted"
+                      style={{ fontSize: 8.5, fontWeight: 600 }}
+                    >
+                      {line}
+                    </text>
+                  ))}
+                </g>
               )
             })}
           </svg>
 
           {/* Floating Tooltip */}
-          {hoveredIncomeIdx !== null && (
-            <div
-              className="absolute z-20 bg-background/95 backdrop-blur-md border border-border rounded-xl p-2.5 shadow-xl transition-all pointer-events-none text-left w-[170px] text-[10.5px] font-bold animate-in fade-in zoom-in-95 duration-100"
-              style={{
-                left: `${Math.min(Math.max(8, (getX(hoveredIncomeIdx) / width) * 100 - 15), 58)}%`,
-                top: `${Math.max(0, (getYIncome(cycleData[hoveredIncomeIdx].collected) / height) * 100 - 38)}%`,
-              }}
-            >
-              <div className="flex items-center gap-1.5 border-b border-border/80 pb-1 mb-1 text-text-primary">
-                <Calendar className="w-3 h-3 text-brand" />
-                <span>{cycleData[hoveredIncomeIdx].label || cycleData[hoveredIncomeIdx].title || `งวดที่ ${cycleData[hoveredIncomeIdx].period_order || cycleData[hoveredIncomeIdx].week || '?'}`}</span>
+          {hoveredIncomeIdx !== null && (() => {
+            const idx = hoveredIncomeIdx
+            const item = cycleData[idx]
+            return (
+              <div
+                className="absolute z-30 bg-background border border-border rounded-xl p-2.5 shadow-xl pointer-events-none text-left text-[10.5px] font-bold"
+                style={{
+                  width: 175,
+                  left: tooltipX(idx, W),
+                  right: tooltipRight(idx),
+                  top: `${Math.max(0, (getYIncome(item.collected) / H) * 100 - 45)}%`,
+                }}
+              >
+                <div className="flex items-center gap-1.5 border-b border-border/70 pb-1 mb-1.5 text-text-primary">
+                  <Calendar className="w-3 h-3 text-brand" />
+                  <span className="truncate">{item.label || item.title || `งวดที่ ${item.period_order ?? item.week}`}</span>
+                </div>
+                <div className="space-y-0.5 font-semibold text-text-secondary">
+                  <div className="flex justify-between gap-2">
+                    <span>รายรับจริง</span>
+                    <span className="text-brand font-extrabold">{formatCurrency(item.collected)}</span>
+                  </div>
+                  {!targetUnreliable && (
+                    <div className="flex justify-between gap-2">
+                      <span>เป้าหมาย</span>
+                      <span className="font-bold text-text-primary">{formatCurrency(studentCount * item.amount)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between gap-2">
+                    <span>ผู้ชำระ</span>
+                    <span className="font-bold text-text-primary">{item.paidCount} / {studentCount} คน</span>
+                  </div>
+                  {(item.rate ?? 0) > 0 && (
+                    <div className="flex justify-between gap-2">
+                      <span>อัตรา</span>
+                      <span className="font-bold text-emerald-600">{item.rate}%</span>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="space-y-0.5 font-semibold text-text-secondary">
-                <div className="flex justify-between">
-                  <span>รายรับจริง:</span>
-                  <span className="text-brand font-extrabold">{formatCurrency(cycleData[hoveredIncomeIdx].collected)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>เป้าหมายยอด:</span>
-                  <span className="text-text-primary font-bold">{formatCurrency(studentCount * cycleData[hoveredIncomeIdx].amount)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>ผู้จ่ายเงิน:</span>
-                  <span className="text-text-primary font-bold">{cycleData[hoveredIncomeIdx].paidCount} / {studentCount} คน</span>
-                </div>
-              </div>
-            </div>
-          )}
+            )
+          })()}
         </div>
       </div>
 
-      {/* 2. Completion Bar Chart Card */}
-      <div className="bg-background-secondary border border-border rounded-3xl p-5 shadow-sm flex flex-col justify-between">
-        <div>
-          <h4 className="text-[13.5px] font-bold text-text-primary flex items-center gap-1.5 mb-0.5">
+      {/* ── 2. Completion Bar Chart ─────────────────────────────────── */}
+      <div className="bg-background-secondary border border-border rounded-2xl p-5 shadow-sm">
+        <div className="mb-3">
+          <h4 className="text-[13px] font-bold text-text-primary flex items-center gap-1.5">
             <Percent className="w-4 h-4 text-emerald-600" />
-            อัตราความคืบหน้าการชำระเงิน (%)
+            อัตราการชำระเงินรายงวด (%)
           </h4>
-          <p className="text-[11px] text-text-muted font-medium mb-4">ร้อยละของนักศึกษาที่ชำระเงินเสร็จสิ้นเปรียบเทียบรายงวด</p>
+          <p className="text-[11px] text-text-muted mt-0.5">ร้อยละของนักศึกษาที่ชำระเงินสำเร็จในแต่ละงวด</p>
         </div>
 
-        {/* SVG Canvas Bar Chart */}
-        <div className="relative w-full">
-          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
+        <div className="relative w-full overflow-hidden">
+          <svg
+            viewBox={`0 0 ${W} ${H}`}
+            className="w-full"
+            style={{ height: 'auto', display: 'block' }}
+          >
             <defs>
-              <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#10b981" stopOpacity="0.95" />
-                <stop offset="100%" stopColor="#059669" stopOpacity="0.75" />
+              <linearGradient id="rptBarGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#10b981" stopOpacity="1" />
+                <stop offset="100%" stopColor="#059669" stopOpacity="0.8" />
+              </linearGradient>
+              <linearGradient id="rptBarGradHov" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#34d399" stopOpacity="1" />
+                <stop offset="100%" stopColor="#10b981" stopOpacity="0.9" />
               </linearGradient>
             </defs>
 
-            {/* Gridlines */}
-            {yPercentTicks.map((val, i) => {
+            {/* Y-axis ticks + gridlines */}
+            {percentTicks.map((val, i) => {
               const y = getYPercent(val)
               return (
-                <g key={i} className="opacity-40">
+                <g key={i}>
                   <line
-                    x1={paddingLeft}
-                    y1={y}
-                    x2={width - paddingRight}
-                    y2={y}
+                    x1={PL} y1={y} x2={W - PR} y2={y}
                     stroke="currentColor"
-                    className="text-border"
-                    strokeWidth="0.75"
-                    strokeDasharray="3 3"
+                    className="text-border/50"
+                    strokeWidth={val === 0 ? 1 : 0.75}
+                    strokeDasharray={val === 0 ? undefined : '3 3'}
                   />
                   <text
-                    x={paddingLeft - 6}
-                    y={y + 3}
+                    x={PL - 5} y={y + 3.5}
                     textAnchor="end"
                     fill="currentColor"
-                    className="text-[8.5px] font-black text-text-muted"
+                    className="text-text-muted"
+                    style={{ fontSize: 8.5, fontWeight: 700 }}
                   >
                     {val}%
                   </text>
@@ -293,113 +382,151 @@ export default function ReportCharts({ cycleData, studentCount }: ReportChartsPr
             {/* Bars */}
             {cycleData.map((c, i) => {
               const xCenter = getX(i)
-              const barWidth = Math.min(26, (chartWidth / cycleData.length) * 0.45)
-              const x = xCenter - barWidth / 2
+              const bx = xCenter - barW / 2
               const rate = completionRates[i]
               const y = getYPercent(rate)
-              const barHeight = Math.max(2, paddingTop + chartHeight - y)
-              const isHovered = hoveredBarIdx === i
+              const bh = Math.max(2, PT + CH - y)
+              const hov = hoveredBarIdx === i
 
               return (
                 <g key={i}>
-                  {/* Invisible Hover Rect */}
+                  {/* Invisible hover area */}
                   <rect
-                    x={xCenter - (chartWidth / cycleData.length) / 2}
-                    y={paddingTop}
-                    width={chartWidth / cycleData.length}
-                    height={chartHeight}
+                    x={xCenter - (CW / cycleData.length) / 2}
+                    y={PT}
+                    width={CW / cycleData.length}
+                    height={CH}
                     fill="transparent"
                     className="cursor-pointer"
                     onMouseEnter={() => setHoveredBarIdx(i)}
                     onMouseLeave={() => setHoveredBarIdx(null)}
                   />
+                  {/* Track (background) */}
+                  <rect
+                    x={bx} y={PT}
+                    width={barW} height={CH}
+                    rx={5} ry={5}
+                    fill="currentColor"
+                    className="text-border/20 pointer-events-none"
+                  />
                   {/* Actual Bar */}
                   <rect
-                    x={x}
-                    y={y}
-                    width={barWidth}
-                    height={barHeight}
-                    rx="4"
-                    ry="4"
-                    fill="url(#barGrad)"
-                    className="transition-all duration-150 pointer-events-none"
-                    style={{
-                      transformOrigin: `${xCenter}px ${paddingTop + chartHeight}px`,
-                      transform: isHovered ? 'scaleX(1.08)' : 'none',
-                    }}
+                    x={bx} y={y}
+                    width={barW} height={bh}
+                    rx={5} ry={5}
+                    fill={hov ? 'url(#rptBarGradHov)' : 'url(#rptBarGrad)'}
+                    style={{ transition: 'fill 100ms' }}
+                    className="pointer-events-none"
                   />
-                  {/* Inline Percentage above bar */}
+                  {/* % label above bar */}
                   <text
                     x={xCenter}
-                    y={y - 5}
+                    y={Math.max(PT + 11, y - 4)}
                     textAnchor="middle"
                     fill="currentColor"
-                    className={`text-[8.5px] font-black transition-all ${isHovered ? 'text-emerald-600 scale-105' : 'text-text-secondary'}`}
+                    className={hov ? 'text-emerald-600' : 'text-text-secondary'}
+                    style={{ fontSize: 8.5, fontWeight: 800, transition: 'fill 100ms' }}
                   >
                     {rate}%
                   </text>
-                  {/* Paid Ratio Label inside/below bar */}
-                  <text
-                    x={xCenter}
-                    y={paddingTop + chartHeight - 4}
-                    textAnchor="middle"
-                    fill="#ffffff"
-                    className="text-[8px] font-black tracking-tighter opacity-90 pointer-events-none select-none"
-                    style={{ display: barHeight > 15 ? 'block' : 'none' }}
-                  >
-                    {c.paidCount}
-                  </text>
+                  {/* paidCount inside bar (only if tall enough) */}
+                  {bh > 18 && (
+                    <text
+                      x={xCenter}
+                      y={PT + CH - 5}
+                      textAnchor="middle"
+                      fill="#ffffff"
+                      style={{ fontSize: 8, fontWeight: 900 }}
+                      className="pointer-events-none select-none opacity-90"
+                    >
+                      {c.paidCount}
+                    </text>
+                  )}
                 </g>
               )
             })}
 
-            {/* X Labels */}
+            {/* X-axis labels */}
             {cycleData.map((c, i) => {
               const x = getX(i)
+              const parts = shortLabel(c).split('\n')
               return (
-                <text
-                  key={i}
-                  x={x}
-                  y={paddingTop + chartHeight + 14}
-                  textAnchor="middle"
-                  fill="currentColor"
-                  className="text-[8.5px] font-bold text-text-muted"
-                >
-                  {c.label ? (c.label.length > 6 ? c.label.substring(0, 5) + '..' : c.label) : (c.title ? (c.title.length > 6 ? c.title.substring(0, 5) + '..' : c.title) : `งวด ${c.period_order || c.week || '?'}`)}
-                </text>
+                <g key={i}>
+                  {parts.map((line, li) => (
+                    <text
+                      key={li}
+                      x={x}
+                      y={PT + CH + 14 + li * 11}
+                      textAnchor="middle"
+                      fill="currentColor"
+                      className="text-text-muted"
+                      style={{ fontSize: 8.5, fontWeight: 600 }}
+                    >
+                      {line}
+                    </text>
+                  ))}
+                </g>
               )
             })}
           </svg>
 
           {/* Floating Tooltip */}
-          {hoveredBarIdx !== null && (
-            <div
-              className="absolute z-20 bg-background/95 backdrop-blur-md border border-border rounded-xl p-2.5 shadow-xl transition-all pointer-events-none text-left w-[170px] text-[10.5px] font-bold animate-in fade-in zoom-in-95 duration-100"
-              style={{
-                left: `${Math.min(Math.max(8, (getX(hoveredBarIdx) / width) * 100 - 15), 58)}%`,
-                top: `${Math.max(0, (getYPercent(completionRates[hoveredBarIdx]) / height) * 100 - 38)}%`,
-              }}
-            >
-              <div className="flex items-center gap-1.5 border-b border-border/80 pb-1 mb-1 text-text-primary">
-                <Info className="w-3.5 h-3.5 text-emerald-600" />
-                <span>{cycleData[hoveredBarIdx].label || cycleData[hoveredBarIdx].title || `งวดที่ ${cycleData[hoveredBarIdx].period_order || cycleData[hoveredBarIdx].week || '?'}`}</span>
+          {hoveredBarIdx !== null && (() => {
+            const idx = hoveredBarIdx
+            const item = cycleData[idx]
+            const rate = completionRates[idx]
+            return (
+              <div
+                className="absolute z-30 bg-background border border-border rounded-xl p-2.5 shadow-xl pointer-events-none text-left text-[10.5px] font-bold"
+                style={{
+                  width: 175,
+                  left: tooltipX(idx, W),
+                  right: tooltipRight(idx),
+                  top: `${Math.max(0, (getYPercent(rate) / H) * 100 - 45)}%`,
+                }}
+              >
+                <div className="flex items-center gap-1.5 border-b border-border/70 pb-1 mb-1.5 text-text-primary">
+                  <Info className="w-3 h-3 text-emerald-600" />
+                  <span className="truncate">{item.label || item.title || `งวดที่ ${item.period_order ?? item.week}`}</span>
+                </div>
+                <div className="space-y-0.5 font-semibold text-text-secondary">
+                  <div className="flex justify-between gap-2">
+                    <span>ชำระแล้ว</span>
+                    <span className="text-emerald-600 font-extrabold">{item.paidCount} คน</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span>ยังไม่ชำระ</span>
+                    <span className="text-red-500 font-bold">{studentCount - item.paidCount} คน</span>
+                  </div>
+                  {(item.pendingCount ?? 0) > 0 && (
+                    <div className="flex justify-between gap-2">
+                      <span>รออนุมัติ</span>
+                      <span className="text-amber-500 font-bold">{item.pendingCount} คน</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between gap-2 pt-0.5 border-t border-border/50 mt-0.5">
+                    <span>อัตราความสำเร็จ</span>
+                    <span className="text-emerald-600 font-extrabold">{rate}%</span>
+                  </div>
+                </div>
               </div>
-              <div className="space-y-0.5 font-semibold text-text-secondary">
-                <div className="flex justify-between">
-                  <span>ผู้จ่ายเงินแล้ว:</span>
-                  <span className="text-emerald-600 font-extrabold">{cycleData[hoveredBarIdx].paidCount} คน</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>ยังไม่ได้ชำระ:</span>
-                  <span className="text-red-500 font-bold">{studentCount - cycleData[hoveredBarIdx].paidCount} คน</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>อัตราความสำเร็จ:</span>
-                  <span className="text-emerald-600 font-bold">{completionRates[hoveredBarIdx]}%</span>
-                </div>
-              </div>
-            </div>
-          )}
+            )
+          })()}
+        </div>
+
+        {/* Summary row below chart */}
+        <div className="mt-3 flex items-center justify-between text-[10.5px] font-semibold text-text-muted border-t border-border/40 pt-3">
+          <span>ทั้งหมด {studentCount} คน</span>
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1 text-emerald-600">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+              เฉลี่ย {completionRates.length > 0 ? Math.round(completionRates.reduce((s, r) => s + r, 0) / completionRates.length) : 0}%
+            </span>
+            <span className="flex items-center gap-1 text-brand">
+              <span className="w-2 h-2 rounded-full bg-brand inline-block" />
+              สูงสุด {completionRates.length > 0 ? Math.max(...completionRates) : 0}%
+            </span>
+          </div>
         </div>
       </div>
     </div>
