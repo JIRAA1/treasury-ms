@@ -300,35 +300,34 @@ export default function UploadPage() {
                   )}
                 </div>
 
-                {/* QR Code — prominent card style */}
+                {/* QR Code — compact horizontal card */}
                 {selectedCycle.qr_url && !isWindowLocked && (
-                  <div className="mb-5 overflow-hidden rounded-2xl border border-emerald-100 shadow-lg shadow-emerald-500/5">
-                    {/* Header */}
-                    <div className="gradient-emerald px-4 py-3 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <QrCode className="w-4 h-4 text-white/80" />
-                        <span className="text-[12px] font-black text-white uppercase tracking-widest">QR โอนเงิน</span>
+                  <div className="mb-5 overflow-hidden rounded-2xl shadow-md shadow-emerald-500/10"
+                    style={{ background: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)' }}>
+                    <div className="flex items-center gap-3 p-3">
+                      {/* QR image — compact */}
+                      <div className="shrink-0 bg-white rounded-xl p-1.5 shadow-sm ring-1 ring-white/30">
+                        <img
+                          src={selectedCycle.qr_url}
+                          alt={`QR Code สำหรับ${selectedCycle.label}`}
+                          className="w-24 h-24 object-contain"
+                        />
                       </div>
-                      <span className="text-[11px] font-bold text-white/60">สแกนก่อนส่งสลิป</span>
-                    </div>
-                    {/* QR image */}
-                    <div className="bg-white flex flex-col items-center gap-3 py-5 px-4">
-                      <img
-                        src={selectedCycle.qr_url}
-                        alt={`QR Code สำหรับ${selectedCycle.label}`}
-                        className="w-44 h-44 object-contain rounded-xl ring-1 ring-border"
-                      />
-                      <div className="text-center">
-                        <div className="text-[22px] font-black text-text-primary tracking-tight">
+                      {/* Info side */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <QrCode className="w-3 h-3 text-white/70 shrink-0" />
+                          <span className="text-[10px] font-black text-white/70 uppercase tracking-widest">QR โอนเงิน</span>
+                        </div>
+                        <div className="text-[22px] font-black text-white leading-none tracking-tight">
                           ฿{selectedCycle.amount.toLocaleString()}
                         </div>
-                        <div className="text-[11px] text-text-muted mt-0.5">ยอดที่ต้องโอน — {selectedCycle.label}</div>
+                        <div className="text-[11px] text-white/70 mt-0.5 truncate">{selectedCycle.label}</div>
+                        <div className="mt-2.5 flex items-center gap-1.5 bg-white/15 backdrop-blur-sm rounded-lg px-2.5 py-1.5 w-fit">
+                          <Upload className="w-3 h-3 text-white/80 shrink-0" />
+                          <span className="text-[10.5px] text-white font-semibold">โอนแล้ว? ส่งสลิปด้านล่าง</span>
+                        </div>
                       </div>
-                    </div>
-                    {/* Footer hint */}
-                    <div className="bg-emerald-50 border-t border-emerald-100 px-4 py-2.5 flex items-center justify-center gap-2">
-                      <Upload className="w-3 h-3 text-emerald-600" />
-                      <span className="text-[11px] text-emerald-700 font-semibold">โอนเงินแล้ว? ส่งสลิปด้านล่างได้เลย</span>
                     </div>
                   </div>
                 )}
