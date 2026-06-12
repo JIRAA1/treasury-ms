@@ -51,11 +51,17 @@ export function getPaymentStatus(status: string) {
   }
 }
 
-// ─── Tier System ────────────────────────────────────────────
+// ─── Tier System ────────────────────────────────────────────────────────
 
+/**
+ * TIER_CONFIGS — สำหรับ UI styling (color, label, description) เท่านั้น
+ *
+ * ⚠️  ไม่มีการ hardcode amount ในนี้แล้ว
+ * ค่าจริงที่ใช้คำนวณต้องดึงจาก system_settings:
+ *   - `tier_a_amount` / `tier_b_amount` / `tier_c_amount`
+ */
 const TIER_CONFIGS: Record<TierType, TierConfig> = {
   A: {
-    amount: 60,
     label: "เทียร์ A",
     description: "สมทบพิเศษ ช่วยเพื่อน",
     color: "text-emerald-700",
@@ -63,7 +69,6 @@ const TIER_CONFIGS: Record<TierType, TierConfig> = {
     border: "border-emerald-200",
   },
   B: {
-    amount: 50,
     label: "เทียร์ B",
     description: "ค่าบำรุงมาตรฐาน",
     color: "text-text-secondary",
@@ -71,7 +76,6 @@ const TIER_CONFIGS: Record<TierType, TierConfig> = {
     border: "border-border",
   },
   C: {
-    amount: 30,
     label: "เทียร์ C",
     description: "ลดหย่อนชั่วคราว",
     color: "text-amber-700",
@@ -80,25 +84,9 @@ const TIER_CONFIGS: Record<TierType, TierConfig> = {
   },
 }
 
-/** จำนวนเงินต่ออาทิตย์ตาม tier */
-export function getTierAmount(tier: TierType): number {
-  return TIER_CONFIGS[tier]?.amount ?? 50
-}
-
 /** รายละเอียด tier สำหรับ UI */
 export function getTierConfig(tier: TierType): TierConfig {
   return TIER_CONFIGS[tier] ?? TIER_CONFIGS.B
-}
-
-/** คำนวณยอดรวมที่ควรเก็บได้ต่ออาทิตย์จากนักศึกษาทั้งหมด */
-export function getWeeklyTotalExpected(
-  students: Pick<User, "tier">[],
-  activityExtra = 0,
-  isSeparateCollection = false
-): number {
-  const base = students.reduce((sum, s) => sum + getTierAmount(s.tier), 0)
-  const extra = isSeparateCollection ? 0 : activityExtra * students.length
-  return base + extra
 }
 
 /** label สำหรับ credit status */

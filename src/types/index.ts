@@ -139,7 +139,7 @@ export interface DashboardStats {
 export type TierType = 'A' | 'B' | 'C'
 
 export interface TierConfig {
-  amount: number
+  amount?: number
   label: string
   description: string
   color: string

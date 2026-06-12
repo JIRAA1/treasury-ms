@@ -143,7 +143,7 @@ export default function StudentDashboard({
                   </span>
                   {(() => {
                     const tierCfg = getTierConfig(profile?.tier ?? 'B')
-                    const amountVal = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierCfg.amount
+                    const amountVal = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
                     return (
                       <span className="text-[9px] font-black px-2.5 py-1 rounded-lg border border-white/10 bg-white/5 text-white/60">
                         Tier {profile?.tier ?? 'B'} · ฿{amountVal}/สัปดาห์

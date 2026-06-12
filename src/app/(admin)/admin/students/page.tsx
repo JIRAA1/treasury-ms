@@ -27,12 +27,14 @@ function ChangeTierModal({
   student,
   tierCCount,
   tierCQuota,
+  tierAmounts,
   onClose,
   onSuccess,
 }: {
   student: Student
   tierCCount: number
   tierCQuota: number
+  tierAmounts: { A: number; B: number; C: number }
   onClose: () => void
   onSuccess: () => void
 }) {
@@ -71,9 +73,9 @@ function ChangeTierModal({
 
   const tiers: TierType[] = ['A', 'B', 'C']
   const tierDescriptions = {
-    A: 'สมทบพิเศษ — ฿60/สัปดาห์',
-    B: 'มาตรฐาน — ฿50/สัปดาห์',
-    C: 'ลดหย่อนชั่วคราว — ฿30/สัปดาห์',
+    A: `สมทบพิเศษ — ฿${tierAmounts.A.toLocaleString()}/งวด`,
+    B: `มาตรฐาน — ฿${tierAmounts.B.toLocaleString()}/งวด`,
+    C: `ลดหย่อนชั่วคราว — ฿${tierAmounts.C.toLocaleString()}/งวด`,
   }
 
   return (
@@ -169,6 +171,7 @@ export default function AdminStudentsPage() {
   const [filter, setFilter] = useState<'all' | 'paid' | 'unpaid' | 'pending' | 'A' | 'B' | 'C'>('all')
   const [totalCycles, setTotalCycles] = useState(0)
   const [tierCQuota, setTierCQuota] = useState(5)
+  const [tierAmounts, setTierAmounts] = useState({ A: 60, B: 50, C: 30 })
   const supabase = useMemo(() => createClient(), [])
 
   const fetchData = useCallback(async () => {
@@ -179,11 +182,24 @@ export default function AdminStudentsPage() {
         { data: semesters },
       ] = await Promise.all([
         supabase.from('users').select('id, fullname, student_id, line_user_id, tier, tier_note').eq('role', 'student'),
-        supabase.from('system_settings').select('key, value').eq('key', 'tier_c_max_quota'),
+        supabase.from('system_settings').select('key, value').in('key', [
+          'tier_c_max_quota',
+          'tier_a_amount',
+          'tier_b_amount',
+          'tier_c_amount',
+        ]),
         supabase.from('semesters').select('id').eq('is_active', true).maybeSingle(),
       ])
 
-      setTierCQuota(parseInt(sysSettings?.[0]?.value ?? '5', 10))
+      const getSetting = (key: string, fallback: string) =>
+        sysSettings?.find((s) => s.key === key)?.value ?? fallback
+
+      setTierCQuota(parseInt(getSetting('tier_c_max_quota', '5'), 10))
+      setTierAmounts({
+        A: parseFloat(getSetting('tier_a_amount', '60')),
+        B: parseFloat(getSetting('tier_b_amount', '50')),
+        C: parseFloat(getSetting('tier_c_amount', '30')),
+      })
 
       const activeSemesterId = (semesters as any)?.id as string | undefined
 
@@ -480,6 +496,7 @@ export default function AdminStudentsPage() {
           student={changeTierStudent}
           tierCCount={tierCCount}
           tierCQuota={tierCQuota}
+          tierAmounts={tierAmounts}
           onClose={() => setChangeTierStudent(null)}
           onSuccess={() => { setChangeTierStudent(null); fetchData() }}
         />
