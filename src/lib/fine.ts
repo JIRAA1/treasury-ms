@@ -64,7 +64,7 @@ export function calculateLateFine(
     }
     case 'daily': {
       const msPerDay = 1000 * 60 * 60 * 24
-      const daysLate = Math.floor((now.getTime() - graceEnd.getTime()) / msPerDay)
+      const daysLate = Math.ceil((now.getTime() - graceEnd.getTime()) / msPerDay)
       fine = daysLate * (period.fine_rate ?? 0)
       break
     }

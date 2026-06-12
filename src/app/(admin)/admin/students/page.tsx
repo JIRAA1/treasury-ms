@@ -175,31 +175,41 @@ export default function AdminStudentsPage() {
     try {
       const [
         { data: users },
-        { data: payments },
         { data: sysSettings },
         { data: semesters },
       ] = await Promise.all([
         supabase.from('users').select('id, fullname, student_id, line_user_id, tier, tier_note').eq('role', 'student'),
-        supabase.from('payments').select('user_id, status'),
         supabase.from('system_settings').select('key, value').eq('key', 'tier_c_max_quota'),
         supabase.from('semesters').select('id').eq('is_active', true).maybeSingle(),
       ])
 
       setTierCQuota(parseInt(sysSettings?.[0]?.value ?? '5', 10))
 
+      const activeSemesterId = (semesters as any)?.id as string | undefined
+
       // Count periods in active semester
       let periodCount = 0
-      if ((semesters as any)?.id) {
+      if (activeSemesterId) {
         const { count } = await supabase
           .from('periods')
           .select('*', { count: 'exact', head: true })
-          .eq('semester_id', (semesters as any).id)
+          .eq('semester_id', activeSemesterId)
         periodCount = count ?? 0
       }
       setTotalCycles(periodCount)
 
+      // Only count payments that belong to the active semester (join via periods)
+      let payments: { user_id: string; status: string }[] = []
+      if (activeSemesterId) {
+        const { data: semesterPayments } = await supabase
+          .from('payments')
+          .select('user_id, status, period:period_id!inner(semester_id)')
+          .eq('period.semester_id', activeSemesterId)
+        payments = (semesterPayments ?? []) as { user_id: string; status: string }[]
+      }
+
       const studentData = (users || []).map((u) => {
-        const userPayments = payments?.filter((p) => p.user_id === u.id) || []
+        const userPayments = payments.filter((p) => p.user_id === u.id)
         return {
           ...u,
           tier: (u.tier ?? 'B') as TierType,

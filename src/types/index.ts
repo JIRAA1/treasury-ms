@@ -44,26 +44,12 @@ export interface Period {
   semester?: Semester
 }
 
-export interface WeekSetting {
-  week: number
-  title: string
-  deadline: string
-  amount: number
-  base_amount: number
-  start_date: string
-  qr_url: string | null
-  payment_open_at: string | null
-  payment_close_at: string | null
-  activity_type: 'small' | 'medium' | 'large' | null
-  activity_extra_amount: number
-  is_separate_collection: boolean
-}
+// WeekSetting interface removed — replaced by Period-based system
 
 export interface PaymentCredit {
   id: string
   user_id: string
   period_id: string | null
-  week: number
   amount: number
   status: 'pending' | 'repaid' | 'forgiven'
   repaid_at: string | null
@@ -80,7 +66,6 @@ export interface Payment {
   id: string
   user_id: string
   period_id: string | null
-  week: number
   amount: number
   trans_ref: string | null
   slip_url: string | null

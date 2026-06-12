@@ -155,7 +155,16 @@ export default async function AdminReportsPage({
         </div>
 
         {/* Charts */}
-        <ReportCharts cycleData={cycleData} studentCount={students?.length || 0} />
+        <ReportCharts
+          cycleData={cycleData}
+          studentCount={students?.length || 0}
+          tierBreakdown={{ A: tierACount, B: tierBCount, C: tierCCount }}
+          tierAmounts={{
+            A: tierSettings.A || 0,
+            B: tierSettings.B || 0,
+            C: tierSettings.C || 0,
+          }}
+        />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Cycle Summary */}

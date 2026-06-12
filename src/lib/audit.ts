@@ -22,6 +22,7 @@ type AuditAction =
   | 'credit_forgiven'
   | 'semester_created'
   | 'semester_activated'
+  | 'semester_closed'
   | 'semester_deleted'
   | 'period_created'
   | 'periods_batch_updated'

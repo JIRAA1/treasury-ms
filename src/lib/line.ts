@@ -88,7 +88,7 @@ export async function sendOTP(to: string, otp: string) {
   })
 }
 
-export async function sendPaymentApproved(to: string, cycleTitle: string, amount: number, date: string) {
+export async function sendPaymentApproved(to: string, periodLabel: string, amount: number, date: string) {
   return await fetch(`${LINE_API}/push`, {
     method: 'POST',
     headers,
@@ -122,7 +122,7 @@ export async function sendPaymentApproved(to: string, cycleTitle: string, amount
                     spacing: 'sm',
                     contents: [
                       { type: 'text', text: 'รายการ', color: '#8e8e93', size: 'sm', flex: 2 },
-                      { type: 'text', text: cycleTitle, wrap: true, color: '#0f172a', size: 'sm', flex: 4, align: 'end', weight: 'bold' }
+                      { type: 'text', text: periodLabel, wrap: true, color: '#0f172a', size: 'sm', flex: 4, align: 'end', weight: 'bold' }
                     ]
                   },
                   {
@@ -243,11 +243,13 @@ export async function sendAdminAlert(to: string, title: string, details: string[
 
 export async function sendPaymentReminder(
   to: string,
-  cycleTitle: string,
+  periodLabel: string,
   amount: number,
   deadline: string,
   openDate?: string,
-  closeDate?: string
+  closeDate?: string,
+  /** ค่าปรับสะสม ณ ปัจจุบัน (บาท) — ถ้าส่งมาจะแสดงในการแจ้งเตือน */
+  fineAmount?: number
 ) {
   const timeContents: object[] = []
   if (openDate) {
@@ -284,6 +286,24 @@ export async function sendPaymentReminder(
     })
   }
 
+  // Fine amount section (shown only when fineAmount > 0)
+  const fineContents: object[] = fineAmount && fineAmount > 0 ? [
+    { type: 'separator', margin: 'lg' },
+    {
+      type: 'box',
+      layout: 'vertical',
+      margin: 'md',
+      paddingAll: 'md',
+      backgroundColor: '#fef3c7',
+      cornerRadius: 'md',
+      contents: [
+        { type: 'text', text: '⚠️ ค่าปรับสะสม ณ วันนี้', color: '#92400e', size: 'xs', weight: 'bold' },
+        { type: 'text', text: `฿${fineAmount.toLocaleString()}`, color: '#b45309', size: 'lg', weight: 'bold', margin: 'xs', align: 'center' },
+        { type: 'text', text: 'ยิ่งช้ายิ่งเสียเพิ่ม — ชำระเร็ว ๆ นี้!', size: 'xxs', color: '#92400e', margin: 'xs', align: 'center' }
+      ]
+    }
+  ] : []
+
   return await fetch(`${LINE_API}/push`, {
     method: 'POST',
     headers,
@@ -291,7 +311,7 @@ export async function sendPaymentReminder(
       to,
       messages: [{
         type: 'flex',
-        altText: `แจ้งเตือน: ยอดค้างชำระ ${cycleTitle} ฿${amount.toLocaleString()}`,
+        altText: `แจ้งเตือน: ยอดค้างชำระ ${periodLabel} ฿${amount.toLocaleString()}${fineAmount && fineAmount > 0 ? ` + ค่าปรับ ฿${fineAmount.toLocaleString()}` : ''}`,
         contents: {
           type: 'bubble',
           styles: { header: { backgroundColor: '#b59410' } },
@@ -305,7 +325,7 @@ export async function sendPaymentReminder(
             layout: 'vertical',
             contents: [
               { type: 'text', text: 'แจ้งเตือนยอดค้างชำระ', weight: 'bold', color: '#b59410', size: 'sm' },
-              { type: 'text', text: cycleTitle, weight: 'bold', size: 'xl', margin: 'md', color: '#0f172a' },
+              { type: 'text', text: periodLabel, weight: 'bold', size: 'xl', margin: 'md', color: '#0f172a' },
               {
                 type: 'box',
                 layout: 'vertical',
@@ -324,6 +344,7 @@ export async function sendPaymentReminder(
                   ...timeContents as any
                 ]
               },
+              ...fineContents as any,
               {
                 type: 'button',
                 action: { type: 'uri', label: 'ส่งสลิปหลักฐานการโอน', uri: `${process.env.NEXT_PUBLIC_APP_URL}/student/upload` },
@@ -341,17 +362,27 @@ export async function sendPaymentReminder(
   })
 }
 
-export async function sendBulkReminder(students: { lineUserId: string; cycleTitle: string; amount: number; deadline: string; openDate?: string; closeDate?: string }[]): Promise<boolean[]> {
+export async function sendBulkReminder(students: {
+  lineUserId: string
+  periodLabel: string
+  amount: number
+  deadline: string
+  openDate?: string
+  closeDate?: string
+  /** ค่าปรับ ณ ปัจจุบัน (บาท) */
+  fineAmount?: number
+}[]): Promise<boolean[]> {
   const results: boolean[] = []
   for (const student of students) {
     try {
       const res = await sendPaymentReminder(
         student.lineUserId,
-        student.cycleTitle,
+        student.periodLabel,
         student.amount,
         student.deadline,
         student.openDate,
-        student.closeDate
+        student.closeDate,
+        student.fineAmount
       )
       if (!res.ok) {
         const err = await res.json()

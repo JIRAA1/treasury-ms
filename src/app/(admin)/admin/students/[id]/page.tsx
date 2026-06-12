@@ -91,13 +91,22 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
         title={student.fullname}
         subtitle={`รหัสนักศึกษา: ${student.student_id}`}
         actions={
-          <Link
-            href="/admin/students"
-            className="flex items-center gap-1.5 border border-border-strong bg-background text-[12.5px] font-medium px-3 py-1.5 rounded-lg hover:bg-background-secondary transition-colors"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            กลับ
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/admin/students/${id}/statement`}
+              className="flex items-center gap-1.5 border border-border-strong bg-background text-[12.5px] font-medium px-3 py-1.5 rounded-lg hover:bg-background-secondary transition-colors"
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              ใบแจ้งหนี้
+            </Link>
+            <Link
+              href="/admin/students"
+              className="flex items-center gap-1.5 border border-border-strong bg-background text-[12.5px] font-medium px-3 py-1.5 rounded-lg hover:bg-background-secondary transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              กลับ
+            </Link>
+          </div>
         }
       />
 

@@ -19,6 +19,10 @@ interface CycleDataItem {
 interface ReportChartsProps {
   cycleData: CycleDataItem[]
   studentCount: number
+  /** จำนวนนักศึกษาแยกตาม Tier — ถ้าส่งมาจะใช้คำนวณเส้นเป้าหมายที่แม่นยำขึ้น */
+  tierBreakdown?: { A: number; B: number; C: number }
+  /** จำนวนเงินต่องวดของแต่ละ Tier (บาท) */
+  tierAmounts?: { A: number; B: number; C: number }
 }
 
 /** Smart number formatter for Y-axis ticks */
@@ -46,7 +50,7 @@ function niceMax(val: number): number {
   return Math.ceil(val / magnitude) * magnitude
 }
 
-export default function ReportCharts({ cycleData, studentCount }: ReportChartsProps) {
+export default function ReportCharts({ cycleData, studentCount, tierBreakdown, tierAmounts }: ReportChartsProps) {
   const [hoveredIncomeIdx, setHoveredIncomeIdx] = useState<number | null>(null)
   const [hoveredBarIdx, setHoveredBarIdx] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -71,9 +75,25 @@ export default function ReportCharts({ cycleData, studentCount }: ReportChartsPr
   }
 
   // ─── Income Chart ─────────────────────────────────────────────────
+  /**
+   * คำนวณเป้าหมายต่องวด:
+   * - ถ้ามี tierBreakdown + tierAmounts → ใช้ weighted sum (A×amtA + B×amtB + C×amtC)
+   * - ถ้าไม่มี → fallback เป็น studentCount × period.amount (legacy)
+   */
+  const calcPeriodTarget = (periodBaseAmount: number): number => {
+    if (tierBreakdown && tierAmounts) {
+      return (
+        tierBreakdown.A * tierAmounts.A +
+        tierBreakdown.B * tierAmounts.B +
+        tierBreakdown.C * tierAmounts.C
+      )
+    }
+    return studentCount * periodBaseAmount
+  }
+
   // Filter out absurd target values caused by wrong period.amount
   const validTargets = cycleData
-    .map(c => studentCount * c.amount)
+    .map(c => calcPeriodTarget(c.amount))
     .filter(v => v > 0 && v < 10_000_000) // cap: 10M sanity check
 
   const maxCollected = Math.max(...cycleData.map(c => c.collected), 1)
@@ -95,7 +115,7 @@ export default function ReportCharts({ cycleData, studentCount }: ReportChartsPr
 
   const targetPoints = cycleData
     .map((c, i) => {
-      const t = studentCount * c.amount
+      const t = calcPeriodTarget(c.amount)
       // If target is 0 or insane, use collected as fallback to keep line flat
       const safeT = t > 0 && t < 10_000_000 ? t : c.collected
       return `${getX(i)},${getYIncome(safeT)}`
@@ -133,8 +153,10 @@ export default function ReportCharts({ cycleData, studentCount }: ReportChartsPr
     return pct > 65 ? `${Math.max(2, 100 - (getX(i) / W) * 100 - 20)}%` : 'auto'
   }
 
-  // Check if target is unreliable (all 0 or identical to collected)
-  const targetUnreliable = validTargets.length === 0 || validTargets.every(v => v === maxCollected)
+  // Check if target is unreliable (all 0, or no tier data AND identical to collected)
+  const targetUnreliable =
+    validTargets.length === 0 ||
+    (!tierBreakdown && validTargets.every(v => v === maxCollected))
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -310,7 +332,7 @@ export default function ReportCharts({ cycleData, studentCount }: ReportChartsPr
                   {!targetUnreliable && (
                     <div className="flex justify-between gap-2">
                       <span>เป้าหมาย</span>
-                      <span className="font-bold text-text-primary">{formatCurrency(studentCount * item.amount)}</span>
+                      <span className="font-bold text-text-primary">{formatCurrency(calcPeriodTarget(item.amount))}</span>
                     </div>
                   )}
                   <div className="flex justify-between gap-2">

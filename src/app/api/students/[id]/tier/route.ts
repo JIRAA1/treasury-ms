@@ -28,7 +28,10 @@ export async function PATCH(req: Request, { params }: Params) {
 
   const admin = createAdminClient()
 
-  // Check Tier C quota
+  // Fetch old value for audit
+  const { data: oldUser } = await supabase.from('users').select('tier, tier_note').eq('id', id).single()
+
+  // Handle Tier C assignment via atomic RPC to prevent race condition
   if (tier === 'C') {
     const { data: settings } = await supabase
       .from('system_settings')
@@ -37,25 +40,47 @@ export async function PATCH(req: Request, { params }: Params) {
       .single()
     const maxQuota = parseInt(settings?.value ?? '5', 10)
 
-    const { count } = await supabase
-      .from('users')
-      .select('*', { count: 'exact', head: true })
-      .eq('tier', 'C')
-      .eq('role', 'student')
-      .neq('id', id) // ไม่นับคนนี้ (กรณีเปลี่ยน tier ของคนที่เป็น C อยู่แล้ว)
+    // Use atomic DB function — checks quota and updates in a single transaction
+    const { data: assigned, error: rpcError } = await admin.rpc('assign_tier_c_safe', {
+      p_user_id: id,
+      p_max_quota: maxQuota,
+    })
 
-    if ((count ?? 0) >= maxQuota) {
+    if (rpcError) {
+      return NextResponse.json({ error: rpcError.message }, { status: 500 })
+    }
+
+    if (!assigned) {
       return NextResponse.json(
         { error: `โควต้าเทียร์ C เต็มแล้ว (สูงสุด ${maxQuota} คน)` },
         { status: 422 }
       )
     }
+
+    // Update tier_note separately (RPC only sets tier = 'C')
+    if (tier_note !== undefined) {
+      await admin.from('users').update({ tier_note: tier_note ?? null }).eq('id', id)
+    }
+
+    // Fetch updated user for response
+    const { data: updated } = await admin
+      .from('users')
+      .select('id, fullname, student_id, tier, tier_note')
+      .eq('id', id)
+      .single()
+
+    await logAction(supabase, {
+      actorId: actor.id,
+      action: 'tier_changed',
+      targetId: id,
+      oldValue: oldUser ?? undefined,
+      newValue: { tier, tier_note },
+    })
+
+    return NextResponse.json({ user: updated })
   }
 
-  // Fetch old value for audit
-  const { data: oldUser } = await supabase.from('users').select('tier, tier_note').eq('id', id).single()
-
-  // Update tier
+  // For Tier A or B — direct update (no quota concern)
   const { data: updated, error } = await admin
     .from('users')
     .update({ tier, tier_note: tier_note ?? null })

@@ -143,11 +143,13 @@ export async function POST(request: NextRequest) {
       const studentAmount = tierAmounts[s.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
       return { 
         lineUserId: s.line_user_id!, 
-        cycleTitle,
+        periodLabel: cycleTitle,
         amount: studentAmount,
         deadline,
         openDate: cycleSetting.open_at ? thaiDateStr(cycleSetting.open_at) : undefined,
         closeDate: cycleSetting.close_at ? thaiDateStr(cycleSetting.close_at) : undefined,
+        // fineAmount ไม่ได้คำนวณใน bulk reminder (ขึ้นกับ tier+วันที่จ่ายจริงของแต่ละคน)
+        // สามารถเพิ่มในอนาคตโดยคำนวณ calculateLateFine() ต่อคน
       }
     }))
     
