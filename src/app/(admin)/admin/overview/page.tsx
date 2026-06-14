@@ -68,7 +68,7 @@ export default async function AdminOverviewPage() {
     .limit(5)
 
   const periodRates = await Promise.all(
-    (recentPeriods ?? []).reverse().map(async (p) => {
+    [...(recentPeriods ?? [])].reverse().map(async (p) => {
       const { data } = await supabase.rpc('get_period_collection_rate', { target_period_id: p.id })
       return { id: p.id, label: p.label, rate: data ?? 0 }
     })

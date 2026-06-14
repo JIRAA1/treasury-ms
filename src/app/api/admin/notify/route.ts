@@ -107,27 +107,30 @@ export async function POST(request: NextRequest) {
     })
 
     // 3. Final list of unpaid students for the selected period
-    const { data: finalPaid } = await adminClient
-      .from('payments')
-      .select('user_id')
-      .eq('period_id', period_id!)
-      .in('status', ['approved', 'pending'])
+    //    Fetch payments & credits in parallel — credit holders are NOT sent reminders
+    const [{ data: finalPaid }, { data: pendingCredits }] = await Promise.all([
+      adminClient
+        .from('payments')
+        .select('user_id')
+        .eq('period_id', period_id!)
+        .in('status', ['approved', 'pending']),
+      adminClient
+        .from('payment_credits')
+        .select('user_id')
+        .eq('period_id', period_id!)
+        .eq('status', 'pending'),
+    ])
 
     const finalPaidIds = new Set(finalPaid?.map(p => p.user_id) || [])
-    const unpaidStudents = (students ?? []).filter((s) => !finalPaidIds.has(s.id))
+    // Students with an active credit for this period are already "handled" — skip them
+    const pendingCreditUserIds = new Set(pendingCredits?.map(c => c.user_id) || [])
+    const handledIds = new Set([...finalPaidIds, ...pendingCreditUserIds])
+
+    const unpaidStudents = (students ?? []).filter((s) => !handledIds.has(s.id))
 
     if (unpaidStudents.length === 0) {
       return NextResponse.json({ sent: 0, failed: 0, message: `นักศึกษาทุกคนชำระ "${cycleTitle}" ครบถ้วนแล้ว` })
     }
-
-    // 4. Fetch pending credits for fine exemption check (bulk, per period)
-    const { data: pendingCredits } = await adminClient
-      .from('payment_credits')
-      .select('user_id')
-      .eq('period_id', period_id!)
-      .eq('status', 'pending')
-
-    const pendingCreditUserIds = new Set(pendingCredits?.map(c => c.user_id) || [])
 
     // 5. Send Notifications (In-App & LINE)
     const notifs = unpaidStudents.map(s => ({
