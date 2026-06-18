@@ -77,11 +77,14 @@ export interface Payment {
   period?: Pick<Period, 'label' | 'period_order'> | null
 }
 
+export type ExpenseCategory = 'supplies' | 'activity' | 'food' | 'transport' | 'other'
+
 export interface Expense {
   id: string
   title: string
   description: string | null
   amount: number
+  category: ExpenseCategory
   created_by: string
   approved_by: string | null
   receipt_url: string | null

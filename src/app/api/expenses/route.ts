@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 
   const { data: expense, error } = await supabase
     .from('expenses')
-    .insert({ title, description: description || null, amount, created_by: profile?.id, receipt_url })
+    .insert({ title, description: description || null, amount, category: category || 'other', created_by: profile?.id, receipt_url })
     .select()
     .single()
 

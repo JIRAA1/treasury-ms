@@ -10,6 +10,9 @@ import { Plus, Download } from 'lucide-react'
 import type { Activity } from '@/components/shared/ActivityFeed'
 import NotificationTrigger from '@/components/admin/NotificationTrigger'
 import QuickApproveButton from '@/components/admin/QuickApproveButton'
+import ExpenseDonutChart from '@/components/charts/ExpenseDonutChart'
+import CashFlowTrendChart from '@/components/charts/CashFlowTrendChart'
+import type { ExpenseCategory } from '@/types'
 
 export const metadata = { title: 'ภาพรวม — TreasuryMS Admin' }
 
@@ -75,6 +78,56 @@ export default async function AdminOverviewPage() {
   )
 
   const monthlyExpenseTotal = (monthExpenses ?? []).reduce((s, e) => s + e.amount, 0)
+
+  // ── Chart data: Expense breakdown by category ──────────────────────────
+  const { data: allExpenses } = await supabase
+    .from('expenses')
+    .select('amount, category')
+    .not('approved_by', 'is', null)
+
+  const EXPENSE_CATS: ExpenseCategory[] = ['activity', 'supplies', 'food', 'transport', 'other']
+  const categoryTotals = EXPENSE_CATS.map((cat) => ({
+    category: cat,
+    amount: (allExpenses ?? []).filter((e: any) => (e.category ?? 'other') === cat).reduce((s: number, e: any) => s + (e.amount ?? 0), 0),
+  }))
+  const expenseTotalAll = categoryTotals.reduce((s, c) => s + c.amount, 0)
+
+  // ── Chart data: Monthly cash flow (last 6 months) ──────────────────────
+  const sixMonthsAgo = new Date()
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5)
+  sixMonthsAgo.setDate(1)
+  sixMonthsAgo.setHours(0, 0, 0, 0)
+
+  const [{ data: monthPayments }, { data: monthIncomes }, { data: monthExpensesAll }] = await Promise.all([
+    supabase.from('payments').select('amount, verified_at, created_at').eq('status', 'approved').gte('created_at', sixMonthsAgo.toISOString()),
+    supabase.from('incomes').select('amount, created_at').not('approved_by', 'is', null).gte('created_at', sixMonthsAgo.toISOString()),
+    supabase.from('expenses').select('amount, created_at').not('approved_by', 'is', null).gte('created_at', sixMonthsAgo.toISOString()),
+  ])
+
+  const thaiShortMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+  const monthlyTrend = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date()
+    d.setMonth(d.getMonth() - (5 - i))
+    const y = d.getFullYear()
+    const m = d.getMonth()
+    const label = `${thaiShortMonths[m]} ${String(y + 543).slice(-2)}`
+
+    const matchMonth = (dateStr: string) => {
+      const dt = new Date(dateStr)
+      return dt.getFullYear() === y && dt.getMonth() === m
+    }
+
+    const income = [
+      ...(monthPayments ?? []).filter((p: any) => matchMonth(p.verified_at || p.created_at)).map((p: any) => p.amount),
+      ...(monthIncomes ?? []).filter((inc: any) => matchMonth(inc.created_at)).map((inc: any) => inc.amount),
+    ].reduce((s, v) => s + v, 0)
+
+    const expense = (monthExpensesAll ?? [])
+      .filter((e: any) => matchMonth(e.created_at))
+      .reduce((s: number, e: any) => s + (e.amount ?? 0), 0)
+
+    return { month: label, income, expense, balance: income - expense }
+  })
 
   // Map audit logs to Activity feed format
   const activities: Activity[] = (auditLogs ?? []).map((log) => {
@@ -277,6 +330,23 @@ export default async function AdminOverviewPage() {
               <div className="text-[12px] font-semibold text-text-primary mb-3">กิจกรรมล่าสุด</div>
               <ActivityFeed activities={activities.slice(0, 6)} />
             </div>
+          </div>
+        </div>
+
+        {/* Chart Row: Expense Donut + Cash Flow */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Expense Breakdown Donut */}
+          <div className="bg-background-secondary border border-border rounded-xl p-4">
+            <div className="text-[12px] font-semibold text-text-primary mb-1">สัดส่วนรายจ่ายตามหมวดหมู่</div>
+            <div className="text-[9px] text-text-muted mb-4">ค่าใช้จ่ายทั้งหมดที่อนุมัติแล้ว · รวม {formatCurrency(expenseTotalAll)}</div>
+            <ExpenseDonutChart data={categoryTotals} totalAmount={expenseTotalAll} />
+          </div>
+
+          {/* Cash Flow Trend */}
+          <div className="bg-background-secondary border border-border rounded-xl p-4">
+            <div className="text-[12px] font-semibold text-text-primary mb-1">กระแสเงินสด 6 เดือนล่าสุด</div>
+            <div className="text-[9px] text-text-muted mb-4">รายรับ · รายจ่าย · ยอดคงเหลือ (บาท)</div>
+            <CashFlowTrendChart data={monthlyTrend} />
           </div>
         </div>
 

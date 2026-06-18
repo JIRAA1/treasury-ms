@@ -4,6 +4,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import Topbar from '@/components/layout/Topbar'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { FileText, ShieldCheck, TrendingUp } from 'lucide-react'
+import ExpenseDonutChart from '@/components/charts/ExpenseDonutChart'
+import CashFlowTrendChart from '@/components/charts/CashFlowTrendChart'
+import type { ExpenseCategory } from '@/types'
 
 // Force the page to always fetch fresh data
 export const dynamic = 'force-dynamic'
@@ -93,6 +96,56 @@ export default async function TransparencyPage() {
         collected: cyclePayments.reduce((sum, pay) => sum + (pay.amount || 0), 0),
         paidCount: cyclePayments.length,
       }
+    })
+
+    // ── Chart data: Expense by category ──────────────────────────────────
+    const { data: allExpensesWithCat } = await adminClient
+      .from('expenses')
+      .select('amount, category')
+      .not('approved_by', 'is', null)
+
+    const EXPENSE_CATS: ExpenseCategory[] = ['activity', 'supplies', 'food', 'transport', 'other']
+    const categoryTotals = EXPENSE_CATS.map((cat) => ({
+      category: cat,
+      amount: (allExpensesWithCat ?? []).filter((e: any) => (e.category ?? 'other') === cat).reduce((s: number, e: any) => s + (e.amount ?? 0), 0),
+    }))
+    const expenseTotalAll = categoryTotals.reduce((s, c) => s + c.amount, 0)
+
+    // ── Chart data: Monthly cash flow (last 6 months) ────────────────────
+    const sixMonthsAgo = new Date()
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5)
+    sixMonthsAgo.setDate(1)
+    sixMonthsAgo.setHours(0, 0, 0, 0)
+
+    const [{ data: monthPayments }, { data: monthIncomes }, { data: monthExpensesAll }] = await Promise.all([
+      adminClient.from('payments').select('amount, verified_at, created_at').eq('status', 'approved').gte('created_at', sixMonthsAgo.toISOString()),
+      adminClient.from('incomes').select('amount, created_at').not('approved_by', 'is', null).gte('created_at', sixMonthsAgo.toISOString()),
+      adminClient.from('expenses').select('amount, created_at').not('approved_by', 'is', null).gte('created_at', sixMonthsAgo.toISOString()),
+    ])
+
+    const thaiShortMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+    const monthlyTrend = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date()
+      d.setMonth(d.getMonth() - (5 - i))
+      const y = d.getFullYear()
+      const m = d.getMonth()
+      const label = `${thaiShortMonths[m]} ${String(y + 543).slice(-2)}`
+
+      const matchMonth = (dateStr: string) => {
+        const dt = new Date(dateStr)
+        return dt.getFullYear() === y && dt.getMonth() === m
+      }
+
+      const income = [
+        ...(monthPayments ?? []).filter((p: any) => matchMonth(p.verified_at || p.created_at)).map((p: any) => p.amount),
+        ...(monthIncomes ?? []).filter((inc: any) => matchMonth(inc.created_at)).map((inc: any) => inc.amount),
+      ].reduce((s, v) => s + v, 0)
+
+      const expense = (monthExpensesAll ?? [])
+        .filter((e: any) => matchMonth(e.created_at))
+        .reduce((s: number, e: any) => s + (e.amount ?? 0), 0)
+
+      return { month: label, income, expense, balance: income - expense }
     })
 
     return (
@@ -227,6 +280,31 @@ export default async function TransparencyPage() {
               {expenses?.length === 0 && (
                 <div className="p-12 text-center text-text-muted italic">ยังไม่มีรายการค่าใช้จ่าย</div>
               )}
+            </div>
+          </div>
+
+          {/* Charts Section */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8">
+            {/* Expense Breakdown */}
+            <div className="bg-background-secondary border border-border rounded-2xl md:rounded-[2rem] overflow-hidden shadow-sm">
+              <div className="px-6 py-4 border-b border-border bg-background-tertiary/50">
+                <h2 className="font-bold text-text-primary text-[15px]">สัดส่วนรายจ่ายตามหมวดหมู่</h2>
+                <div className="text-[11px] text-text-muted mt-0.5">รวม {formatCurrency(expenseTotalAll)}</div>
+              </div>
+              <div className="p-5">
+                <ExpenseDonutChart data={categoryTotals} totalAmount={expenseTotalAll} />
+              </div>
+            </div>
+
+            {/* Cash Flow Trend */}
+            <div className="bg-background-secondary border border-border rounded-2xl md:rounded-[2rem] overflow-hidden shadow-sm">
+              <div className="px-6 py-4 border-b border-border bg-background-tertiary/50">
+                <h2 className="font-bold text-text-primary text-[15px]">กระแสเงินสด 6 เดือนล่าสุด</h2>
+                <div className="text-[11px] text-text-muted mt-0.5">รายรับ · รายจ่าย · ยอดคงเหลือ</div>
+              </div>
+              <div className="p-4">
+                <CashFlowTrendChart data={monthlyTrend} />
+              </div>
             </div>
           </div>
 

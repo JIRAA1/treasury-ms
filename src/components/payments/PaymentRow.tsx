@@ -1,6 +1,8 @@
 import { cn, formatDate, formatCurrency } from '@/lib/utils'
 import StatusPill from './StatusPill'
 import type { Payment } from '@/types'
+import Link from 'next/link'
+import { FileText } from 'lucide-react'
 
 interface PaymentRowProps {
   payment: Payment
@@ -28,6 +30,19 @@ export default function PaymentRow({ payment, showWeek = true, className }: Paym
         }
         note={payment.note}
       />
+      {payment.status === 'approved' && (
+        <Link
+          href={`/student/history/receipt/${payment.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          id={`btn-receipt-${payment.id}`}
+          title="พิมพ์ / ดาวน์โหลดใบเสร็จ"
+          className="flex-shrink-0 p-1 rounded-lg text-brand hover:bg-brand/10 transition-colors"
+        >
+          <FileText className="w-3.5 h-3.5" />
+        </Link>
+      )}
     </div>
   )
 }
+
