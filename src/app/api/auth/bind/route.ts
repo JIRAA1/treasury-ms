@@ -65,7 +65,15 @@ export async function POST(request: NextRequest) {
   // Store OTP temporarily in a cookie (simple approach)
   cookieStore.set('bind_otp', `${otp}:${student_id}:${expiresAt}`, { httpOnly: true, maxAge: 300, path: '/' })
 
-  await sendOTP(lineUserId, otp)
+  const otpRes = await sendOTP(lineUserId, otp)
+  if (!otpRes.ok) {
+    // Clean up the stored OTP since delivery failed
+    cookieStore.delete('bind_otp')
+    console.error('[Bind] sendOTP failed for lineUserId:', lineUserId, 'status:', otpRes.status)
+    return NextResponse.json({
+      error: 'ไม่สามารถส่ง OTP ไปยัง LINE ของท่านได้ กรุณาตรวจสอบว่าท่านได้เพิ่มเพื่อนกับบัญชี LINE Bot ของเราแล้ว'
+    }, { status: 502 })
+  }
 
   return NextResponse.json({ success: true, message: 'ส่ง OTP แล้ว' })
 }

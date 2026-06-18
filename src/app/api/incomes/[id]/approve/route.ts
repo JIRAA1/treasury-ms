@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { logAction } from '@/lib/audit'
-import { sendLineMessage } from '@/lib/line'
+import { sendMulticastLineMessage } from '@/lib/line'
 
 export async function PATCH(
   request: NextRequest,
@@ -58,11 +58,12 @@ export async function PATCH(
       }))
       await adminClient.from('notifications').insert(notifs)
 
-      // LINE Notifications (Optional: Can be slow if many students, but requested)
-      for (const student of students) {
-        if (student.line_user_id) {
-          await sendLineMessage(student.line_user_id, `${title}\n\n${message}`)
-        }
+      // LINE Notifications (single multicast request — avoids timeout for large classes)
+      const lineIds = students
+        .map((s: any) => s.line_user_id)
+        .filter(Boolean) as string[]
+      if (lineIds.length > 0) {
+        await sendMulticastLineMessage(lineIds, `${title}\n\n${message}`)
       }
     }
   } catch (err) {

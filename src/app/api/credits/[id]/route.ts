@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import { logAction } from '@/lib/audit'
+import { sendLineMessage } from '@/lib/line'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -64,6 +65,29 @@ export async function PATCH(req: Request, { params }: Params) {
     oldValue: { status: 'pending' },
     newValue: { status, repaid_via },
   })
+
+  // Notify the student about their credit resolution
+  const creditUser = (existing.user as any)
+  const statusText = status === 'repaid' ? 'ชำระแล้ว' : 'ยกเว้นให้แล้ว'
+  const notifTitle = status === 'repaid' ? 'ยอดค้างชำระถูกเคลียร์' : 'ยอดค้างถูกยกเว้นให้'
+  const notifMessage = `ยอดค้างชำระ ฿${existing.amount?.toLocaleString?.() ?? existing.amount} ที่เพิ่มโดยเหรัญญิกได้รับการดำเนินการแล้ว (สถานะ: ${statusText})`
+
+  try {
+    await createAdminClient().from('notifications').insert({
+      user_id: existing.user_id,
+      title: notifTitle,
+      message: notifMessage,
+      type: status === 'repaid' ? 'success' : 'info',
+    })
+    if (creditUser?.line_user_id) {
+      await sendLineMessage(
+        creditUser.line_user_id,
+        `💬 ${notifTitle}\n${notifMessage}`
+      )
+    }
+  } catch (e) {
+    console.error('[Credits PATCH] Failed to notify student:', e)
+  }
 
   return NextResponse.json({ credit: updated })
 }

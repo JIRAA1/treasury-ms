@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     action: 'approve' | 'reject' | 'notify_only'
     status?: string
     type?: 'cash_success' | 'manual_change'
-    reason?: string
+    reason?: string // Custom rejection reason from admin
   }
   let body: VerifyBody = { id: '', action: 'approve' }
   const contentType = request.headers.get('content-type') || ''
@@ -35,7 +35,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Missing required fields: id, action' }, { status: 400 })
   }
 
-  const { id, action, status, type } = body
+  const { id, action, status, type, reason } = body
+  const rejectionReason = reason?.trim() || 'สลิปไม่ถูกต้องหรือข้อมูลไม่ครบถ้วน'
 
   // 1. Fetch Payment, User, and Cycle Info
   const { data: payment } = await adminClient
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
     notifType = 'warning'
   } else if (action === 'reject' || status === 'rejected') {
     title = 'สลิปถูกปฏิเสธ'
-    message = `รายการ "${cycleTitle}" ไม่ผ่านการตรวจสอบ กรุณาติดต่อเหรัญญิก`
+    message = `รายการ "${cycleTitle}" ไม่ผ่านการตรวจสอบ\nเหตุผล: ${rejectionReason}`
     notifType = 'error'
   } else if (action === 'approve' || status === 'approved') {
     title = 'ชำระเงินสำเร็จ'
@@ -87,12 +88,14 @@ export async function POST(request: NextRequest) {
   if (student.line_user_id) {
     try {
       if (finalStatus === 'approved') {
-        await sendPaymentApproved(student.line_user_id, cycleTitle, payment.amount, thaiDate)
+        const ok = await sendPaymentApproved(student.line_user_id, cycleTitle, payment.amount, thaiDate)
+        if (!ok) console.error(`[Verify] sendPaymentApproved failed for userId=${student.id}`)
       } else if (finalStatus === 'rejected') {
-        await sendPaymentRejected(student.line_user_id, cycleTitle, 'สลิปไม่ถูกต้องหรือข้อมูลไม่ครบถ้วน')
+        const ok = await sendPaymentRejected(student.line_user_id, cycleTitle, rejectionReason)
+        if (!ok) console.error(`[Verify] sendPaymentRejected failed for userId=${student.id}`)
       }
     } catch (e) {
-      console.error('Failed to send LINE notification:', e)
+      console.error('[Verify] Failed to send LINE notification:', e)
     }
   }
 

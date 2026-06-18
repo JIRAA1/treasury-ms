@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifySlip } from '@/lib/thunder'
 import { logAction } from '@/lib/audit'
 import { extractQRCode } from '@/lib/qr'
-import { sendLineMessage, sendAdminAlert } from '@/lib/line'
+import { sendLineMessage, sendAdminAlert, sendPaymentApproved } from '@/lib/line'
 import { parseSlipQR } from '@/lib/slip-qr'
 import { createHash } from 'crypto'
 import { calculateLateFine } from '@/lib/fine'
@@ -337,13 +337,37 @@ export async function POST(request: NextRequest) {
 
   await logAction({ actorId: profile.id, action: 'payment_uploaded', targetId: payment.id, newValue: paymentData })
 
-  // 8. Notify Success
-  await notifyAdmins('New Slip Received', [
-    `จาก: ${profile.fullname}`,
-    `รหัสนักศึกษา: ${profile.student_id}`,
-    `รายการ: ${cycleTitle}`,
-    `ยอดเงิน: ฿${paymentData.amount.toLocaleString()}`
-  ], 'info')
+  // 8. Notify (auto-approve path vs. normal pending path)
+  if (autoApprove) {
+    // Auto-approved because student had a pending credit — notify them
+    const thaiDate = new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    await adminClient.from('notifications').insert({
+      user_id: profile.id,
+      title: 'ชำระเงินสำเร็จ (หักล้างยอดค้าง)',
+      message: `รายการ "${cycleTitle}" จำนวน ฿${paymentData.amount.toLocaleString()} ได้รับการอนุมัติอัตโนมัติเนื่องจากยอดค้างชำระถูกเคลียร์แล้ว`,
+      type: 'success',
+    })
+    if (profile.line_user_id) {
+      try {
+        await sendPaymentApproved(profile.line_user_id, cycleTitle, paymentData.amount, thaiDate)
+      } catch (e) {
+        console.error('[Upload AutoApprove] Failed to send LINE notification:', e)
+      }
+    }
+    await notifyAdmins('Slip Auto-Approved (Credit)', [
+      `จาก: ${profile.fullname}`,
+      `รหัสนักศึกษา: ${profile.student_id}`,
+      `รายการ: ${cycleTitle}`,
+      `ยอดเงิน: ฿${paymentData.amount.toLocaleString()} (อนุมัติอัตโนมัติ — มียอดค้างชำระ credit)`
+    ], 'info')
+  } else {
+    await notifyAdmins('New Slip Received', [
+      `จาก: ${profile.fullname}`,
+      `รหัสนักศึกษา: ${profile.student_id}`,
+      `รายการ: ${cycleTitle}`,
+      `ยอดเงิน: ฿${paymentData.amount.toLocaleString()}`
+    ], 'info')
+  }
 
   return NextResponse.json({ success: true, payment, ocr: ocrResult })
 }

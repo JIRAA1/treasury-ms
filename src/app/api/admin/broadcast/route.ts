@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
-import { sendLineMessage } from '@/lib/line'
+import { sendLineMessage, sendMulticastLineMessage } from '@/lib/line'
 import { logAction } from '@/lib/audit'
 
 export async function POST(request: NextRequest) {
@@ -65,9 +65,9 @@ export async function POST(request: NextRequest) {
     errors: [] as string[]
   }
 
-  for (const student of targetStudents) {
-    // In-App
-    if (sendInApp) {
+  // In-App — must be per-student (one DB row each)
+  if (sendInApp) {
+    for (const student of targetStudents) {
       const { error: notifError } = await adminClient.from('notifications').insert({
         user_id: student.id,
         title: title || 'ประกาศจากเหรัญญิก',
@@ -77,12 +77,15 @@ export async function POST(request: NextRequest) {
       if (!notifError) results.inApp++
       else results.errors.push(`In-App error for ${student.fullname}: ${notifError.message}`)
     }
+  }
 
-    // LINE
-    if (sendLine && student.line_user_id) {
-      const success = await sendLineMessage(student.line_user_id, message)
-      if (success) results.line++
-      else results.errors.push(`LINE error for ${student.fullname}`)
+  // LINE — single multicast request (avoids per-student sequential awaits & timeout)
+  if (sendLine) {
+    const lineIds = targetStudents.map(s => s.line_user_id).filter(Boolean) as string[]
+    if (lineIds.length > 0) {
+      const ok = await sendMulticastLineMessage(lineIds, message)
+      results.line = ok ? lineIds.length : 0
+      if (!ok) results.errors.push('LINE multicast ไม่สำเร็จ กรุณาตรวจสอบ server logs')
     }
   }
 
