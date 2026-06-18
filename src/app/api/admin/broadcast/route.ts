@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
-import { sendLineMessage, sendMulticastLineMessage } from '@/lib/line'
+import { sendMulticastLineMessage } from '@/lib/line'
 import { logAction } from '@/lib/audit'
 
 export async function POST(request: NextRequest) {

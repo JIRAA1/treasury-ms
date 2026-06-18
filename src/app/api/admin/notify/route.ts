@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
-import { sendBulkReminder, sendLineMessage } from '@/lib/line'
+import { sendBulkReminder, sendMulticastLineMessage } from '@/lib/line'
 import { logAction } from '@/lib/audit'
 import { calculateLateFine } from '@/lib/fine'
 
@@ -185,12 +185,28 @@ export async function POST(request: NextRequest) {
 
   } else if (body.type === 'custom' && body.message) {
     const targetIds = Array.isArray(body.target) ? body.target : []
-    const { data: targets } = await adminClient.from('users').select('id, line_user_id').in('id', targetIds)
-    
-    for (const t of targets ?? []) {
-      if (t.line_user_id) {
-        const ok = await sendLineMessage(t.line_user_id, body.message!)
-        ok ? sent++ : failed++
+    const { data: targets } = await adminClient.from('users').select('id, fullname, line_user_id').in('id', targetIds)
+
+    if (targets && targets.length > 0) {
+      // In-App — one row per student
+      const notifs = targets.map(t => ({
+        user_id: t.id,
+        title: 'ข้อความจากเหรัญญิก',
+        message: body.message!,
+        type: 'info',
+      }))
+      const { error: notifErr } = await adminClient.from('notifications').insert(notifs)
+      if (!notifErr) sent += targets.length
+      else {
+        failed += targets.length
+        console.error('[Notify Custom] In-App insert error:', notifErr.message)
+      }
+
+      // LINE — single multicast request
+      const lineIds = targets.map(t => t.line_user_id).filter(Boolean) as string[]
+      if (lineIds.length > 0) {
+        const ok = await sendMulticastLineMessage(lineIds, body.message!)
+        if (!ok) console.error('[Notify Custom] LINE multicast ไม่สำเร็จ ตรวจสอบ server logs')
       }
     }
   }
