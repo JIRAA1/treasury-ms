@@ -7,6 +7,7 @@ import KpiCard from '@/components/shared/KpiCard'
 import { formatCurrency, formatDate, getCreditStatusLabel, getTierConfig } from '@/lib/utils'
 import { CheckCircle2, Gift, Plus, Loader2, Filter } from 'lucide-react'
 import { toast } from 'sonner'
+import { useDialog } from '@/components/shared/GlobalDialog'
 import type { PaymentCredit, Period, User } from '@/types'
 
 interface CreditRow extends PaymentCredit {
@@ -17,6 +18,7 @@ interface CreditRow extends PaymentCredit {
 type StatusFilter = 'all' | 'pending' | 'repaid' | 'forgiven'
 
 export default function AdminCreditsPage() {
+  const dialog = useDialog()
   const [credits, setCredits] = useState<CreditRow[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<StatusFilter>('all')
@@ -38,25 +40,36 @@ export default function AdminCreditsPage() {
     fetchCredits()
   }, [fetchCredits])
 
-  const handleResolve = async (id: string, status: 'repaid' | 'forgiven') => {
+  const handleResolve = (id: string, status: 'repaid' | 'forgiven', studentName: string) => {
     const label = status === 'repaid' ? 'จ่ายคืนแล้ว' : 'ยกให้'
-    if (!confirm(`ยืนยัน: ${label} credit นี้?`)) return
-    try {
-      const res = await fetch(`/api/credits/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      })
-      if (!res.ok) {
-        const json = await res.json()
-        toast.error(json.error ?? 'เกิดข้อผิดพลาด')
-        return
-      }
-      toast.success(`อัปเดต credit เป็น "${label}" แล้ว`)
-      fetchCredits()
-    } catch {
-      toast.error('เกิดข้อผิดพลาดในการเชื่อมต่อ')
-    }
+    dialog.show({
+      type: 'confirm',
+      title: `${label} Credit`,
+      message: `ยืนยันอัปเดต credit ของ "${studentName}" เป็น "${label}" ใช่หรือไม่?`,
+      confirmText: `✓ ${label}`,
+      onConfirm: async () => {
+        dialog.setLoading(true)
+        try {
+          const res = await fetch(`/api/credits/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status }),
+          })
+          if (!res.ok) {
+            const json = await res.json()
+            toast.error(json.error ?? 'เกิดข้อผิดพลาด')
+            dialog.setLoading(false)
+            return
+          }
+          toast.success(`อัปเดต credit เป็น "${label}" แล้ว`)
+          dialog.hide()
+          fetchCredits()
+        } catch {
+          toast.error('เกิดข้อผิดพลาดในการเชื่อมต่อ')
+          dialog.setLoading(false)
+        }
+      },
+    })
   }
 
   const pending = credits.filter(c => c.status === 'pending')
@@ -180,7 +193,7 @@ export default function AdminCreditsPage() {
                         {c.status === 'pending' ? (
                           <div className="flex items-center justify-end gap-2">
                             <button
-                              onClick={() => handleResolve(c.id, 'repaid')}
+                              onClick={() => handleResolve(c.id, 'repaid', c.user?.fullname)}
                               title="Mark as Repaid"
                               className="flex items-center gap-1 text-[11px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 rounded-lg hover:bg-emerald-100 transition-all"
                             >
@@ -188,7 +201,7 @@ export default function AdminCreditsPage() {
                               จ่ายคืน
                             </button>
                             <button
-                              onClick={() => handleResolve(c.id, 'forgiven')}
+                              onClick={() => handleResolve(c.id, 'forgiven', c.user?.fullname)}
                               title="Forgive"
                               className="flex items-center gap-1 text-[11px] font-black text-sky-700 bg-sky-50 border border-sky-200 px-2.5 py-1.5 rounded-lg hover:bg-sky-100 transition-all"
                             >

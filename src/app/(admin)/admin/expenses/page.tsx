@@ -4,14 +4,17 @@ import { useState, useEffect, useCallback } from 'react'
 import Topbar from '@/components/layout/Topbar'
 import ExpenseForm from '@/components/expenses/ExpenseForm'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { Plus, ExternalLink, CheckCircle, Trash2 } from 'lucide-react'
+import { Plus, ExternalLink, CheckCircle, Trash2, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useDialog } from '@/components/shared/GlobalDialog'
 import type { Expense } from '@/types'
 
 export default function AdminExpensesPage() {
+  const dialog = useDialog()
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved'>('all')
 
   const fetchExpenses = useCallback(async () => {
@@ -47,21 +50,56 @@ export default function AdminExpensesPage() {
     }
   }
 
-  const handleApprove = async (id: string) => {
-    const res = await fetch(`/api/expenses/${id}/approve`, { method: 'PATCH' })
-    if (res.ok) { toast.success('อนุมัติแล้ว'); fetchExpenses() }
-    else toast.error('เกิดข้อผิดพลาด')
+  const handleApprove = (id: string, title: string) => {
+    dialog.show({
+      type: 'confirm',
+      title: 'อนุมัติค่าใช้จ่าย',
+      message: `ยืนยันอนุมัติค่าใช้จ่าย "${title}" ใช่หรือไม่?`,
+      confirmText: '✓ อนุมัติ',
+      onConfirm: async () => {
+        dialog.setLoading(true)
+        setActionLoadingId(id)
+        try {
+          const res = await fetch(`/api/expenses/${id}/approve`, { method: 'PATCH' })
+          if (res.ok) {
+            toast.success('อนุมัติแล้ว')
+            dialog.hide()
+            fetchExpenses()
+          } else {
+            toast.error('เกิดข้อผิดพลาด')
+            dialog.setLoading(false)
+          }
+        } finally {
+          setActionLoadingId(null)
+        }
+      },
+    })
   }
 
-  const handleRemove = async (id: string) => {
-    if (!confirm('ยืนยันการลบค่าใช้จ่ายนี้?')) return
-    const res = await fetch(`/api/expenses/${id}`, { method: 'DELETE' })
-    if (res.ok) {
-      toast.success('ลบรายการแล้ว')
-      fetchExpenses()
-    } else {
-      toast.error('ลบไม่สำเร็จ')
-    }
+  const handleRemove = (id: string, title: string) => {
+    dialog.show({
+      type: 'error',
+      title: 'ลบค่าใช้จ่าย',
+      message: `ยืนยันลบค่าใช้จ่าย "${title}" ใช่หรือไม่?`,
+      confirmText: 'ลบรายการ',
+      onConfirm: async () => {
+        dialog.setLoading(true)
+        setActionLoadingId(id)
+        try {
+          const res = await fetch(`/api/expenses/${id}`, { method: 'DELETE' })
+          if (res.ok) {
+            toast.success('ลบรายการแล้ว')
+            dialog.hide()
+            fetchExpenses()
+          } else {
+            toast.error('ลบไม่สำเร็จ')
+            dialog.setLoading(false)
+          }
+        } finally {
+          setActionLoadingId(null)
+        }
+      },
+    })
   }
 
   const filtered = expenses.filter((e) => {
@@ -151,14 +189,19 @@ export default function AdminExpensesPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
                       {!e.approved_by && (
-                        <button onClick={() => handleApprove(e.id)}
-                          className="flex items-center gap-1 text-[10px] font-medium text-emerald-600 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-md transition-colors">
-                          <CheckCircle className="w-3 h-3" /> อนุมัติ
+                        <button onClick={() => handleApprove(e.id, e.title)}
+                          disabled={actionLoadingId === e.id}
+                          className="flex items-center gap-1 text-[10px] font-medium text-emerald-600 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-md transition-colors disabled:opacity-50">
+                          {actionLoadingId === e.id
+                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                            : <CheckCircle className="w-3 h-3" />}
+                          อนุมัติ
                         </button>
                       )}
                       <button 
-                        onClick={() => handleRemove(e.id)}
-                        className="p-1 text-text-muted hover:text-red-500 hover:bg-red-50 rounded-md transition-colors opacity-0 group-hover:opacity-100"
+                        onClick={() => handleRemove(e.id, e.title)}
+                        disabled={actionLoadingId === e.id}
+                        className="p-1 text-text-muted hover:text-red-500 hover:bg-red-50 rounded-md transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
                         title="ลบรายการ"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

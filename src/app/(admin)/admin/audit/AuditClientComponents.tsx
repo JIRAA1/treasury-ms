@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Trash2, ShieldAlert, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { createPortal } from 'react-dom'
+import { useDialog } from '@/components/shared/GlobalDialog'
 
 interface DeleteLogButtonProps {
   id: string
@@ -12,27 +13,37 @@ interface DeleteLogButtonProps {
 
 export function DeleteLogButton({ id }: DeleteLogButtonProps) {
   const router = useRouter()
+  const dialog = useDialog()
   const [loading, setLoading] = useState(false)
 
-  const handleDelete = async () => {
-    if (!confirm('คุณแน่ใจหรือไม่ที่จะลบบันทึกประวัตินี้?')) return
+  const handleDelete = () => {
+    dialog.show({
+      type: 'error',
+      title: 'ลบบันทึกประวัติ',
+      message: 'คุณแน่ใจหรือไม่ที่จะลบบันทึกประวัตินี้? การดำเนินการนี้ไม่สามารถย้อนกลับได้',
+      confirmText: 'ลบบันทึก',
+      onConfirm: async () => {
+        dialog.setLoading(true)
+        setLoading(true)
+        try {
+          const res = await fetch(`/api/admin/audit?id=${id}`, {
+            method: 'DELETE',
+          })
+          const data = await res.json()
 
-    setLoading(true)
-    try {
-      const res = await fetch(`/api/admin/audit?id=${id}`, {
-        method: 'DELETE',
-      })
-      const data = await res.json()
+          if (!res.ok) throw new Error(data.error || 'เกิดข้อผิดพลาดในการลบข้อมูล')
 
-      if (!res.ok) throw new Error(data.error || 'เกิดข้อผิดพลาดในการลบข้อมูล')
-
-      toast.success('ลบบันทึกประวัติเรียบร้อยแล้ว')
-      router.refresh()
-    } catch (err: any) {
-      toast.error(err.message || 'เกิดข้อผิดพลาด')
-    } finally {
-      setLoading(false)
-    }
+          toast.success('ลบบันทึกประวัติเรียบร้อยแล้ว')
+          dialog.hide()
+          router.refresh()
+        } catch (err: any) {
+          toast.error(err.message || 'เกิดข้อผิดพลาด')
+          dialog.setLoading(false)
+        } finally {
+          setLoading(false)
+        }
+      },
+    })
   }
 
   return (

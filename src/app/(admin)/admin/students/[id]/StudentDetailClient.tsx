@@ -7,6 +7,7 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { Banknote, Check, X, Edit, Trash2, Link2Off, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import EditStudentModal from '@/components/admin/EditStudentModal'
+import { useDialog } from '@/components/shared/GlobalDialog'
 import type { PeriodStatus } from '@/types'
 
 interface StudentDetailClientProps {
@@ -18,6 +19,7 @@ interface StudentDetailClientProps {
 
 export default function StudentDetailClient({ student, periodStatuses, actorRole, profileActionsOnly = false }: StudentDetailClientProps) {
   const router = useRouter()
+  const dialog = useDialog()
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [loadingId, setLoadingId] = useState<string | null>(null)
 
@@ -25,108 +27,147 @@ export default function StudentDetailClient({ student, periodStatuses, actorRole
   const isTreasurer = actorRole === 'treasurer' || isAdmin
 
   // ---- Cash payment ----
-  const handleCashPayment = async (ps: PeriodStatus) => {
-    if (!confirm(`ยืนยันรับเงินสดจำนวน ${formatCurrency(ps.period.amount)} สำหรับ "${ps.period.label}" ใช่หรือไม่?`)) return
-    setLoadingId(`cash-${ps.period.id}`)
-    try {
-      const paymentData = {
-        user_id: student.id as string,
-        period_id: ps.period.id,
-        amount: ps.period.amount,
-        status: 'approved',
-        note: 'ชำระด้วยเงินสด (บันทึกโดยเหรัญญิก)',
-        verified_at: new Date().toISOString(),
-      }
+  const handleCashPayment = (ps: PeriodStatus) => {
+    dialog.show({
+      type: 'confirm',
+      title: 'รับเงินสด',
+      message: `ยืนยันรับเงินสดจำนวน ${formatCurrency(ps.period.amount)} สำหรับ "${ps.period.label}" ใช่หรือไม่?`,
+      confirmText: '✓ บันทึกเงินสด',
+      onConfirm: async () => {
+        dialog.setLoading(true)
+        setLoadingId(`cash-${ps.period.id}`)
+        try {
+          const paymentData = {
+            user_id: student.id as string,
+            period_id: ps.period.id,
+            amount: ps.period.amount,
+            status: 'approved',
+            note: 'ชำระด้วยเงินสด (บันทึกโดยเหรัญญิก)',
+            verified_at: new Date().toISOString(),
+          }
 
-      let paymentId: string
-      if (ps.payment?.id) {
-        const res = await fetch(`/api/payments/verify`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: ps.payment.id, action: 'approve' }),
-        })
-        if (!res.ok) throw new Error((await res.json()).error)
-        paymentId = ps.payment.id
-      } else {
-        const res = await fetch('/api/payments/cash', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(paymentData),
-        })
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error)
-        paymentId = data.payment.id
-      }
+          let paymentId: string
+          if (ps.payment?.id) {
+            const res = await fetch(`/api/payments/verify`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: ps.payment.id, action: 'approve' }),
+            })
+            if (!res.ok) throw new Error((await res.json()).error)
+            paymentId = ps.payment.id
+          } else {
+            const res = await fetch('/api/payments/cash', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(paymentData),
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error)
+            paymentId = data.payment.id
+          }
 
-      // Send notify
-      await fetch('/api/payments/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: paymentId, action: 'notify_only', type: 'cash_success' }),
-      })
+          // Send notify
+          await fetch('/api/payments/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: paymentId, action: 'notify_only', type: 'cash_success' }),
+          })
 
-      toast.success('บันทึกการชำระเงินสดเรียบร้อย')
-      router.refresh()
-    } catch (e: unknown) {
-      toast.error('เกิดข้อผิดพลาด: ' + (e instanceof Error ? e.message : String(e)))
-    } finally {
-      setLoadingId(null)
-    }
+          toast.success('บันทึกการชำระเงินสดเรียบร้อย')
+          dialog.hide()
+          router.refresh()
+        } catch (e: unknown) {
+          toast.error('เกิดข้อผิดพลาด: ' + (e instanceof Error ? e.message : String(e)))
+          dialog.setLoading(false)
+        } finally {
+          setLoadingId(null)
+        }
+      },
+    })
   }
 
   // ---- Toggle payment status ----
-  const handleToggleStatus = async (ps: PeriodStatus, newStatus: 'approved' | 'rejected' | 'pending') => {
+  const handleToggleStatus = (ps: PeriodStatus, newStatus: 'approved' | 'rejected' | 'pending') => {
     if (!ps.payment?.id) return
     const label = newStatus === 'approved' ? 'อนุมัติ' : newStatus === 'rejected' ? 'ปฏิเสธ' : 'ยกเลิกการอนุมัติ'
-    if (!confirm(`ยืนยัน${label}รายการ "${ps.period.label}"?`)) return
-
-    setLoadingId(`toggle-${ps.period.id}`)
-    try {
-      const res = await fetch('/api/payments/verify', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: ps.payment.id, action: newStatus === 'approved' ? 'approve' : 'reject' }),
-      })
-      if (!res.ok) throw new Error((await res.json()).error)
-      toast.success(`อัปเดตสถานะเป็น "${label}" เรียบร้อย`)
-      router.refresh()
-    } catch (e: unknown) {
-      toast.error('เกิดข้อผิดพลาด: ' + (e instanceof Error ? e.message : String(e)))
-    } finally {
-      setLoadingId(null)
-    }
+    const isDestructive = newStatus === 'rejected' || newStatus === 'pending'
+    dialog.show({
+      type: isDestructive ? 'warning' : 'confirm',
+      title: `${label}รายการชำระเงิน`,
+      message: `ยืนยัน${label}รายการ "${ps.period.label}"?`,
+      confirmText: `✓ ${label}`,
+      onConfirm: async () => {
+        dialog.setLoading(true)
+        setLoadingId(`toggle-${ps.period.id}`)
+        try {
+          const res = await fetch('/api/payments/verify', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: ps.payment!.id, action: newStatus === 'approved' ? 'approve' : 'reject' }),
+          })
+          if (!res.ok) throw new Error((await res.json()).error)
+          toast.success(`อัปเดตสถานะเป็น "${label}" เรียบร้อย`)
+          dialog.hide()
+          router.refresh()
+        } catch (e: unknown) {
+          toast.error('เกิดข้อผิดพลาด: ' + (e instanceof Error ? e.message : String(e)))
+          dialog.setLoading(false)
+        } finally {
+          setLoadingId(null)
+        }
+      },
+    })
   }
 
   // ---- Reset LINE binding / Auth user ----
-  const handleResetBinding = async () => {
-    if (!confirm(`ล้างข้อมูลผูกบัญชีของ "${student.fullname as string}" ใช่หรือไม่? นักศึกษาจะต้องทำการผูกบัญชี (Login ด้วย LINE) ใหม่อีกครั้ง`)) return
-    setLoadingId('binding')
-    try {
-      const res = await fetch(`/api/students/${student.id}/binding`, { method: 'DELETE' })
-      if (!res.ok) throw new Error((await res.json()).error)
-      toast.success('ล้างข้อมูลผูกบัญชีเรียบร้อยแล้ว')
-      router.refresh()
-    } catch (e: unknown) {
-      toast.error('เกิดข้อผิดพลาด: ' + (e instanceof Error ? e.message : String(e)))
-    } finally {
-      setLoadingId(null)
-    }
+  const handleResetBinding = () => {
+    dialog.show({
+      type: 'warning',
+      title: 'ล้างข้อมูลการเข้าสู่ระบบ',
+      message: `ล้างข้อมูลผูกบัญชีของ "${student.fullname as string}" ใช่หรือไม่? นักศึกษาจะต้องทำการผูกบัญชี (Login ด้วย LINE) ใหม่อีกครั้ง`,
+      confirmText: 'ล้างข้อมูล',
+      onConfirm: async () => {
+        dialog.setLoading(true)
+        setLoadingId('binding')
+        try {
+          const res = await fetch(`/api/students/${student.id}/binding`, { method: 'DELETE' })
+          if (!res.ok) throw new Error((await res.json()).error)
+          toast.success('ล้างข้อมูลผูกบัญชีเรียบร้อยแล้ว')
+          dialog.hide()
+          router.refresh()
+        } catch (e: unknown) {
+          toast.error('เกิดข้อผิดพลาด: ' + (e instanceof Error ? e.message : String(e)))
+          dialog.setLoading(false)
+        } finally {
+          setLoadingId(null)
+        }
+      },
+    })
   }
 
   // ---- Delete student ----
-  const handleDelete = async () => {
-    if (!confirm(`⚠️ ลบนักศึกษา "${student.fullname as string}" และประวัติทั้งหมดถาวร? ไม่สามารถกู้คืนได้`)) return
-    if (!confirm('ยืนยันอีกครั้ง — ข้อมูลจะหายถาวร')) return
-    setLoadingId('delete')
-    try {
-      const res = await fetch(`/api/students/${student.id}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error((await res.json()).error)
-      toast.success('ลบข้อมูลนักศึกษาเรียบร้อยแล้ว')
-      router.push('/admin/students')
-    } catch (e: unknown) {
-      toast.error('ลบไม่สำเร็จ: ' + (e instanceof Error ? e.message : String(e)))
-      setLoadingId(null)
-    }
+  const handleDelete = () => {
+    dialog.show({
+      type: 'error',
+      title: '⚠️ ลบนักศึกษา',
+      message: `ลบนักศึกษา "${student.fullname as string}" และประวัติทั้งหมดถาวร? ไม่สามารถกู้คืนได้`,
+      confirmText: 'ลบถาวร',
+      onConfirm: async () => {
+        dialog.setLoading(true)
+        setLoadingId('delete')
+        try {
+          const res = await fetch(`/api/students/${student.id}`, { method: 'DELETE' })
+          if (!res.ok) throw new Error((await res.json()).error)
+          toast.success('ลบข้อมูลนักศึกษาเรียบร้อยแล้ว')
+          dialog.hide()
+          router.push('/admin/students')
+        } catch (e: unknown) {
+          toast.error('ลบไม่สำเร็จ: ' + (e instanceof Error ? e.message : String(e)))
+          dialog.setLoading(false)
+          setLoadingId(null)
+        }
+      },
+    })
   }
 
   // ---- Profile-only mode: only render Edit/ResetLINE/Delete buttons ----

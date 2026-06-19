@@ -6,8 +6,9 @@ import StatusPill from '@/components/payments/StatusPill'
 import { formatCurrency, formatDate, getTierConfig } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { th } from 'date-fns/locale'
-import { Search, ExternalLink, CheckCircle, XCircle, AlertTriangle } from 'lucide-react'
+import { Search, ExternalLink, CheckCircle, XCircle, AlertTriangle, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useDialog } from '@/components/shared/GlobalDialog'
 
 interface Payment {
   id: string
@@ -23,10 +24,12 @@ interface Payment {
 }
 
 export default function AdminPaymentsPage() {
+  const dialog = useDialog()
   const [payments, setPayments] = useState<Payment[]>([])
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all')
   const [filterPeriod, setFilterPeriod] = useState<string>('')
   const [periods, setPeriods] = useState<{ id: string; label: string }[]>([])
@@ -76,19 +79,54 @@ export default function AdminPaymentsPage() {
   // Reset to page 1 when filters change
   useEffect(() => { setPage(1) }, [filterStatus, filterPeriod, search])
 
-  const handleAction = async (id: string, action: 'approve' | 'reject') => {
-    const res = await fetch('/api/payments/verify', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, action, reason: rejectReason }),
-    })
-    if (res.ok) {
-      toast.success(action === 'approve' ? 'อนุมัติแล้ว' : 'ปฏิเสธแล้ว')
-      setSelectedPayment(null)
-      setRejectReason('')
-      fetchPayments()
+  const doAction = async (id: string, action: 'approve' | 'reject') => {
+    dialog.setLoading(true)
+    setActionLoadingId(id)
+    try {
+      const res = await fetch('/api/payments/verify', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action, reason: rejectReason }),
+      })
+      if (res.ok) {
+        toast.success(action === 'approve' ? 'อนุมัติแล้ว' : 'ปฏิเสธแล้ว')
+        dialog.hide()
+        setSelectedPayment(null)
+        setRejectReason('')
+        fetchPayments()
+      } else {
+        toast.error('เกิดข้อผิดพลาด')
+        dialog.setLoading(false)
+      }
+    } catch {
+      toast.error('เกิดข้อผิดพลาดในการเชื่อมต่อ')
+      dialog.setLoading(false)
+    } finally {
+      setActionLoadingId(null)
+    }
+  }
+
+  const handleAction = (id: string, action: 'approve' | 'reject', paymentName?: string) => {
+    if (action === 'approve') {
+      dialog.show({
+        type: 'confirm',
+        title: 'อนุมัติการชำระเงิน',
+        message: paymentName
+          ? `ยืนยันอนุมัติสลิปของ ${paymentName} ใช่หรือไม่?`
+          : 'ยืนยันอนุมัติรายการชำระเงินนี้ใช่หรือไม่?',
+        confirmText: '✓ อนุมัติ',
+        onConfirm: () => doAction(id, 'approve'),
+      })
     } else {
-      toast.error('เกิดข้อผิดพลาด')
+      dialog.show({
+        type: 'warning',
+        title: 'ปฏิเสธการชำระเงิน',
+        message: rejectReason
+          ? `ปฏิเสธด้วยเหตุผล: "${rejectReason}" ยืนยันหรือไม่?`
+          : 'ยืนยันปฏิเสธรายการชำระเงินนี้ใช่หรือไม่?',
+        confirmText: '✕ ปฏิเสธ',
+        onConfirm: () => doAction(id, 'reject'),
+      })
     }
   }
 
@@ -187,8 +225,14 @@ export default function AdminPaymentsPage() {
                   <td className="px-4 py-3">
                     {p.status === 'pending' && (
                       <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                        <button onClick={() => handleAction(p.id, 'approve')} className="p-1 rounded hover:bg-emerald-50 text-emerald-600 transition-colors">
-                          <CheckCircle className="w-4 h-4" />
+                        <button
+                          onClick={() => handleAction(p.id, 'approve', p.user?.fullname)}
+                          disabled={actionLoadingId === p.id}
+                          className="p-1 rounded hover:bg-emerald-50 text-emerald-600 transition-colors disabled:opacity-50"
+                        >
+                          {actionLoadingId === p.id
+                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                            : <CheckCircle className="w-4 h-4" />}
                         </button>
                         <button onClick={() => { setSelectedPayment(p); }} className="p-1 rounded hover:bg-red-50 text-red-500 transition-colors">
                           <XCircle className="w-4 h-4" />
@@ -279,13 +323,13 @@ export default function AdminPaymentsPage() {
           {selectedPayment.status === 'pending' && (
             <div className="p-4 border-t border-border flex gap-2">
               <button
-                onClick={() => handleAction(selectedPayment.id, 'approve')}
+                onClick={() => handleAction(selectedPayment.id, 'approve', selectedPayment.user?.fullname)}
                 className="flex-1 bg-brand text-white text-[13px] font-medium py-2.5 rounded-lg hover:bg-brand-hover transition-colors"
               >
                 ✓ อนุมัติ
               </button>
               <button
-                onClick={() => handleAction(selectedPayment.id, 'reject')}
+                onClick={() => handleAction(selectedPayment.id, 'reject', selectedPayment.user?.fullname)}
                 disabled={!rejectReason}
                 className="flex-1 bg-red-50 text-red-600 border border-red-200 text-[13px] font-medium py-2.5 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-40"
               >
