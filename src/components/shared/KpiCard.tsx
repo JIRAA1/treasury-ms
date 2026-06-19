@@ -1,6 +1,8 @@
 import { cn } from '@/lib/utils'
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
-import type { ElementType } from 'react'
+import type { ElementType, Suspense as SuspenseType } from 'react'
+import { Suspense } from 'react'
+import AnimatedValue from './AnimatedValue'
 
 interface KpiCardProps {
   label: string
@@ -69,7 +71,13 @@ export default function KpiCard({
       </div>
 
       <div className="animate-count text-[13px] sm:text-[24px] md:text-[28px] font-black text-text-primary tracking-tighter leading-none">
-        {value}
+        {typeof value === 'number' ? (
+          <Suspense fallback={<span>{value.toLocaleString('th-TH')}</span>}>
+            <AnimatedValue value={value} />
+          </Suspense>
+        ) : (
+          value
+        )}
       </div>
 
       <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-1 sm:pt-2.5 mt-auto">

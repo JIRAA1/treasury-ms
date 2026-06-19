@@ -7,6 +7,7 @@ import type { User } from '@/types'
 import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import ErrorBoundary from '@/components/shared/ErrorBoundary'
+import { usePendingCount } from '@/hooks/usePendingCount'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -17,9 +18,16 @@ interface AppShellProps {
   hasUnpaidWeek?: boolean
 }
 
-export default function AppShell({ children, role, user = null, pendingCount = 0, pendingCredits = 0, hasUnpaidWeek = false }: AppShellProps) {
+export default function AppShell({ children, role, user = null, pendingCount: initialPending = 0, pendingCredits: initialCredits = 0, hasUnpaidWeek = false }: AppShellProps) {
   const { isSidebarOpen, closeSidebar } = useUIStore()
   const pathname = usePathname()
+  const isAdmin = role === 'admin' || role === 'treasurer'
+
+  // Real-time badge counts — only active for admin/treasurer to avoid unnecessary subscriptions
+  const { pendingCount, pendingCredits } = usePendingCount(
+    isAdmin ? initialPending : 0,
+    isAdmin ? initialCredits : 0,
+  )
 
   // Close sidebar on navigation
   useEffect(() => {

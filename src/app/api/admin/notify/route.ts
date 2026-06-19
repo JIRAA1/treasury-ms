@@ -20,6 +20,8 @@ export async function POST(request: NextRequest) {
     period_id?: string
     message?: string
     target: 'all_unpaid' | string[]
+    /** Optional: filter reminders to a specific Tier ('A' | 'B' | 'C') */
+    tier_filter?: 'A' | 'B' | 'C'
   }
 
   let sent = 0
@@ -126,10 +128,16 @@ export async function POST(request: NextRequest) {
     const pendingCreditUserIds = new Set(pendingCredits?.map(c => c.user_id) || [])
     const handledIds = new Set([...finalPaidIds, ...pendingCreditUserIds])
 
-    const unpaidStudents = (students ?? []).filter((s) => !handledIds.has(s.id))
+    let unpaidStudents = (students ?? []).filter((s) => !handledIds.has(s.id))
+
+    // Apply tier filter if specified
+    if (body.tier_filter) {
+      unpaidStudents = unpaidStudents.filter((s) => s.tier === body.tier_filter)
+    }
 
     if (unpaidStudents.length === 0) {
-      return NextResponse.json({ sent: 0, failed: 0, message: `นักศึกษาทุกคนชำระ "${cycleTitle}" ครบถ้วนแล้ว` })
+      const tierMsg = body.tier_filter ? ` (Tier ${body.tier_filter})` : ''
+      return NextResponse.json({ sent: 0, failed: 0, message: `นักศึกษาทุกคน${tierMsg}ชำระ "${cycleTitle}" ครบถ้วนแล้ว` })
     }
 
     // 5. Send Notifications (In-App & LINE)

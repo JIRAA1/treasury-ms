@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import Topbar from '@/components/layout/Topbar'
 import KpiCard from '@/components/shared/KpiCard'
 import { formatCurrency, getTierConfig } from '@/lib/utils'
-import { Search, Users, ChevronRight, Loader2, UserPlus, Download, CheckCircle, Tag } from 'lucide-react'
+import { Search, Users, ChevronRight, Loader2, UserPlus, Download, CheckCircle, Tag, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import Link from 'next/link'
 import AddStudentModal from '@/components/admin/AddStudentModal'
 import { toast } from 'sonner'
@@ -169,6 +169,8 @@ export default function AdminStudentsPage() {
   const [exporting, setExporting] = useState(false)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'paid' | 'unpaid' | 'pending' | 'A' | 'B' | 'C'>('all')
+  const [sortKey, setSortKey] = useState<'fullname' | 'student_id' | 'weeksPaid' | 'tier'>('fullname')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [totalCycles, setTotalCycles] = useState(0)
   const [tierCQuota, setTierCQuota] = useState(5)
   const [tierAmounts, setTierAmounts] = useState({ A: 60, B: 50, C: 30 })
@@ -278,16 +280,40 @@ export default function AdminStudentsPage() {
     C: tierCCount,
   }
 
-  const filtered = students.filter((s) => {
-    const matchesSearch = s.fullname.toLowerCase().includes(search.toLowerCase()) || s.student_id.includes(search)
-    if (!matchesSearch) return false
+  const filtered = useMemo(() => {
+    const base = students.filter((s) => {
+      const matchesSearch = s.fullname.toLowerCase().includes(search.toLowerCase()) || s.student_id.includes(search)
+      if (!matchesSearch) return false
+      if (filter === 'paid') return s.weeksPaid === totalCycles && totalCycles > 0
+      if (filter === 'unpaid') return s.weeksPaid < totalCycles
+      if (filter === 'pending') return s.weeksPending > 0
+      if (filter === 'A' || filter === 'B' || filter === 'C') return s.tier === filter
+      return true
+    })
 
-    if (filter === 'paid') return s.weeksPaid === totalCycles && totalCycles > 0
-    if (filter === 'unpaid') return s.weeksPaid < totalCycles
-    if (filter === 'pending') return s.weeksPending > 0
-    if (filter === 'A' || filter === 'B' || filter === 'C') return s.tier === filter
-    return true
-  })
+    return [...base].sort((a, b) => {
+      let av: string | number, bv: string | number
+      if (sortKey === 'fullname') { av = a.fullname; bv = b.fullname }
+      else if (sortKey === 'student_id') { av = a.student_id; bv = b.student_id }
+      else if (sortKey === 'weeksPaid') { av = a.weeksPaid; bv = b.weeksPaid }
+      else { av = a.tier; bv = b.tier }
+      if (av < bv) return sortDir === 'asc' ? -1 : 1
+      if (av > bv) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+  }, [students, search, filter, totalCycles, sortKey, sortDir])
+
+  const handleSort = (key: typeof sortKey) => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('asc') }
+  }
+
+  const SortIcon = ({ col }: { col: typeof sortKey }) => {
+    if (sortKey !== col) return <ArrowUpDown className="w-3 h-3 ml-1 opacity-30" />
+    return sortDir === 'asc'
+      ? <ArrowUp className="w-3 h-3 ml-1 text-brand" />
+      : <ArrowDown className="w-3 h-3 ml-1 text-brand" />
+  }
 
   const fullyPaid = students.filter((s) => s.weeksPaid === totalCycles && totalCycles > 0).length
 
@@ -400,10 +426,30 @@ export default function AdminStudentsPage() {
             <table className="w-full text-[13px]">
               <thead className="bg-background-tertiary/50 text-text-muted border-b border-border">
                 <tr>
-                  <th className="px-6 py-4 text-left font-black text-[10px] uppercase tracking-widest">ชื่อ-นามสกุล</th>
-                  <th className="px-6 py-4 text-left font-black text-[10px] uppercase tracking-widest">รหัสนักศึกษา</th>
-                  <th className="px-6 py-4 text-center font-black text-[10px] uppercase tracking-widest">Tier</th>
-                  <th className="px-6 py-4 text-center font-black text-[10px] uppercase tracking-widest">ความคืบหน้า</th>
+                  <th
+                    className="px-6 py-4 text-left font-black text-[10px] uppercase tracking-widest cursor-pointer hover:text-text-primary transition-colors select-none"
+                    onClick={() => handleSort('fullname')}
+                  >
+                    <span className="flex items-center">ชื่อ-นามสกุล<SortIcon col="fullname" /></span>
+                  </th>
+                  <th
+                    className="px-6 py-4 text-left font-black text-[10px] uppercase tracking-widest cursor-pointer hover:text-text-primary transition-colors select-none"
+                    onClick={() => handleSort('student_id')}
+                  >
+                    <span className="flex items-center">รหัสนักศึกษา<SortIcon col="student_id" /></span>
+                  </th>
+                  <th
+                    className="px-6 py-4 text-center font-black text-[10px] uppercase tracking-widest cursor-pointer hover:text-text-primary transition-colors select-none"
+                    onClick={() => handleSort('tier')}
+                  >
+                    <span className="flex items-center justify-center">Tier<SortIcon col="tier" /></span>
+                  </th>
+                  <th
+                    className="px-6 py-4 text-center font-black text-[10px] uppercase tracking-widest cursor-pointer hover:text-text-primary transition-colors select-none"
+                    onClick={() => handleSort('weeksPaid')}
+                  >
+                    <span className="flex items-center justify-center">ความคืบหน้า<SortIcon col="weeksPaid" /></span>
+                  </th>
                   <th className="px-6 py-4 text-center font-black text-[10px] uppercase tracking-widest">ค้างตรวจ</th>
                   <th className="px-6 py-4 text-right font-black text-[10px] uppercase tracking-widest">จัดการ</th>
                 </tr>
