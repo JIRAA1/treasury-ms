@@ -17,27 +17,31 @@ export default function Topbar({ title, subtitle, actions }: TopbarProps) {
   return (
     <header className="sticky top-0 z-30">
       {/* Main bar */}
-      <div className="h-[64px] bg-background/90 backdrop-blur-xl px-4 md:px-8 flex items-center justify-between"
-        style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}
+      <div
+        className="h-[60px] px-4 md:px-7 flex items-center justify-between"
+        style={{
+          background: 'rgba(245,247,252,0.88)',
+          backdropFilter: 'blur(24px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+          borderBottom: '1px solid rgba(0,0,0,0.055)',
+        }}
       >
         <div className="flex items-center gap-3">
           {/* Mobile hamburger */}
           <button
             onClick={toggleSidebar}
-            className="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl text-text-muted hover:text-text-primary hover:bg-background-muted transition-all active:scale-95"
+            className="lg:hidden w-8 h-8 flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary hover:bg-background-muted transition-all active:scale-95"
           >
-            <Menu className="w-4.5 h-4.5" />
+            <Menu className="w-4 h-4" />
           </button>
 
           {/* Title block */}
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h2 className="text-[15px] md:text-[16px] font-black text-text-primary tracking-tight truncate leading-none">
-                {title}
-              </h2>
-            </div>
+            <h2 className="text-[15px] md:text-[16px] font-black text-text-primary tracking-tight truncate leading-none">
+              {title}
+            </h2>
             {subtitle && (
-              <p className="text-[10px] text-text-muted font-medium truncate mt-0.5 tracking-wide">
+              <p className="text-[10.5px] text-text-muted font-medium truncate mt-[3px] tracking-wide leading-none">
                 {subtitle}
               </p>
             )}
@@ -56,11 +60,11 @@ export default function Topbar({ title, subtitle, actions }: TopbarProps) {
         </div>
       </div>
 
-      {/* Subtle shimmer gradient line under header */}
+      {/* Premium gradient accent line */}
       <div
-        className="h-px w-full"
+        className="h-[1px] w-full"
         style={{
-          background: 'linear-gradient(90deg, transparent 0%, rgba(15,23,42,0.06) 30%, rgba(181,148,16,0.15) 50%, rgba(15,23,42,0.06) 70%, transparent 100%)',
+          background: 'linear-gradient(90deg, transparent 0%, rgba(61,82,213,0.12) 30%, rgba(212,168,71,0.2) 60%, transparent 100%)',
         }}
       />
     </header>

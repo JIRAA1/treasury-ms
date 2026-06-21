@@ -34,20 +34,20 @@ export default function SkeletonCard({
   return (
     <div
       className={cn(
-        'bg-background-secondary border border-border rounded-xl overflow-hidden',
+        'bg-white border border-border rounded-xl overflow-hidden card-shadow',
         className,
       )}
       aria-busy="true"
       aria-label="กำลังโหลด..."
     >
       {hasHeader && (
-        <div className={cn('flex items-center gap-3 border-b border-border', pad)}>
-          <ShimmerBlock className="w-9 h-9 rounded-lg flex-shrink-0" />
-          <div className="flex-1 space-y-1.5">
-            <ShimmerBlock className="h-3.5 w-32" />
-            <ShimmerBlock className="h-2.5 w-20" />
+        <div className={cn('flex items-center gap-3 border-b border-border/60', pad)}>
+          <ShimmerBlock className="w-9 h-9 rounded-xl flex-shrink-0" />
+          <div className="flex-1 space-y-2">
+            <ShimmerBlock className="h-3 w-28" />
+            <ShimmerBlock className="h-2.5 w-16" />
           </div>
-          <ShimmerBlock className="h-6 w-16 rounded-full" />
+          <ShimmerBlock className="h-5 w-14 rounded-full" />
         </div>
       )}
 
@@ -57,7 +57,6 @@ export default function SkeletonCard({
             key={i}
             className={cn(
               'h-3',
-              // Vary widths for a more natural look
               i === 0 ? 'w-full' : i === lines - 1 ? 'w-2/3' : 'w-5/6',
             )}
           />
@@ -65,7 +64,7 @@ export default function SkeletonCard({
       </div>
 
       {hasFooter && (
-        <div className={cn('border-t border-border flex justify-end', pad)}>
+        <div className={cn('border-t border-border/60 flex justify-end', pad)}>
           <ShimmerBlock className="h-8 w-24 rounded-lg" />
         </div>
       )}

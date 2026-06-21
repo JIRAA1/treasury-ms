@@ -168,17 +168,17 @@ export default async function AdminOverviewPage() {
         subtitle="ข้อมูลล่าสุด ณ วันนี้"
         actions={
           <div className="flex items-center gap-2">
-            <Link href="/admin/expenses" className="flex items-center gap-1.5 border border-border-strong bg-background text-[11px] font-medium px-2.5 py-1.5 rounded-lg hover:bg-background-secondary transition-colors">
+            <Link href="/admin/expenses" className="flex items-center gap-1.5 border border-border bg-white text-[11px] font-semibold px-3 py-1.5 rounded-xl hover:bg-background-muted hover:border-border-strong transition-all duration-150 text-text-secondary shadow-sm">
               <Plus className="w-3 h-3" /> เพิ่มค่าใช้จ่าย
             </Link>
-            <a href="/api/reports/export?type=income" className="flex items-center gap-1.5 border border-border-strong bg-background text-[11px] font-medium px-2.5 py-1.5 rounded-lg hover:bg-background-secondary transition-colors">
+            <a href="/api/reports/export?type=income" className="flex items-center gap-1.5 border border-border bg-white text-[11px] font-semibold px-3 py-1.5 rounded-xl hover:bg-background-muted hover:border-border-strong transition-all duration-150 text-text-secondary shadow-sm">
               <Download className="w-3 h-3" /> ส่งออกรายงาน
             </a>
           </div>
         }
       />
 
-      <div className="p-6 space-y-6">
+      <div className="p-5 md:p-6 space-y-5">
         {/* KPI Grid — Row 1 */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard 
@@ -201,81 +201,80 @@ export default async function AdminOverviewPage() {
         {/* KPI Grid — Row 2: Tier + Credit + Reserve */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Tier Distribution */}
-          <div className="bg-background-secondary border border-border rounded-xl p-4">
-            <div className="text-[10px] uppercase tracking-wide text-text-muted mb-3">สัดส่วน Tier นักศึกษา</div>
-            <div className="flex items-end gap-2 mb-3">
+          <div className="bg-white border border-border rounded-2xl p-5 card-shadow hover-lift">
+            <div className="text-[9.5px] uppercase tracking-[0.2em] font-black text-text-muted mb-4">สัดส่วน Tier นักศึกษา</div>
+            <div className="flex items-end gap-3 mb-4" style={{ height: '56px' }}>
               {[
-                { label: 'A', count: tierBreakdown.A, color: 'bg-emerald-400', text: 'text-emerald-700' },
-                { label: 'B', count: tierBreakdown.B, color: 'bg-slate-400', text: 'text-slate-600' },
-                { label: 'C', count: tierBreakdown.C, color: 'bg-amber-400', text: 'text-amber-700' },
+                { label: 'A', count: tierBreakdown.A, gradient: 'from-emerald-500 to-teal-400', text: 'text-emerald-700' },
+                { label: 'B', count: tierBreakdown.B, gradient: 'from-slate-400 to-slate-300', text: 'text-slate-600' },
+                { label: 'C', count: tierBreakdown.C, gradient: 'from-amber-500 to-amber-300', text: 'text-amber-700' },
               ].map((t) => (
-                <div key={t.label} className="flex-1 flex flex-col items-center gap-1">
+                <div key={t.label} className="flex-1 flex flex-col items-center gap-1.5">
                   <span className={`text-[10px] font-black ${t.text}`}>{t.count}</span>
                   <div
-                    className={`w-full rounded-t-sm ${t.color} transition-all`}
-                    style={{ height: `${Math.max((t.count / Math.max(studentCount ?? 1, 1)) * 48, 4)}px` }}
+                    className={`w-full rounded-t-lg bg-gradient-to-t ${t.gradient} bar-grow`}
+                    style={{ height: `${Math.max((t.count / Math.max(studentCount ?? 1, 1)) * 44, 4)}px` }}
                   />
                   <span className={`text-[9px] font-black ${t.text}`}>{t.label}</span>
                 </div>
               ))}
             </div>
-            <Link href="/admin/students" className="text-[10px] text-brand hover:underline">ดูรายชื่อ →</Link>
+            <Link href="/admin/students" className="text-[10.5px] text-brand hover:text-brand-hover font-bold transition-colors">ดูรายชื่อทั้งหมด →</Link>
           </div>
 
           {/* Credit Debt */}
-          <div className="bg-background-secondary border border-border rounded-xl p-4">
-            <div className="text-[10px] uppercase tracking-wide text-text-muted mb-1">ยอด Credit ค้างจ่าย</div>
-            <div className={`text-[22px] font-bold tracking-tight ${pendingCreditsCount > 0 ? 'text-amber-700' : 'text-text-primary'}`}>
+          <div className="bg-white border border-border rounded-2xl p-5 card-shadow hover-lift">
+            <div className="text-[9.5px] uppercase tracking-[0.2em] font-black text-text-muted mb-3">ยอด Credit ค้างจ่าย</div>
+            <div className={`text-[24px] font-black tracking-tight leading-none mb-1 ${pendingCreditsCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
               {formatCurrency(creditDebtTotal)}
             </div>
-            <div className="text-[10px] text-text-muted mt-1">
+            <div className="text-[10.5px] text-text-muted mt-2">
               {pendingCreditsCount > 0
                 ? `${pendingCreditsCount} รายการค้างจ่าย`
-                : 'ไม่มียอดค้าง ✓'}
+                : '✓ ไม่มียอดค้าง'}
             </div>
-            <Link href="/admin/credits" className="text-[10px] text-brand hover:underline mt-2 inline-block font-bold">จัดการ Credit →</Link>
+            <Link href="/admin/credits" className="text-[10.5px] text-brand hover:text-brand-hover font-bold transition-colors mt-3 inline-block">จัดการ Credit →</Link>
           </div>
 
           {/* Reserve Fund */}
-          <div className="bg-background-secondary border border-border rounded-xl p-4">
-            <div className="text-[10px] uppercase tracking-wide text-text-muted mb-1">กองทุนสำรอง (สะสม)</div>
-            <div className="text-[22px] font-bold text-text-primary tracking-tight">
+          <div className="bg-white border border-border rounded-2xl p-5 card-shadow hover-lift">
+            <div className="text-[9.5px] uppercase tracking-[0.2em] font-black text-text-muted mb-3">กองทุนสำรอง (สะสม)</div>
+            <div className="text-[24px] font-black text-text-primary tracking-tight leading-none mb-1">
               ฿{reserveTarget.toLocaleString()}
             </div>
-            <div className="text-[10px] text-text-muted mt-1">หักออกจากเงินกองกลางโดยตรง</div>
-            <Link href="/admin/settings" className="text-[10px] text-brand hover:underline mt-2 inline-block font-bold">ตั้งค่าเป้าหมาย →</Link>
+            <div className="text-[10.5px] text-text-muted mt-2">หักออกจากเงินกองกลางโดยตรง</div>
+            <Link href="/admin/settings" className="text-[10.5px] text-brand hover:text-brand-hover font-bold transition-colors mt-3 inline-block">ตั้งค่าเป้าหมาย →</Link>
           </div>
         </div>
 
         {/* Middle Section */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           {/* Pending Payments Table */}
-          <div className="lg:col-span-3 bg-background-secondary border border-border rounded-xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-[12px] font-semibold text-text-primary">รายการรอตรวจสอบ</span>
+          <div className="lg:col-span-3 bg-white border border-border rounded-2xl overflow-hidden card-shadow">
+            <div className="px-5 py-4 border-b border-border/70 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="text-[12.5px] font-black text-text-primary">รายการรอตรวจสอบ</span>
                 {(pendingCount ?? 0) > 0 && (
-                  <span className="bg-amber-100 text-amber-700 text-[9px] font-semibold px-1.5 py-0.5 rounded-full">{pendingCount}</span>
+                  <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[9px] font-black px-2 py-0.5 rounded-full">{pendingCount}</span>
                 )}
               </div>
-              <Link href="/admin/payments" className="text-[11px] text-text-muted hover:text-text-primary transition-colors">ดูทั้งหมด →</Link>
+              <Link href="/admin/payments" className="text-[10.5px] text-text-muted hover:text-brand font-semibold transition-colors">ดูทั้งหมด →</Link>
             </div>
             {pendingPayments && pendingPayments.length > 0 ? (
-              <div className="divide-y divide-border">
+              <div className="divide-y divide-border/50">
                 {pendingPayments.map((p) => {
                   const user = p.user as { fullname: string; student_id: string } | null
                   return (
-                    <div key={p.id} className="flex items-center gap-4 px-5 py-3">
-                      <div className="w-7 h-7 rounded-full bg-brand flex items-center justify-center flex-shrink-0">
-                        <span className="text-white text-[9px] font-semibold">
-                          {user?.fullname?.[0] ?? 'U'}
-                        </span>
+                    <div key={p.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-background-muted/50 transition-colors">
+                      <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-[10px] font-black"
+                        style={{ background: 'linear-gradient(135deg, #3d52d5, #7c94f8)' }}>
+                        {user?.fullname?.[0] ?? 'U'}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[11.5px] font-medium text-text-primary truncate">{user?.fullname}</div>
-                        <div className="text-[10px] text-text-muted">{user?.student_id} · {p.period?.label || '—'}</div>
+                        <div className="text-[11.5px] font-semibold text-text-primary truncate">{user?.fullname}</div>
+                        <div className="text-[10px] text-text-muted mt-0.5">{user?.student_id} · {p.period?.label || '—'}</div>
                       </div>
-                      <div className="text-[11.5px] font-semibold text-text-primary">{formatCurrency(p.amount)}</div>
+                      <div className="text-[12px] font-black text-text-primary tabular-nums">{formatCurrency(p.amount)}</div>
                       <div className="flex items-center gap-1">
                         <QuickApproveButton paymentId={p.id} />
                       </div>
@@ -284,38 +283,42 @@ export default async function AdminOverviewPage() {
                 })}
               </div>
             ) : (
-              <div className="py-8 text-center text-[12px] text-text-muted">ไม่มีรายการรอตรวจสอบ ✓</div>
+              <div className="py-10 text-center text-[12px] text-text-muted font-medium">✓ ไม่มีรายการรอตรวจสอบ</div>
             )}
           </div>
 
           {/* Right Column */}
           <div className="lg:col-span-2 space-y-4">
             {/* Balance Card */}
-            <div className="bg-background-secondary border border-border rounded-xl p-4">
-              <div className="text-[10px] uppercase tracking-wide text-text-muted mb-2">ยอดคงเหลือคลัง</div>
-              <div className="text-[22px] font-bold text-text-primary tracking-tight">{formatCurrency(balance ?? 0)}</div>
+            <div className="bg-white border border-border rounded-2xl p-5 card-shadow overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-[#ecfdf5]/80 to-transparent pointer-events-none" />
+              <div className="absolute top-0 inset-x-0 h-[3px] rounded-t-2xl bg-gradient-to-r from-emerald-500 to-teal-400" />
+              <div className="relative">
+                <div className="text-[9.5px] uppercase tracking-[0.22em] font-black text-text-muted mb-2">ยอดคงเหลือคลัง</div>
+                <div className="text-[26px] font-black text-text-primary tracking-tight leading-none">{formatCurrency(balance ?? 0)}</div>
+              </div>
             </div>
 
             {/* Period Chart */}
-            <div className="bg-background-secondary border border-border rounded-xl p-4">
-              <div className="text-[12px] font-semibold text-text-primary mb-1">อัตราการชำระ 5 งวดล่าสุด</div>
-              <div className="text-[9px] text-text-muted mb-4">{activeSemester?.name ?? '—'}</div>
+            <div className="bg-white border border-border rounded-2xl p-5 card-shadow">
+              <div className="text-[12px] font-black text-text-primary mb-0.5">อัตราการชำระ 5 งวดล่าสุด</div>
+              <div className="text-[9.5px] text-text-muted mb-4">{activeSemester?.name ?? '—'}</div>
               <div className="flex items-end gap-2" style={{ height: '72px' }}>
                 {periodRates.map((p, i) => {
                   const isLatest = i === periodRates.length - 1
                   const barH = Math.max((p.rate / 100) * 60, 4)
                   return (
                     <div key={p.id} className="flex-1 flex flex-col items-center gap-1.5" title={`${p.label}: ${p.rate}%`}>
-                      <span className="text-[8.5px] font-bold text-text-muted">{p.rate > 0 ? `${p.rate}%` : ''}</span>
+                      <span className="text-[8px] font-bold text-text-muted">{p.rate > 0 ? `${p.rate}%` : ''}</span>
                       <div
-                        className={`w-full rounded-t-md bar-grow ${
+                        className={`w-full rounded-t-lg bar-grow ${
                           isLatest
-                            ? 'bg-gradient-to-t from-brand to-slate-500'
+                            ? 'bg-gradient-to-t from-brand to-[#7c94f8]'
                             : 'bg-gradient-to-t from-background-muted to-slate-200'
                         }`}
                         style={{ height: `${barH}px`, animationDelay: `${i * 80}ms` }}
                       />
-                      <div className="text-[8px] text-text-muted truncate w-full text-center font-medium" title={p.label}>{p.label}</div>
+                      <div className="text-[7.5px] text-text-muted truncate w-full text-center font-semibold" title={p.label}>{p.label}</div>
                     </div>
                   )
                 })}
@@ -326,8 +329,8 @@ export default async function AdminOverviewPage() {
             </div>
 
             {/* Activity */}
-            <div className="bg-background-secondary border border-border rounded-xl p-4">
-              <div className="text-[12px] font-semibold text-text-primary mb-3">กิจกรรมล่าสุด</div>
+            <div className="bg-white border border-border rounded-2xl p-5 card-shadow">
+              <div className="text-[12px] font-black text-text-primary mb-4">กิจกรรมล่าสุด</div>
               <ActivityFeed activities={activities.slice(0, 6)} />
             </div>
           </div>
@@ -336,16 +339,16 @@ export default async function AdminOverviewPage() {
         {/* Chart Row: Expense Donut + Cash Flow */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Expense Breakdown Donut */}
-          <div className="bg-background-secondary border border-border rounded-xl p-4">
-            <div className="text-[12px] font-semibold text-text-primary mb-1">สัดส่วนรายจ่ายตามหมวดหมู่</div>
-            <div className="text-[9px] text-text-muted mb-4">ค่าใช้จ่ายทั้งหมดที่อนุมัติแล้ว · รวม {formatCurrency(expenseTotalAll)}</div>
+          <div className="bg-white border border-border rounded-2xl p-5 card-shadow">
+            <div className="text-[12.5px] font-black text-text-primary mb-0.5">สัดส่วนรายจ่ายตามหมวดหมู่</div>
+            <div className="text-[9.5px] text-text-muted mb-4">ค่าใช้จ่ายทั้งหมดที่อนุมัติแล้ว · รวม {formatCurrency(expenseTotalAll)}</div>
             <ExpenseDonutChart data={categoryTotals} totalAmount={expenseTotalAll} />
           </div>
 
           {/* Cash Flow Trend */}
-          <div className="bg-background-secondary border border-border rounded-xl p-4">
-            <div className="text-[12px] font-semibold text-text-primary mb-1">กระแสเงินสด 6 เดือนล่าสุด</div>
-            <div className="text-[9px] text-text-muted mb-4">รายรับ · รายจ่าย · ยอดคงเหลือ (บาท)</div>
+          <div className="bg-white border border-border rounded-2xl p-5 card-shadow">
+            <div className="text-[12.5px] font-black text-text-primary mb-0.5">กระแสเงินสด 6 เดือนล่าสุด</div>
+            <div className="text-[9.5px] text-text-muted mb-4">รายรับ · รายจ่าย · ยอดคงเหลือ (บาท)</div>
             <CashFlowTrendChart data={monthlyTrend} />
           </div>
         </div>
@@ -354,21 +357,21 @@ export default async function AdminOverviewPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <NotificationTrigger />
           {[
-            { label: 'เพิ่มค่าใช้จ่าย', desc: 'บันทึกรายจ่ายสาขา', icon: Plus, href: '/admin/expenses', gradient: 'from-slate-600 to-slate-800' },
-            { label: 'ส่งออกรายงาน', desc: 'Excel รายงานทางการเงิน', icon: Download, href: '/api/reports/export?type=income', gradient: 'from-emerald-600 to-teal-700' },
+            { label: 'เพิ่มค่าใช้จ่าย', desc: 'บันทึกรายจ่ายสาขา', icon: Plus, href: '/admin/expenses', accentFrom: '#3d52d5', accentTo: '#7c94f8' },
+            { label: 'ส่งออกรายงาน', desc: 'Excel รายงานทางการเงิน', icon: Download, href: '/api/reports/export?type=income', accentFrom: '#0a8f5a', accentTo: '#0fad6e' },
           ].map((a) => (
             <Link
               key={a.label}
               href={a.href}
-              className="group relative bg-background-secondary border border-border rounded-xl p-4 flex items-center gap-3 hover-lift card-shadow overflow-hidden"
+              className="group relative bg-white border border-border rounded-2xl p-5 flex items-center gap-4 hover-lift card-shadow overflow-hidden"
             >
-              <div className={`absolute inset-0 bg-gradient-to-br ${a.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-200`} />
-              <div className="w-9 h-9 rounded-lg bg-background-muted flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
-                <a.icon className="w-4 h-4 text-text-secondary" />
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform text-white"
+                style={{ background: `linear-gradient(135deg, ${a.accentFrom}, ${a.accentTo})` }}>
+                <a.icon className="w-4 h-4" />
               </div>
               <div>
-                <div className="text-[12px] font-bold text-text-primary">{a.label}</div>
-                <div className="text-[10.5px] text-text-muted">{a.desc}</div>
+                <div className="text-[12.5px] font-black text-text-primary">{a.label}</div>
+                <div className="text-[10.5px] text-text-muted mt-0.5">{a.desc}</div>
               </div>
             </Link>
           ))}
