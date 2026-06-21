@@ -30,6 +30,27 @@ export async function DELETE(
   const { error } = await adminClient.from('expenses').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // Delete receipt from storage if it exists
+  if (expense.receipt_url) {
+    try {
+      const getStoragePathFromUrl = (url: string, bucketName: string = 'receipts'): string | null => {
+        const marker = `/storage/v1/object/public/${bucketName}/`
+        const idx = url.indexOf(marker)
+        if (idx === -1) return null
+        return decodeURIComponent(url.substring(idx + marker.length))
+      }
+      const storagePath = getStoragePathFromUrl(expense.receipt_url, 'receipts')
+      if (storagePath) {
+        const { error: deleteError } = await adminClient.storage.from('receipts').remove([storagePath])
+        if (deleteError) {
+          console.error('Failed to delete expense receipt from storage:', deleteError)
+        }
+      }
+    } catch (e) {
+      console.error('Error deleting expense receipt from storage:', e)
+    }
+  }
+
   await logAction({
     actorId: profile.id,
     action: 'expense_deleted',

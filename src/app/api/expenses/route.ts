@@ -37,11 +37,14 @@ export async function POST(request: NextRequest) {
     const ext = receipt.type === 'application/pdf' ? 'pdf' : receipt.type.split('/')[1]
     const filename = `receipts/${user.id}-${Date.now()}.${ext}`
     const bytes = await receipt.arrayBuffer()
-    const { error: uploadErr } = await supabase.storage
+    const adminClient = createAdminClient()
+    const { error: uploadErr } = await adminClient.storage
       .from('receipts').upload(filename, bytes, { contentType: receipt.type, upsert: true })
     if (!uploadErr) {
-      const { data: { publicUrl } } = supabase.storage.from('receipts').getPublicUrl(filename)
+      const { data: { publicUrl } } = adminClient.storage.from('receipts').getPublicUrl(filename)
       receipt_url = publicUrl
+    } else {
+      console.error('[Expense Receipt Upload Error]:', uploadErr)
     }
   }
 

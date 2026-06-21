@@ -130,7 +130,7 @@ export default function Sidebar({
               {/* Active left accent */}
               {isActive && (
                 <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full"
-                  style={{ background: 'linear-gradient(180deg, #b59410, #d4a820)' }}
+                  style={{ background: 'linear-gradient(180deg, #4f46e5, #8b5cf6)' }}
                 />
               )}
 
