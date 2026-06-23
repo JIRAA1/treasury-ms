@@ -90,7 +90,12 @@ export default function AdminPaymentsPage() {
         body: JSON.stringify({ id, action, reason: rejectReason }),
       })
       if (res.ok) {
-        toast.success(action === 'approve' ? 'อนุมัติแล้ว' : 'ปฏิเสธแล้ว')
+        const data = await res.json()
+        if (data.warning) {
+          toast.warning(`อนุมัติสำเร็จ แต่แจ้งเตือน LINE ล้มเหลว: ${data.warning}`, { duration: 6000 })
+        } else {
+          toast.success(action === 'approve' ? 'อนุมัติแล้ว' : 'ปฏิเสธแล้ว')
+        }
         dialog.hide()
         setSelectedPayment(null)
         setRejectReason('')

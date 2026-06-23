@@ -94,23 +94,38 @@ export async function POST(request: NextRequest) {
     })
   }
 
+  let lineErrorDetail = ''
+  let lineHttpStatus = 200
+
   // 3. Send LINE Notification (Flex Message with Detail)
   if (lineUserId) {
     try {
       if (finalStatus === 'approved') {
-        const ok = await sendPaymentApproved(lineUserId, cycleTitle, payment.amount, thaiDate)
-        console.log(`[Verify] sendPaymentApproved → ok=${ok}`)
-        if (!ok) console.error(`[Verify] sendPaymentApproved failed for userId=${payment.user_id}`)
+        const result = await sendPaymentApproved(lineUserId, cycleTitle, payment.amount, thaiDate)
+        console.log(`[Verify] sendPaymentApproved → ok=${result.ok} status=${result.status ?? 'unknown'}`)
+        if (!result.ok) {
+          console.error(`[Verify] sendPaymentApproved failed for userId=${payment.user_id}: ${result.message}`)
+          lineErrorDetail = result.message || 'ส่งข้อความไม่สำเร็จ'
+          lineHttpStatus = result.status || 500
+        }
       } else if (finalStatus === 'rejected') {
-        const ok = await sendPaymentRejected(lineUserId, cycleTitle, rejectionReason)
-        console.log(`[Verify] sendPaymentRejected → ok=${ok}`)
-        if (!ok) console.error(`[Verify] sendPaymentRejected failed for userId=${payment.user_id}`)
+        const result = await sendPaymentRejected(lineUserId, cycleTitle, rejectionReason)
+        console.log(`[Verify] sendPaymentRejected → ok=${result.ok} status=${result.status ?? 'unknown'}`)
+        if (!result.ok) {
+          console.error(`[Verify] sendPaymentRejected failed for userId=${payment.user_id}: ${result.message}`)
+          lineErrorDetail = result.message || 'ส่งข้อความไม่สำเร็จ'
+          lineHttpStatus = result.status || 500
+        }
       }
     } catch (e) {
       console.error('[Verify] Failed to send LINE notification:', e)
+      lineErrorDetail = e instanceof Error ? e.message : 'เกิดข้อผิดพลาดในการเชื่อมต่อ LINE'
+      lineHttpStatus = 500
     }
   } else {
     console.warn(`[Verify] Student userId=${payment.user_id} has no LINE linked — skipping LINE notification`)
+    lineErrorDetail = 'นักศึกษายังไม่ได้ผูกบัญชี LINE'
+    lineHttpStatus = 400
   }
 
   // 4. Update Database if not notify_only
@@ -184,9 +199,23 @@ export async function POST(request: NextRequest) {
       targetId: id,
       newValue: { status: finalStatus, slip_url: updateData.slip_url || null }
     })
+  } else {
+    // If notify_only and LINE notification failed, return error response
+    if (lineErrorDetail) {
+      let displayError = lineErrorDetail
+      if (lineHttpStatus === 429) {
+        displayError = 'เกินโควต้าการส่งข้อความประจำเดือนของ LINE Official Account (You have reached your monthly limit.)'
+      } else if (lineHttpStatus === 400 && lineErrorDetail === 'นักศึกษายังไม่ได้ผูกบัญชี LINE') {
+        displayError = 'ไม่สามารถส่งการแจ้งเตือนได้เนื่องจากนักศึกษายังไม่ได้ผูกบัญชี LINE'
+      }
+      return NextResponse.json({ error: displayError }, { status: lineHttpStatus })
+    }
   }
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ 
+    success: true,
+    warning: lineErrorDetail ? (lineHttpStatus === 429 ? 'เกินโควต้า LINE รายเดือน' : lineErrorDetail) : undefined
+  })
 }
 
 export async function PATCH(request: NextRequest) {

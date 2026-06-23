@@ -33,12 +33,16 @@ export default function QuickApproveButton({ paymentId }: QuickApproveButtonProp
             })
           })
 
+          const data = await res.json()
           if (!res.ok) {
-            const data = await res.json()
             throw new Error(data.error)
           }
 
-          toast.success('อนุมัติสลิปเรียบร้อยแล้ว')
+          if (data.warning) {
+            toast.warning(`อนุมัติสำเร็จ แต่แจ้งเตือน LINE ล้มเหลว: ${data.warning}`, { duration: 6000 })
+          } else {
+            toast.success('อนุมัติสลิปเรียบร้อยแล้ว')
+          }
           dialog.hide()
           router.refresh()
         } catch (error: any) {

@@ -14,6 +14,12 @@ export interface LineProfile {
   pictureUrl?: string
 }
 
+export interface LineSendResult {
+  ok: boolean
+  status?: number
+  message?: string
+}
+
 export async function exchangeCode(code: string): Promise<LineProfile> {
   const params = new URLSearchParams({
     grant_type: 'authorization_code',
@@ -128,7 +134,7 @@ export async function sendOTP(to: string, otp: string): Promise<Response> {
   }])
 }
 
-export async function sendPaymentApproved(to: string, periodLabel: string, amount: number, date: string): Promise<boolean> {
+export async function sendPaymentApproved(to: string, periodLabel: string, amount: number, date: string): Promise<LineSendResult> {
   try {
     const res = await postToLinePush(to, [{
       type: 'flex',
@@ -187,14 +193,22 @@ export async function sendPaymentApproved(to: string, periodLabel: string, amoun
         }
       }
     }])
-    return res.ok
+    if (!res.ok) {
+      let message = 'LINE API error'
+      try {
+        const err = await res.clone().json()
+        message = err.message || message
+      } catch {}
+      return { ok: false, status: res.status, message }
+    }
+    return { ok: true, status: res.status }
   } catch (e) {
     console.error(`[LINE sendPaymentApproved Exception] to=${to}`, e)
-    return false
+    return { ok: false, message: e instanceof Error ? e.message : 'Unknown exception' }
   }
 }
 
-export async function sendPaymentRejected(to: string, cycleTitle: string, reason: string): Promise<boolean> {
+export async function sendPaymentRejected(to: string, cycleTitle: string, reason: string): Promise<LineSendResult> {
   try {
     const res = await postToLinePush(to, [{
       type: 'flex',
@@ -230,10 +244,18 @@ export async function sendPaymentRejected(to: string, cycleTitle: string, reason
         }
       }
     }])
-    return res.ok
+    if (!res.ok) {
+      let message = 'LINE API error'
+      try {
+        const err = await res.clone().json()
+        message = err.message || message
+      } catch {}
+      return { ok: false, status: res.status, message }
+    }
+    return { ok: true, status: res.status }
   } catch (e) {
     console.error(`[LINE sendPaymentRejected Exception] to=${to}`, e)
-    return false
+    return { ok: false, message: e instanceof Error ? e.message : 'Unknown exception' }
   }
 }
 
