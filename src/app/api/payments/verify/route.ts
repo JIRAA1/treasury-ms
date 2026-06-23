@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
   // 1. Fetch Payment, User, and Cycle Info
   const { data: payment } = await adminClient
     .from('payments')
-    .select('*, user:user_id(id, line_user_id, fullname), period:period_id(label, period_order)')
+    .select('*, user:user_id(id, fullname), period:period_id(label, period_order)')
     .eq('id', id)
     .single()
 
@@ -51,6 +51,16 @@ export async function POST(request: NextRequest) {
   const cycleTitle = (payment as any).period?.label || `งวดที่ ${(payment as any).period?.period_order || '—'}`
   const finalStatus = action === 'notify_only' ? (status || payment.status) : (action === 'approve' ? 'approved' : 'rejected')
   const thaiDate = new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+  // 1b. Fetch line_user_id explicitly from public.users (bypass PostgREST join ambiguity)
+  const { data: studentFull } = await adminClient
+    .from('users')
+    .select('id, line_user_id')
+    .eq('id', payment.user_id)
+    .single()
+  const lineUserId: string | null = studentFull?.line_user_id ?? null
+
+  console.log(`[Verify] payment.id=${id} action=${action} student.id=${payment.user_id} line_user_id=${lineUserId ?? 'NOT_LINKED'} finalStatus=${finalStatus}`)
 
   // 2. Create In-App Notification
   let title = ''
@@ -77,7 +87,7 @@ export async function POST(request: NextRequest) {
 
   if (title) {
     await adminClient.from('notifications').insert({
-      user_id: student.id,
+      user_id: payment.user_id,
       title,
       message,
       type: notifType
@@ -85,18 +95,22 @@ export async function POST(request: NextRequest) {
   }
 
   // 3. Send LINE Notification (Flex Message with Detail)
-  if (student.line_user_id) {
+  if (lineUserId) {
     try {
       if (finalStatus === 'approved') {
-        const ok = await sendPaymentApproved(student.line_user_id, cycleTitle, payment.amount, thaiDate)
-        if (!ok) console.error(`[Verify] sendPaymentApproved failed for userId=${student.id}`)
+        const ok = await sendPaymentApproved(lineUserId, cycleTitle, payment.amount, thaiDate)
+        console.log(`[Verify] sendPaymentApproved → ok=${ok}`)
+        if (!ok) console.error(`[Verify] sendPaymentApproved failed for userId=${payment.user_id}`)
       } else if (finalStatus === 'rejected') {
-        const ok = await sendPaymentRejected(student.line_user_id, cycleTitle, rejectionReason)
-        if (!ok) console.error(`[Verify] sendPaymentRejected failed for userId=${student.id}`)
+        const ok = await sendPaymentRejected(lineUserId, cycleTitle, rejectionReason)
+        console.log(`[Verify] sendPaymentRejected → ok=${ok}`)
+        if (!ok) console.error(`[Verify] sendPaymentRejected failed for userId=${payment.user_id}`)
       }
     } catch (e) {
       console.error('[Verify] Failed to send LINE notification:', e)
     }
+  } else {
+    console.warn(`[Verify] Student userId=${payment.user_id} has no LINE linked — skipping LINE notification`)
   }
 
   // 4. Update Database if not notify_only

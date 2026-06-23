@@ -6,7 +6,7 @@ import StatusPill from '@/components/payments/StatusPill'
 import { formatCurrency, formatDate, getTierConfig } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { th } from 'date-fns/locale'
-import { Search, ExternalLink, CheckCircle, XCircle, AlertTriangle, Loader2 } from 'lucide-react'
+import { Search, ExternalLink, CheckCircle, XCircle, AlertTriangle, Loader2, Bell } from 'lucide-react'
 import { toast } from 'sonner'
 import { useDialog } from '@/components/shared/GlobalDialog'
 
@@ -30,6 +30,7 @@ export default function AdminPaymentsPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
+  const [notifyLoadingId, setNotifyLoadingId] = useState<string | null>(null)
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all')
   const [filterPeriod, setFilterPeriod] = useState<string>('')
   const [periods, setPeriods] = useState<{ id: string; label: string }[]>([])
@@ -130,6 +131,44 @@ export default function AdminPaymentsPage() {
     }
   }
 
+  // ── Retroactive LINE notification (notify_only) ──────────────────────────
+  const doNotify = async (id: string) => {
+    setNotifyLoadingId(id)
+    dialog.setLoading(true)
+    try {
+      const res = await fetch('/api/payments/verify', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: 'notify_only', status: 'approved' }),
+      })
+      if (res.ok) {
+        toast.success('ส่งแจ้งเตือนไลน์ให้นักศึกษาแล้ว')
+        dialog.hide()
+      } else {
+        const json = await res.json()
+        toast.error(json.error ?? 'ส่งแจ้งเตือนไม่สำเร็จ')
+        dialog.setLoading(false)
+      }
+    } catch {
+      toast.error('เกิดข้อผิดพลาดในการเชื่อมต่อ')
+      dialog.setLoading(false)
+    } finally {
+      setNotifyLoadingId(null)
+    }
+  }
+
+  const handleNotify = (id: string, paymentName?: string) => {
+    dialog.show({
+      type: 'confirm',
+      title: '📢 แจ้งเตือนยืนยันการชำระ',
+      message: paymentName
+        ? `ส่งแจ้งเตือนไลน์ "ชำระเงินสำเร็จ" ให้ ${paymentName} อีกครั้งใช่หรือไม่?\n(สถานะการชำระในระบบจะไม่เปลี่ยนแปลง)`
+        : 'ส่งแจ้งเตือนไลน์อีกครั้งให้นักศึกษา?\n(สถานะการชำระในระบบจะไม่เปลี่ยนแปลง)',
+      confirmText: '📢 ส่งแจ้งเตือน',
+      onConfirm: () => doNotify(id),
+    })
+  }
+
   return (
     <div className="flex h-full">
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -223,28 +262,48 @@ export default function AdminPaymentsPage() {
                     <StatusPill status={p.status === 'approved' ? 'paid' : p.status === 'pending' ? 'pending' : 'rejected'} />
                   </td>
                   <td className="px-4 py-3">
-                    {p.status === 'pending' && (
-                      <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      {p.status === 'pending' && (
+                        <>
+                          <button
+                            onClick={() => handleAction(p.id, 'approve', p.user?.fullname)}
+                            disabled={actionLoadingId === p.id}
+                            title="อนุมัติ"
+                            className="p-1 rounded hover:bg-emerald-50 text-emerald-600 transition-colors disabled:opacity-50"
+                          >
+                            {actionLoadingId === p.id
+                              ? <Loader2 className="w-4 h-4 animate-spin" />
+                              : <CheckCircle className="w-4 h-4" />}
+                          </button>
+                          <button
+                            onClick={() => { setSelectedPayment(p) }}
+                            title="ปฏิเสธ"
+                            className="p-1 rounded hover:bg-red-50 text-red-500 transition-colors"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+                      {p.status === 'approved' && (
                         <button
-                          onClick={() => handleAction(p.id, 'approve', p.user?.fullname)}
-                          disabled={actionLoadingId === p.id}
-                          className="p-1 rounded hover:bg-emerald-50 text-emerald-600 transition-colors disabled:opacity-50"
+                          onClick={() => handleNotify(p.id, p.user?.fullname)}
+                          disabled={notifyLoadingId === p.id}
+                          title="ส่งแจ้งเตือนไลน์อีกครั้ง"
+                          className="p-1 rounded hover:bg-sky-50 text-sky-500 transition-colors disabled:opacity-50"
                         >
-                          {actionLoadingId === p.id
+                          {notifyLoadingId === p.id
                             ? <Loader2 className="w-4 h-4 animate-spin" />
-                            : <CheckCircle className="w-4 h-4" />}
+                            : <Bell className="w-4 h-4" />}
                         </button>
-                        <button onClick={() => { setSelectedPayment(p); }} className="p-1 rounded hover:bg-red-50 text-red-500 transition-colors">
-                          <XCircle className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                    {p.slip_url && (
-                      <a href={p.slip_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
-                        className="text-[11px] text-text-muted hover:text-text-primary flex items-center gap-0.5 transition-colors">
-                        สลิป <ExternalLink className="w-2.5 h-2.5" />
-                      </a>
-                    )}
+                      )}
+                      {p.slip_url && (
+                        <a href={p.slip_url} target="_blank" rel="noopener noreferrer"
+                          title="ดูสลิป"
+                          className="text-[11px] text-text-muted hover:text-text-primary flex items-center gap-0.5 transition-colors">
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -319,7 +378,7 @@ export default function AdminPaymentsPage() {
             )}
           </div>
 
-          {/* Actions */}
+          {/* Actions — Pending */}
           {selectedPayment.status === 'pending' && (
             <div className="p-4 border-t border-border flex gap-2">
               <button
@@ -335,6 +394,23 @@ export default function AdminPaymentsPage() {
               >
                 ✕ ปฏิเสธ
               </button>
+            </div>
+          )}
+
+          {/* Actions — Approved: retroactive LINE notify */}
+          {selectedPayment.status === 'approved' && (
+            <div className="p-4 border-t border-border">
+              <button
+                onClick={() => handleNotify(selectedPayment.id, selectedPayment.user?.fullname)}
+                disabled={notifyLoadingId === selectedPayment.id}
+                className="w-full flex items-center justify-center gap-2 bg-sky-50 text-sky-700 border border-sky-200 text-[13px] font-medium py-2.5 rounded-lg hover:bg-sky-100 transition-colors disabled:opacity-50"
+              >
+                {notifyLoadingId === selectedPayment.id
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <Bell className="w-4 h-4" />}
+                ส่งแจ้งเตือนยืนยันการชำระอีกครั้ง
+              </button>
+              <p className="text-[10.5px] text-text-muted text-center mt-2">ส่ง LINE Flex Message ให้นักศึกษาโดยไม่เปลี่ยนสถานะในระบบ</p>
             </div>
           )}
         </div>
