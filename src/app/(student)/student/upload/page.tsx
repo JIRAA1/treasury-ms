@@ -282,31 +282,38 @@ export default function UploadPage() {
 
             {/* ── Step 2: Upload ──────────────────────────────── */}
             {selectedPeriodId !== null && selectedCycle && (
-              <div className="bg-background-secondary border border-border rounded-2xl p-5 animate-in fade-in slide-in-from-right-2 duration-200">
+              <div className="bg-background-secondary/80 backdrop-blur-xl border border-white/10 dark:border-black/20 rounded-2xl p-5 md:p-6 luxury-shadow animate-in fade-in slide-in-from-right-4 duration-350 relative">
+                {/* Subtle internal glowing spots */}
+                <div className="absolute top-0 right-1/4 w-32 h-32 bg-brand/5 rounded-full filter blur-2xl pointer-events-none" />
+
                 {/* Header */}
-                <div className="flex items-center justify-between mb-5 pb-4 border-b border-border">
+                <div className="flex items-center justify-between mb-6 pb-4 border-b border-border-strong">
                   <div>
-                    <div className="text-[11px] text-text-muted uppercase tracking-wider font-bold mb-0.5">กำลังส่งสลิปสำหรับ</div>
-                    <div className="text-[15px] font-bold text-text-primary">{selectedCycle.label}</div>
-                    <div className="text-[12.5px] font-medium text-brand mt-0.5">ยอดโอนที่กำหนด: ฿{selectedCycle.amount.toLocaleString()}</div>
+                    <div className="text-[10px] text-text-muted uppercase tracking-wider font-extrabold mb-0.5">กำลังนำส่งสลิปชำระเงิน</div>
+                    <div className="text-[16px] font-black text-text-primary">{selectedCycle.label}</div>
+                    <div className="text-[13px] font-bold text-brand mt-0.5">ยอดเงินโอนที่กำหนด: ฿{selectedCycle.amount.toLocaleString()}</div>
                   </div>
                   {unpaidCycles.length > 1 && (
                     <button
                       onClick={() => setSelectedPeriodId(null)}
-                      className="text-[12px] text-brand hover:underline font-medium"
+                      className="text-[12px] text-brand hover:text-brand-hover font-bold hover:underline transition-colors px-3 py-1.5 rounded-lg bg-brand/5 hover:bg-brand/10"
                     >
                       เปลี่ยนงวด
                     </button>
                   )}
                 </div>
 
-                {/* QR Code — compact horizontal card */}
+                {/* QR Code — compact premium horizontal card */}
                 {selectedCycle.qr_url && !isWindowLocked && (
-                  <div className="mb-5 overflow-hidden rounded-2xl shadow-md shadow-emerald-500/10"
+                  <div className="mb-6 overflow-hidden rounded-2xl border border-white/10 dark:border-black/20 shadow-xl relative"
                     style={{ background: 'linear-gradient(135deg, #059669 0%, #0d9488 100%)' }}>
-                    <div className="flex items-center gap-3 p-3">
-                      {/* QR image — compact */}
-                      <div className="shrink-0 bg-white rounded-xl p-1.5 shadow-sm ring-1 ring-white/30">
+                    
+                    {/* Pulsing glow background */}
+                    <div className="absolute inset-0 bg-white/5 animate-pulse" />
+                    
+                    <div className="flex items-center gap-4 p-4 relative z-10">
+                      {/* QR image — compact rounded glass */}
+                      <div className="shrink-0 bg-white rounded-2xl p-2 shadow-2xl ring-4 ring-white/15 hover:scale-105 transition-transform duration-300">
                         <img
                           src={selectedCycle.qr_url}
                           alt={`QR Code สำหรับ${selectedCycle.label}`}
@@ -314,18 +321,18 @@ export default function UploadPage() {
                         />
                       </div>
                       {/* Info side */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <QrCode className="w-3 h-3 text-white/70 shrink-0" />
-                          <span className="text-[10px] font-black text-white/70 uppercase tracking-widest">QR โอนเงิน</span>
+                      <div className="flex-1 min-w-0 text-white">
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <QrCode className="w-3.5 h-3.5 text-white/80 shrink-0" />
+                          <span className="text-[10px] font-black text-white/80 uppercase tracking-widest">QR Code การโอนเงิน</span>
                         </div>
-                        <div className="text-[22px] font-black text-white leading-none tracking-tight">
+                        <div className="text-[26px] font-black leading-none tracking-tight">
                           ฿{selectedCycle.amount.toLocaleString()}
                         </div>
-                        <div className="text-[11px] text-white/70 mt-0.5 truncate">{selectedCycle.label}</div>
-                        <div className="mt-2.5 flex items-center gap-1.5 bg-white/15 backdrop-blur-sm rounded-lg px-2.5 py-1.5 w-fit">
-                          <Upload className="w-3 h-3 text-white/80 shrink-0" />
-                          <span className="text-[10.5px] text-white font-semibold">โอนแล้ว? ส่งสลิปด้านล่าง</span>
+                        <div className="text-[11px] text-white/80 mt-1 truncate font-medium">{selectedCycle.label}</div>
+                        <div className="mt-3 flex items-center gap-1.5 bg-white/20 backdrop-blur-md rounded-lg px-2.5 py-1.5 w-fit border border-white/10 shadow-sm">
+                          <Upload className="w-3 h-3 text-white shrink-0" />
+                          <span className="text-[10.5px] font-extrabold">สแกนชำระแล้วแนบหลักฐานด้านล่าง</span>
                         </div>
                       </div>
                     </div>
@@ -334,27 +341,27 @@ export default function UploadPage() {
 
                 {/* Window locked guard */}
                 {isWindowLocked ? (
-                  <div className="py-8 text-center space-y-3">
-                    <div className="w-12 h-12 bg-background-tertiary rounded-full flex items-center justify-center mx-auto">
-                      <Lock className="w-5 h-5 text-text-muted" />
+                  <div className="py-10 text-center space-y-4">
+                    <div className="w-14 h-14 bg-background-tertiary rounded-full flex items-center justify-center mx-auto shadow-inner border border-border-strong">
+                      <Lock className="w-6 h-6 text-text-muted" />
                     </div>
                     {selectedWindowStatus === 'upcoming' && selectedCycle.open_at ? (
-                      <>
-                        <div className="text-[14px] font-bold text-text-primary">ยังไม่ถึงเวลาเปิดรับสลิป</div>
+                      <div className="space-y-1">
+                        <div className="text-[15px] font-bold text-text-primary">ยังไม่ถึงเวลาเปิดรับสลิป</div>
                         <div className="text-[12.5px] text-text-muted">
-                          จะเปิดรับสลิปในวันที่ <span className="font-semibold text-text-primary">{formatThaiDate(selectedCycle.open_at)}</span>
+                          จะเปิดรับสลิปในวันที่ <span className="font-semibold text-brand">{formatThaiDate(selectedCycle.open_at)}</span>
                         </div>
-                      </>
+                      </div>
                     ) : (
-                      <>
-                        <div className="text-[14px] font-bold text-text-primary">หมดเวลารับสลิปแล้ว</div>
+                      <div className="space-y-1">
+                        <div className="text-[15px] font-bold text-text-primary">หมดเวลารับสลิปชำระเงินแล้ว</div>
                         {selectedCycle.close_at && (
                           <div className="text-[12.5px] text-text-muted">
                             ปิดรับเมื่อวันที่ <span className="font-semibold text-text-primary">{formatThaiDate(selectedCycle.close_at)}</span>
                           </div>
                         )}
-                        <div className="text-[12px] text-text-disabled">กรุณาติดต่อเหรัญญิกหากต้องการส่งสลิปล่าช้า</div>
-                      </>
+                        <div className="text-[11.5px] text-text-disabled mt-2">กรุณาติดต่อเหรัญญิกหากต้องการส่งสลิปล่าช้า</div>
+                      </div>
                     )}
                   </div>
                 ) : (

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Upload, CheckCircle, XCircle, Loader2, ImageIcon, AlertTriangle, RefreshCw, HelpCircle } from 'lucide-react'
+import { Upload, CheckCircle, XCircle, Loader2, ImageIcon, AlertTriangle, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { parseSlipQR } from '@/lib/slip-qr'
 import jsQR from 'jsqr'
@@ -308,6 +308,155 @@ export default function SlipUploader({ periodId, unpaidCycles, onPeriodChange, o
     }
   }
 
+  // ── INJECT CUSTOM CSS ANIMATIONS ON MOUNT ──────────────────────────────────
+  useEffect(() => {
+    const style = document.createElement('style')
+    style.id = 'slip-uploader-custom-styles'
+    style.innerHTML = `
+      @keyframes neonPulse {
+        0%, 100% { border-color: rgba(16, 185, 129, 0.3); box-shadow: 0 0 5px rgba(16, 185, 129, 0.1), inset 0 0 5px rgba(16, 185, 129, 0.05); }
+        50% { border-color: rgba(16, 185, 129, 0.8); box-shadow: 0 0 20px rgba(16, 185, 129, 0.4), inset 0 0 10px rgba(16, 185, 129, 0.15); }
+      }
+      @keyframes neonPulseHover {
+        0%, 100% { border-color: rgba(99, 102, 241, 0.3); box-shadow: 0 0 5px rgba(99, 102, 241, 0.1); }
+        50% { border-color: rgba(99, 102, 241, 0.8); box-shadow: 0 0 20px rgba(99, 102, 241, 0.4); }
+      }
+      @keyframes laserScan {
+        0% { top: 0%; opacity: 0.3; }
+        50% { top: 100%; opacity: 1; }
+        100% { top: 0%; opacity: 0.3; }
+      }
+      @keyframes iconFloat {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-6px); }
+      }
+      @keyframes checkPop {
+        0% { transform: scale(0.8); opacity: 0; }
+        50% { transform: scale(1.15); }
+        100% { transform: scale(1); opacity: 1; }
+      }
+      @keyframes shimmerGlow {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+      }
+      .luxury-scanner::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, #10b981 20%, #34d399 50%, #10b981 80%, transparent);
+        box-shadow: 0 0 15px #10b981, 0 0 30px #34d399;
+        animation: laserScan 2.5s infinite linear;
+        z-index: 10;
+      }
+      .pulse-glow-emerald {
+        animation: neonPulse 2.5s infinite ease-in-out;
+      }
+      .pulse-glow-hover:hover {
+        animation: neonPulseHover 2s infinite ease-in-out;
+      }
+      .animate-float {
+        animation: iconFloat 3s infinite ease-in-out;
+      }
+      .receipt-bg {
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%);
+      }
+    `
+    document.head.appendChild(style)
+    return () => {
+      const el = document.getElementById('slip-uploader-custom-styles')
+      if (el) document.head.removeChild(el)
+    }
+  }, [])
+
+  // ── CUSTOM CANVAS CONFETTI ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (step !== 'success') return
+    const canvas = document.getElementById('confetti-canvas') as HTMLCanvasElement | null
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const container = canvas.parentElement
+    canvas.width = container?.clientWidth || 500
+    canvas.height = container?.clientHeight || 450
+
+    interface Particle {
+      x: number
+      y: number
+      size: number
+      color: string
+      speedX: number
+      speedY: number
+      rotation: number
+      rotationSpeed: number
+    }
+
+    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4']
+    const particles: Particle[] = []
+
+    const initParticles = () => {
+      for (let i = 0; i < 60; i++) {
+        particles.push({
+          x: 20,
+          y: canvas.height - 20,
+          size: Math.random() * 8 + 4,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          speedX: Math.random() * 6 + 2,
+          speedY: -Math.random() * 12 - 6,
+          rotation: Math.random() * 360,
+          rotationSpeed: (Math.random() - 0.5) * 12
+        })
+      }
+      for (let i = 0; i < 60; i++) {
+        particles.push({
+          x: canvas.width - 20,
+          y: canvas.height - 20,
+          size: Math.random() * 8 + 4,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          speedX: -Math.random() * 6 - 2,
+          speedY: -Math.random() * 12 - 6,
+          rotation: Math.random() * 360,
+          rotationSpeed: (Math.random() - 0.5) * 12
+        })
+      }
+    }
+
+    initParticles()
+    let animId: number
+
+    const render = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      let hasActive = false
+
+      particles.forEach(p => {
+        p.x += p.speedX
+        p.y += p.speedY
+        p.speedY += 0.25
+        p.rotation += p.rotationSpeed
+
+        ctx.save()
+        ctx.translate(p.x, p.y)
+        ctx.rotate((p.rotation * Math.PI) / 180)
+        ctx.fillStyle = p.color
+        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size)
+        ctx.restore()
+
+        if (p.y < canvas.height + 20 && p.x > -20 && p.x < canvas.width + 20) {
+          hasActive = true
+        }
+      })
+
+      if (hasActive) {
+        animId = requestAnimationFrame(render)
+      }
+    }
+
+    render()
+    return () => cancelAnimationFrame(animId)
+  }, [step])
+
   const isSubmitDisabled = 
     !file || 
     scanning || 
@@ -317,119 +466,156 @@ export default function SlipUploader({ periodId, unpaidCycles, onPeriodChange, o
 
   if (step === 'verifying') {
     return (
-      <div className="flex gap-6 items-start">
+      <div className="relative overflow-hidden rounded-2xl border border-white/10 dark:border-black/20 bg-background-secondary/80 backdrop-blur-xl p-6 md:p-8 luxury-shadow flex flex-col md:flex-row gap-8 items-center min-h-[300px]">
+        <div className="absolute top-0 right-0 w-48 h-48 bg-brand/10 rounded-full filter blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-emerald-500/10 rounded-full filter blur-3xl pointer-events-none" />
+
         {preview && (
-          <div className="w-28 h-36 rounded-lg border border-border overflow-hidden flex-shrink-0">
-            <img src={preview} alt="slip" className="w-full h-full object-cover" />
+          <div className="w-32 h-44 rounded-xl border border-border overflow-hidden flex-shrink-0 relative shadow-2xl animate-pulse">
+            <img src={preview} alt="slip" className="w-full h-full object-cover grayscale opacity-70" />
+            <div className="absolute inset-0 bg-gradient-to-t from-background-secondary via-transparent to-transparent" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+              <Loader2 className="w-8 h-8 text-brand animate-spin" />
+            </div>
           </div>
         )}
-        <div className="flex-1 space-y-3 pt-1">
-          <div className="text-[13px] font-semibold text-text-primary mb-4 flex items-center gap-2">
-            <Loader2 className="w-4 h-4 text-brand animate-spin" />
-            กำลังส่งข้อมูล...
-          </div>
-          {verifySteps.map((s, i) => (
-            <div key={i} className="flex items-center gap-3">
-              {s.done ? (
-                <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-              ) : s.active ? (
-                <Loader2 className="w-4 h-4 text-brand animate-spin flex-shrink-0" />
-              ) : (
-                <div className="w-4 h-4 rounded-full border-2 border-border flex-shrink-0" />
-              )}
-              <span className={cn(
-                'text-[12.5px]',
-                s.done ? 'text-text-primary' : s.active ? 'text-text-primary font-medium' : 'text-text-muted'
-              )}>
-                {s.label}
-              </span>
+        <div className="flex-1 space-y-6 w-full">
+          <div>
+            <div className="text-[15px] font-bold text-text-primary mb-1 flex items-center gap-2">
+              <Loader2 className="w-4 h-4 text-brand animate-spin" />
+              กำลังประมวลผลระบบชำระเงิน
             </div>
-          ))}
+            <div className="text-[12px] text-text-muted">กรุณารอสักครู่ ระบบกำลังนำส่งข้อมูลเข้าสู่ฐานข้อมูลและทำรายการอนุมัติ</div>
+          </div>
+
+          <div className="space-y-3.5 bg-background-muted/40 p-4.5 rounded-xl border border-border-strong">
+            {verifySteps.map((s, i) => (
+              <div key={i} className="flex items-center gap-3.5 transition-all duration-300">
+                {s.done ? (
+                  <div className="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center flex-shrink-0" style={{ animation: 'checkPop 0.4s ease-out forwards' }}>
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                  </div>
+                ) : s.active ? (
+                  <div className="w-5 h-5 rounded-full bg-brand/15 border border-brand/30 flex items-center justify-center flex-shrink-0">
+                    <Loader2 className="w-3 h-3 text-brand animate-spin" />
+                  </div>
+                ) : (
+                  <div className="w-5 h-5 rounded-full border border-border-strong flex-shrink-0 bg-background-muted" />
+                )}
+                <span className={cn(
+                  'text-[12.5px] transition-colors duration-300',
+                  s.done ? 'text-emerald-600 dark:text-emerald-500 font-medium' : s.active ? 'text-text-primary font-bold' : 'text-text-muted'
+                )}>
+                  {s.label}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     )
   }
 
   if (step === 'success') {
-    // Auto-approved (credit case) vs pending (normal case)
     const isAutoApproved = successData?.payment?.status === 'approved'
 
     return (
-      <div className="text-center py-6">
-        <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 ${isAutoApproved ? 'bg-emerald-100' : 'bg-blue-50'}`}>
-          <CheckCircle className={`w-6 h-6 ${isAutoApproved ? 'text-emerald-600' : 'text-blue-500'}`} />
-        </div>
-        <div className="text-[15px] font-bold text-text-primary mb-1">ส่งสลิปสำเร็จ ✓</div>
-        <div className="text-[12.5px] text-text-muted mb-4">
-          {successData?.quota_exceeded
-            ? 'ระบบได้รับสลิปของคุณแล้ว'
-            : `ระบบบันทึกสลิปสำหรับ ${selectedCycle?.label || 'งวดที่กำหนด'} เรียบร้อยแล้ว`}
+      <div className="relative overflow-hidden rounded-2xl border border-white/10 dark:border-black/20 bg-background-secondary/80 backdrop-blur-xl p-6 md:p-8 luxury-shadow text-center min-h-[400px]">
+        <canvas id="confetti-canvas" className="absolute inset-0 w-full h-full pointer-events-none z-40" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 bg-emerald-500/10 rounded-full filter blur-3xl pointer-events-none" />
+
+        <div className="relative w-16 h-16 mx-auto mb-5 z-10 flex items-center justify-center">
+          <div className="absolute inset-0 rounded-full bg-emerald-500/20 dark:bg-emerald-500/10 animate-ping opacity-60" />
+          <div className="w-14 h-14 rounded-full bg-emerald-500 dark:bg-emerald-600 shadow-lg shadow-emerald-500/20 flex items-center justify-center relative" style={{ animation: 'checkPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards' }}>
+            <CheckCircle className="w-7 h-7 text-white" />
+          </div>
         </div>
 
-        {/* Status Banner */}
-        {isAutoApproved ? (
-          <div className="mb-5 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-left flex gap-2.5 items-start">
-            <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <div className="text-[12.5px] font-bold text-emerald-900">อนุมัติอัตโนมัติ</div>
-              <div className="text-[11.5px] text-emerald-800 mt-0.5">ยอดค้างชำระของคุณถูกหักออกแล้ว — ไม่ต้องรอเหรัญญิก</div>
-            </div>
-          </div>
-        ) : (
-          <div className="mb-5 p-3 bg-amber-50 border border-amber-100 rounded-xl text-left flex gap-2.5 items-start">
-            <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <div className="text-[12.5px] font-bold text-amber-900">รอเหรัญญิกตรวจสอบ</div>
-              <div className="text-[11.5px] text-amber-800 mt-0.5">
-                สลิปของคุณ<span className="font-bold">ยังไม่ผ่านการอนุมัติ</span> — กรุณารอเหรัญญิกตรวจสอบ
-                ระบบจะแจ้ง LINE เมื่ออนุมัติแล้ว
-              </div>
-            </div>
-          </div>
-        )}
+        <div className="text-[17px] font-black text-text-primary mb-1">ส่งหลักฐานการชำระเงินสำเร็จ ✓</div>
+        <div className="text-[12px] text-text-muted mb-6 max-w-xs mx-auto">
+          {successData?.quota_exceeded
+            ? 'ระบบอัปโหลดใบเสร็จในความดูแลของเหรัญญิกเรียบร้อยแล้ว'
+            : `บันทึกสลิปสำหรับการจ่ายเงิน "${selectedCycle?.label || 'งวดปัจจุบัน'}" เรียบร้อย`}
+        </div>
 
         {ocrResult && (
-          <div className="bg-background-muted border border-border-strong rounded-xl p-4 text-left mb-5 space-y-2.5">
-            <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-1 border-b border-border-strong pb-1">ข้อมูลที่ตรวจสอบพบ</div>
-            {Object.entries(ocrResult).map(([k, v]) => (
-              <div key={k} className="flex justify-between text-[12.5px]">
-                <span className="text-text-secondary">{k}</span>
-                <span className="font-semibold text-text-primary text-right">{v}</span>
-              </div>
-            ))}
+          <div className="relative bg-background-muted/70 backdrop-blur-md border border-border-strong rounded-2xl p-5 text-left mb-6 space-y-4 max-w-sm mx-auto shadow-inner overflow-hidden">
+            <div className="absolute -top-3 -right-3 w-16 h-16 rounded-full border-4 border-emerald-500/20 flex items-center justify-center text-[10px] font-bold text-emerald-500/30 rotate-[20deg] select-none pointer-events-none">
+              VERIFIED
+            </div>
+
+            <div className="flex justify-between items-center border-b border-border-strong pb-3">
+              <span className="text-[11px] font-black text-text-muted uppercase tracking-wider">รายละเอียดใบเสร็จ</span>
+              <span className="text-[10px] bg-brand/10 text-brand px-2 py-0.5 rounded-full font-bold">Smart QR</span>
+            </div>
+
+            <div className="space-y-3">
+              {Object.entries(ocrResult).map(([k, v]) => (
+                <div key={k} className="flex justify-between items-start gap-4 text-[12.5px]">
+                  <span className="text-text-secondary text-[12px]">{k}</span>
+                  <span className="font-semibold text-text-primary text-right break-all max-w-[200px]">{v}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
+
+        <div className="max-w-sm mx-auto mb-6">
+          {isAutoApproved ? (
+            <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-xl text-left flex gap-3 items-start">
+              <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="text-[12.5px] font-bold text-emerald-900 dark:text-emerald-400">อนุมัติอัตโนมัติ</div>
+                <div className="text-[11px] text-emerald-800/85 dark:text-emerald-500/80 mt-0.5">ยอดค้างชำระของท่านได้รับการหักล้างเรียบร้อยแล้ว โดยมียอดเครดิตก่อนหน้า</div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-3.5 bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/40 rounded-xl text-left flex gap-3 items-start">
+              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="text-[12.5px] font-bold text-amber-900 dark:text-amber-400">รอการตรวจสอบ</div>
+                <div className="text-[11px] text-amber-800/85 dark:text-amber-500/80 mt-0.5">สลิปอยู่ในคิวรอการตรวจสอบโดยเหรัญญิก ระบบจะส่งแจ้งเตือนทาง LINE เมื่อมีอัปเดต</div>
+              </div>
+            </div>
+          )}
+        </div>
+
         <button
           onClick={() => { setStep('upload'); setFile(null); setPreview(null); setRawQrPayload(null); setQrStatus({ scanned: false, hasQR: false, isValid: false }) }}
-          className="text-[12.5px] text-brand hover:underline font-semibold"
+          className="text-[12.5px] text-brand hover:text-brand-hover font-semibold transition-colors flex items-center justify-center gap-1 mx-auto"
         >
-          ส่งสลิปใบอื่นเพิ่มเติม
+          <span>อัปโหลดสลิปใบอื่นเพิ่มเติม</span>
         </button>
       </div>
     )
   }
 
-
   if (step === 'failed') {
     return (
-      <div className="text-center py-6">
-        <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
-          <XCircle className="w-6 h-6 text-red-500" />
+      <div className="relative overflow-hidden rounded-2xl border border-white/10 dark:border-black/20 bg-background-secondary/80 backdrop-blur-xl p-6 md:p-8 luxury-shadow text-center min-h-[300px] flex flex-col justify-center items-center">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 bg-red-500/10 rounded-full filter blur-3xl pointer-events-none" />
+
+        <div className="w-14 h-14 bg-red-50 dark:bg-red-950/20 rounded-full flex items-center justify-center mb-4 border border-red-100 dark:border-red-900/30 relative">
+          <div className="absolute inset-0 rounded-full bg-red-500/10 animate-ping opacity-40" />
+          <XCircle className="w-7 h-7 text-red-500" />
         </div>
-        <div className="text-[15px] font-bold text-text-primary mb-1">ส่งสลิปไม่สำเร็จ</div>
-        <div className="text-[12.5px] text-text-muted mb-5 max-w-sm mx-auto">{errorMsg}</div>
+
+        <div className="text-[16px] font-bold text-text-primary mb-1">ส่งหลักฐานล้มเหลว</div>
+        <div className="text-[12.5px] text-text-muted mb-6 max-w-sm">{errorMsg}</div>
+
         <button
           onClick={() => { setStep('upload'); setFile(null); setPreview(null); setRawQrPayload(null); setQrStatus({ scanned: false, hasQR: false, isValid: false }) }}
-          className="bg-brand text-white text-[13px] font-semibold px-5 py-2.5 rounded-xl hover:bg-brand-hover transition-colors"
+          className="bg-brand hover:bg-brand-hover text-white text-[13px] font-bold px-6 py-2.5 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-brand/20 cursor-pointer"
         >
-          ลองใหม่อีกครั้ง
+          กลับไปแก้ไขและลองใหม่
         </button>
       </div>
     )
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* ── DRAG AND DROP AREA ──────────────────────────────────────────────────── */}
       {!preview ? (
         <div
           onClick={() => inputRef.current?.click()}
@@ -438,13 +624,25 @@ export default function SlipUploader({ periodId, unpaidCycles, onPeriodChange, o
           onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
           onDragLeave={() => setDragOver(false)}
           className={cn(
-            'border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-200 luxury-shadow',
-            dragOver ? 'border-brand bg-background-muted' : 'border-border-strong hover:border-brand/40 hover:bg-background-muted'
+            'relative overflow-hidden border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-300 luxury-shadow flex flex-col items-center justify-center min-h-[220px]',
+            dragOver 
+              ? 'border-brand bg-brand/5 scale-[1.01]' 
+              : 'border-border-strong hover:border-brand/50 hover:bg-background-muted/30 pulse-glow-hover'
           )}
         >
-          <Upload className="w-9 h-9 text-text-muted mx-auto mb-3" />
-          <div className="text-[13px] font-semibold text-text-primary mb-1">คลิกเพื่ออัปโหลด หรือลากไฟล์มาวาง</div>
-          <div className="text-[11.5px] text-text-muted">PNG, JPG, WEBP ขนาดไม่เกิน 5MB</div>
+          <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.015] pointer-events-none" 
+               style={{ backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)', backgroundSize: '16px 16px' }} />
+
+          <div className="relative w-14 h-14 bg-brand/10 dark:bg-brand/5 rounded-2xl flex items-center justify-center mb-4 transition-all duration-300 group-hover:scale-110 shadow-sm animate-float">
+            <Upload className="w-6 h-6 text-brand" />
+          </div>
+
+          <div className="text-[13.5px] font-bold text-text-primary mb-1">
+            ลากและวางรูปสลิป หรือ คลิกเพื่อนำเข้า
+          </div>
+          <div className="text-[11.5px] text-text-muted">
+            รองรับ PNG, JPG, WEBP ขนาดข้อมูลไม่เกิน 5MB
+          </div>
           <input 
             ref={inputRef} 
             type="file" 
@@ -454,129 +652,160 @@ export default function SlipUploader({ periodId, unpaidCycles, onPeriodChange, o
           />
         </div>
       ) : (
-        <div className="border border-border-strong rounded-2xl overflow-hidden luxury-shadow">
-          <div className="flex items-center justify-between px-4 py-3 bg-background-muted border-b border-border-strong">
-            <div className="flex items-center gap-2 text-[12.5px] text-text-secondary font-medium">
-              <ImageIcon className="w-4 h-4 text-text-muted" />
-              <span className="truncate max-w-[200px]">{file?.name}</span>
+        /* ── PREVIEW VIEW WITH SCI-FI SCANNER ───────────────────────────────────── */
+        <div className="border border-border-strong rounded-2xl overflow-hidden bg-background-secondary/40 backdrop-blur-md luxury-shadow transition-all duration-300">
+          <div className="flex items-center justify-between px-4 py-3 bg-background-muted/50 border-b border-border-strong">
+            <div className="flex items-center gap-2.5 text-[12.5px] text-text-secondary font-medium">
+              <ImageIcon className="w-4 h-4 text-brand" />
+              <span className="truncate max-w-[200px] font-semibold">{file?.name}</span>
             </div>
             <button 
-            onClick={() => { setFile(null); setPreview(null); setRawQrPayload(null); setQrStatus({ scanned: false, hasQR: false, isValid: false }) }} 
-              className="text-[11.5px] text-text-muted hover:text-text-primary underline font-medium"
+              onClick={() => { setFile(null); setPreview(null); setRawQrPayload(null); setQrStatus({ scanned: false, hasQR: false, isValid: false }) }} 
+              className="text-[11.5px] text-brand hover:text-brand-hover hover:underline font-bold transition-all"
             >
-              เปลี่ยนไฟล์
+              เปลี่ยนไฟล์ภาพ
             </button>
           </div>
-          <div className="p-4 flex justify-center bg-background-tertiary">
-            <img src={preview} alt="preview" className="max-h-[220px] object-contain rounded-lg shadow-sm" />
+          
+          <div className={cn(
+            "p-5 flex justify-center bg-background-tertiary/40 relative overflow-hidden",
+            scanning && "luxury-scanner"
+          )}>
+            {scanning && (
+              <>
+                <div className="absolute inset-0 bg-emerald-500/5 mix-blend-overlay animate-pulse pointer-events-none" />
+                <div className="absolute top-2 left-3 font-mono text-[8.5px] text-emerald-500/60 pointer-events-none select-none">
+                  SYSTEM_STATUS: RESOLVING_SLIP_IMAGE<br />
+                  SCANNING_MATRIX: 2D_QR_CODE
+                </div>
+              </>
+            )}
+            <img 
+              src={preview} 
+              alt="preview" 
+              className={cn(
+                "max-h-[240px] object-contain rounded-xl shadow-lg border border-border-strong/50 transition-all duration-500",
+                scanning && "brightness-[1.1] contrast-[1.05]"
+              )} 
+            />
           </div>
         </div>
       )}
 
-      {/* Pre-verification Status UI */}
+      {/* ── SCANNING & VALIDATION OVERLAYS ──────────────────────────────────────── */}
       {preview && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {scanning && (
-            <div className="flex items-center justify-center gap-2 py-3 border border-border-strong bg-background-muted rounded-xl animate-pulse">
-              <RefreshCw className="w-4 h-4 text-brand animate-spin" />
-              <span className="text-[12.5px] text-text-secondary font-medium">กำลังสแกนและวิเคราะห์สลิป...</span>
+            <div className="flex items-center justify-center gap-3 py-3.5 border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-500/10 rounded-xl relative overflow-hidden pulse-glow-emerald">
+              <RefreshCw className="w-4 h-4 text-emerald-500 animate-spin" />
+              <span className="text-[12.5px] text-emerald-700 dark:text-emerald-400 font-bold tracking-wide">
+                กำลังสแกนและถอดรหัส QR Payload...
+              </span>
             </div>
           )}
 
           {!scanning && qrStatus.scanned && (
-            <div className="space-y-3">
-              {/* Case 1: Scanning Failed or Invalid QR */}
+            <div className="space-y-3.5 animate-in fade-in slide-in-from-top-1 duration-200">
               {(!qrStatus.isValid) && (
-                <div className="p-4 border border-red-100 bg-red-50/50 rounded-xl space-y-2">
-                  <div className="flex gap-2.5 items-start">
-                    <XCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="p-4 border border-red-100 dark:border-red-900/30 bg-red-50/40 dark:bg-red-950/10 rounded-xl space-y-3" style={{ animation: 'neonPulse 2.5s infinite ease-in-out' }}>
+                  <div className="flex gap-3 items-start">
+                    <XCircle className="w-4.5 h-4.5 text-red-500 flex-shrink-0 mt-0.5" />
                     <div>
-                      <div className="text-[12.5px] font-bold text-red-900">ตรวจสอบสลิปไม่ผ่าน</div>
-                      <div className="text-[11.5px] text-red-800 mt-0.5">{qrStatus.error}</div>
+                      <div className="text-[13px] font-bold text-red-900 dark:text-red-400">ตรวจสอบความถูกต้องไม่ผ่าน</div>
+                      <div className="text-[11.5px] text-red-800/85 dark:text-red-500/80 mt-0.5 leading-relaxed">{qrStatus.error}</div>
                     </div>
                   </div>
 
-                  {/* Let user bypass if it is simply "No QR found" */}
                   {!qrStatus.hasQR && (
-                    <div className="pt-2 border-t border-red-100/50 flex items-center gap-2">
+                    <div className="pt-3 border-t border-red-200/40 flex items-center gap-2.5">
                       <input 
                         type="checkbox" 
                         id="manual_confirm_check"
                         checked={manualConfirm}
                         onChange={(e) => setManualConfirm(e.target.checked)}
-                        className="rounded border-red-200 text-red-600 focus:ring-red-500 w-3.5 h-3.5 cursor-pointer"
+                        className="rounded border-red-300 text-red-600 focus:ring-red-500 w-4 h-4 cursor-pointer"
                       />
-                      <label htmlFor="manual_confirm_check" className="text-[11.5px] text-red-900 font-medium cursor-pointer">
-                        ยืนยันส่งภาพนี้เพื่อขอตรวจสอบด้วยตัวเอง (แอดมินตรวจแมนนวล)
+                      <label htmlFor="manual_confirm_check" className="text-[12px] text-red-900 dark:text-red-400 font-bold cursor-pointer select-none">
+                        ยินยอมส่งสลิปเพื่อขอตรวจสอบแมนนวลด้วยมือโดยเหรัญญิก
                       </label>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Case 2: Valid Slip Scanned */}
               {qrStatus.isValid && (
                 <div className="space-y-3">
-                  <div className="p-4 border border-emerald-100 bg-emerald-50/30 rounded-xl">
-                    <div className="flex gap-2.5 items-start">
-                      <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <div className="text-[12.5px] font-bold text-emerald-900">สแกนและตรวจสอบข้อมูลสำเร็จ</div>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-[11.5px] text-emerald-800">
-                          <div>ยอดเงิน: <span className="font-bold">{qrStatus.amount ? `฿${qrStatus.amount.toLocaleString()}` : 'ไม่ระบุ'}</span></div>
-                          <div>ธนาคาร: <span className="font-semibold">{qrStatus.bank ? (BANK_NAMES[qrStatus.bank] || qrStatus.bank) : 'ไม่ระบุ'}</span></div>
-                          <div className="col-span-2 mt-0.5 text-emerald-700/80 font-mono text-[10.5px]">Ref: {qrStatus.transRef}</div>
+                  <div className="p-4 border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-500/10 rounded-xl pulse-glow-emerald">
+                    <div className="flex gap-3 items-start">
+                      <CheckCircle className="w-4.5 h-4.5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                      <div className="w-full">
+                        <div className="text-[13px] font-bold text-emerald-800 dark:text-emerald-400">
+                          สแกน Smart QR Code เรียบร้อย
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-2 mt-3 text-[12px] text-emerald-800/85 dark:text-emerald-400/85 border-t border-emerald-500/10 pt-2.5">
+                          <div>
+                            <span className="text-[11px] text-emerald-600/70 dark:text-emerald-500/50 block">ยอดชำระ:</span>
+                            <span className="font-extrabold text-[13px] text-emerald-700 dark:text-emerald-300">{qrStatus.amount ? `฿${qrStatus.amount.toLocaleString()}` : 'ไม่ระบุ'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[11px] text-emerald-600/70 dark:text-emerald-500/50 block">ธนาคาร:</span>
+                            <span className="font-bold text-[12.5px] text-emerald-700 dark:text-emerald-300">{qrStatus.bank ? (BANK_NAMES[qrStatus.bank] || qrStatus.bank) : 'ไม่ระบุ'}</span>
+                          </div>
+                          <div className="col-span-2 border-t border-emerald-500/10 pt-2">
+                            <span className="text-[9.5px] text-emerald-600/70 dark:text-emerald-500/50 block font-mono">TRANSACTION REFERENCE:</span>
+                            <span className="font-mono text-[10.5px] text-emerald-700 dark:text-emerald-300 tracking-wider break-all">{qrStatus.transRef}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Suggestion Case 1: Amount matches another week */}
                   {suggestedWeek && (
-                    <div className="p-4 border border-amber-100 bg-amber-50/50 rounded-xl space-y-3">
-                      <div className="flex gap-2.5 items-start">
-                        <AlertTriangle className="w-4.5 h-4.5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="p-4 border border-amber-500/30 bg-amber-500/5 dark:bg-amber-500/10 rounded-xl space-y-3" style={{ animation: 'neonPulse 2.5s infinite ease-in-out' }}>
+                      <div className="flex gap-3 items-start">
+                        <AlertTriangle className="w-4.5 h-4.5 text-amber-500 flex-shrink-0 mt-0.5 animate-bounce" />
                         <div>
-                          <div className="text-[12.5px] font-bold text-amber-900">ตรวจพบยอดเงินไม่ตรงกับงวดที่เลือก</div>
-                          <div className="text-[11.5px] text-amber-800 mt-1">
-                            ยอดเงินสลิปคือ <span className="font-bold">฿{qrStatus.amount?.toLocaleString()}</span> 
-                            ซึ่งตรงกับยอดที่ต้องชำระของ <span className="font-bold">{suggestedWeek.label}</span> 
-                            (คุณกำลังทำรายการสำหรับ {selectedCycle?.label} ยอด ฿{selectedCycle?.amount.toLocaleString()})
+                          <div className="text-[13px] font-bold text-amber-800 dark:text-amber-400">ตรวจพบยอดเงินตรงกับงวดอื่น</div>
+                          <div className="text-[11.5px] text-amber-850 dark:text-amber-400/90 mt-1 leading-relaxed">
+                            ยอดชำระ <span className="font-bold">฿{qrStatus.amount?.toLocaleString()}</span> 
+                            ของสลิปตรงกับยอดค้างของ <span className="font-bold text-amber-900 dark:text-amber-300">"{suggestedWeek.label}"</span>
+                            <br />
+                            (งวดที่ท่านเลือกอยู่คือ {selectedCycle?.label} ยอด ฿{selectedCycle?.amount.toLocaleString()})
                           </div>
                         </div>
                       </div>
                       <button 
                         onClick={handleSwitchWeek}
-                        className="w-full bg-amber-600 text-white text-[12px] font-semibold py-2 px-3 rounded-lg hover:bg-amber-700 transition-colors shadow-sm"
+                        className="w-full bg-amber-600 hover:bg-amber-700 text-white text-[12.5px] font-bold py-2.5 px-3 rounded-xl transition-all shadow-md shadow-amber-600/15"
                       >
                         สลับชำระสำหรับ {suggestedWeek.label}
                       </button>
                     </div>
                   )}
 
-                  {/* Suggestion Case 2: Amount Mismatch (No suggested week) */}
                   {amountMismatch && !suggestedWeek && (
-                    <div className="p-4 border border-amber-100 bg-amber-50/50 rounded-xl space-y-2">
-                      <div className="flex gap-2.5 items-start">
-                        <AlertTriangle className="w-4.5 h-4.5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="p-4 border border-amber-500/30 bg-amber-500/5 dark:bg-amber-500/10 rounded-xl space-y-3">
+                      <div className="flex gap-3 items-start">
+                        <AlertTriangle className="w-4.5 h-4.5 text-amber-500 flex-shrink-0 mt-0.5" />
                         <div>
-                          <div className="text-[12.5px] font-bold text-amber-900">ยอดเงินโอนไม่ตรงกับยอดของงวดที่เลือก</div>
-                          <div className="text-[11.5px] text-amber-800 mt-1">
-                            ยอดเงินในสลิปคือ <span className="font-bold">฿{qrStatus.amount?.toLocaleString()}</span> 
-                            แต่ยอดที่กำหนดในงวดนี้คือ <span className="font-bold">฿{selectedCycle?.amount.toLocaleString()}</span>
+                          <div className="text-[13px] font-bold text-amber-800 dark:text-amber-400">ยอดโอนไม่ตรงกับยอดที่กำหนด</div>
+                          <div className="text-[11.5px] text-amber-850 dark:text-amber-400/90 mt-1 leading-relaxed">
+                            ยอดเงินสลิปคือ <span className="font-bold">฿{qrStatus.amount?.toLocaleString()}</span> 
+                            แต่ยอดที่กำหนดของ {selectedCycle?.label} คือ <span className="font-bold">฿{selectedCycle?.amount.toLocaleString()}</span>
                           </div>
                         </div>
                       </div>
-                      <div className="pt-2 border-t border-amber-200/50 flex items-center gap-2">
+                      <div className="pt-2.5 border-t border-amber-500/10 flex items-center gap-2.5">
                         <input 
                           type="checkbox" 
                           id="amount_mismatch_check"
                           checked={manualConfirm}
                           onChange={(e) => setManualConfirm(e.target.checked)}
-                          className="rounded border-amber-300 text-amber-600 focus:ring-amber-500 w-3.5 h-3.5 cursor-pointer"
+                          className="rounded border-amber-350 text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer"
                         />
-                        <label htmlFor="amount_mismatch_check" className="text-[11.5px] text-amber-900 font-medium cursor-pointer">
-                          ยืนยันว่าจำนวนเงินถูกต้อง (เช่น จ่ายบางส่วน หรือชดใช้ยอดเก่า)
+                        <label htmlFor="amount_mismatch_check" className="text-[12px] text-amber-900 dark:text-amber-450 font-bold cursor-pointer select-none">
+                          ยืนยันว่าข้อมูลถูกต้อง (ชำระขาด/เกิน หรือชดเชยยอดค้างเดิม)
                         </label>
                       </div>
                     </div>
@@ -591,9 +820,9 @@ export default function SlipUploader({ periodId, unpaidCycles, onPeriodChange, o
       <button
         onClick={handleSubmit}
         disabled={isSubmitDisabled}
-        className="w-full bg-brand text-white text-[13.5px] font-semibold py-3 rounded-xl hover:bg-brand-hover transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-sm"
+        className="w-full bg-brand hover:bg-brand-hover text-white text-[13.5px] font-bold py-3.5 rounded-xl transition-all duration-300 disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer shadow-lg shadow-brand/20 active:scale-[0.98]"
       >
-        {scanning ? 'กำลังตรวจสอบสลิป...' : `ยืนยันส่งหลักฐานสำหรับ ${selectedCycle?.label || 'งวดที่เลือก'}`}
+        {scanning ? 'ระบบกำลังสแกนวิเคราะห์ภาพ...' : `ส่งใบเสร็จรับเงินสำหรับ ${selectedCycle?.label || 'งวดที่เลือก'}`}
       </button>
     </div>
   )
