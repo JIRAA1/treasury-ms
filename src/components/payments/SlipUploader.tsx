@@ -80,6 +80,7 @@ export default function SlipUploader({ periodId, unpaidCycles, onPeriodChange, o
     hasQR: false,
     isValid: false
   })
+  const [rawQrPayload, setRawQrPayload] = useState<string | null>(null)
   const [suggestedWeek, setSuggestedWeek] = useState<PaymentPeriod | null>(null)
   const [amountMismatch, setAmountMismatch] = useState(false)
   const [manualConfirm, setManualConfirm] = useState(false)
@@ -109,6 +110,7 @@ export default function SlipUploader({ periodId, unpaidCycles, onPeriodChange, o
     // Reset pre-verification states
     setScanning(true)
     setQrStatus({ scanned: false, hasQR: false, isValid: false })
+    setRawQrPayload(null)
     setSuggestedWeek(null)
     setAmountMismatch(false)
     setManualConfirm(false)
@@ -194,6 +196,7 @@ export default function SlipUploader({ periodId, unpaidCycles, onPeriodChange, o
           amount: parsed.amount,
           bank: parsed.sendingBank
         })
+        setRawQrPayload(qrCode.data)
       } catch (err) {
         console.error('Error scanning QR:', err)
         setQrStatus({ scanned: true, hasQR: false, isValid: false, error: 'เกิดข้อผิดพลาดระหว่างการวิเคราะห์สลิป' })
@@ -262,6 +265,10 @@ export default function SlipUploader({ periodId, unpaidCycles, onPeriodChange, o
     const formData = new FormData()
     formData.append('file', file)
     formData.append('period_id', periodId)
+    // Send the raw QR payload to the server so it can call verifySlipByPayload
+    if (rawQrPayload) formData.append('qr_payload', rawQrPayload)
+    // If user bypassed missing-QR warning, tell the server about it
+    if (manualConfirm) formData.append('manual_confirm', 'true')
 
     try {
       await updateStep(1)
@@ -393,7 +400,7 @@ export default function SlipUploader({ periodId, unpaidCycles, onPeriodChange, o
           </div>
         )}
         <button
-          onClick={() => { setStep('upload'); setFile(null); setPreview(null); setQrStatus({ scanned: false, hasQR: false, isValid: false }) }}
+          onClick={() => { setStep('upload'); setFile(null); setPreview(null); setRawQrPayload(null); setQrStatus({ scanned: false, hasQR: false, isValid: false }) }}
           className="text-[12.5px] text-brand hover:underline font-semibold"
         >
           ส่งสลิปใบอื่นเพิ่มเติม
@@ -412,7 +419,7 @@ export default function SlipUploader({ periodId, unpaidCycles, onPeriodChange, o
         <div className="text-[15px] font-bold text-text-primary mb-1">ส่งสลิปไม่สำเร็จ</div>
         <div className="text-[12.5px] text-text-muted mb-5 max-w-sm mx-auto">{errorMsg}</div>
         <button
-          onClick={() => { setStep('upload'); setFile(null); setPreview(null); setQrStatus({ scanned: false, hasQR: false, isValid: false }) }}
+          onClick={() => { setStep('upload'); setFile(null); setPreview(null); setRawQrPayload(null); setQrStatus({ scanned: false, hasQR: false, isValid: false }) }}
           className="bg-brand text-white text-[13px] font-semibold px-5 py-2.5 rounded-xl hover:bg-brand-hover transition-colors"
         >
           ลองใหม่อีกครั้ง
@@ -454,7 +461,7 @@ export default function SlipUploader({ periodId, unpaidCycles, onPeriodChange, o
               <span className="truncate max-w-[200px]">{file?.name}</span>
             </div>
             <button 
-              onClick={() => { setFile(null); setPreview(null); setQrStatus({ scanned: false, hasQR: false, isValid: false }) }} 
+            onClick={() => { setFile(null); setPreview(null); setRawQrPayload(null); setQrStatus({ scanned: false, hasQR: false, isValid: false }) }} 
               className="text-[11.5px] text-text-muted hover:text-text-primary underline font-medium"
             >
               เปลี่ยนไฟล์

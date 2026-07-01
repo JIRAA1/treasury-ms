@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
-import { verifySlip } from '@/lib/thunder'
+import { verifySlipByPayload } from '@/lib/thunder'
 import { logAction } from '@/lib/audit'
 import { extractQRCode } from '@/lib/qr'
 import { sendAdminAlert, sendPaymentApproved } from '@/lib/line'
@@ -17,6 +17,11 @@ export async function POST(request: NextRequest) {
   const formData = await request.formData()
   const file = formData.get('file') as File
   const period_id = formData.get('period_id') as string
+  // qr_payload is sent by the client after scanning the slip image
+  const clientQrPayload = formData.get('qr_payload') as string | null
+  // manual_confirm: true when user explicitly bypasses missing-QR warning
+  const manualConfirmRaw = formData.get('manual_confirm') as string | null
+  const manualConfirm = manualConfirmRaw === 'true'
 
   if (!file || !period_id) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
@@ -31,9 +36,9 @@ export async function POST(request: NextRequest) {
   }
 
   const adminClient = createAdminClient()
-  
+
   const { data: profile } = await adminClient.from('users').select('*').or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`).maybeSingle()
-  
+
   if (!profile) {
     return NextResponse.json({ error: 'ไม่พบข้อมูลบัญชีผู้ใช้งานในระบบ กรุณาลงทะเบียนหรือผูกบัญชีก่อนส่งสลิป' }, { status: 404 })
   }
@@ -57,8 +62,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'คุณได้ส่งสลิปของงวดนี้ไปแล้ว' }, { status: 409 })
   }
 
-  const { data: nameSetting } = await adminClient.from('system_settings').select('value').eq('key', 'promptpay_name').maybeSingle()
-  const expectedName = nameSetting?.value || "ชานน ศ."
   const { data: periodSetting } = await adminClient
     .from('periods')
     .select('label, amount, deadline, open_at, close_at, late_fine_amount, fine_type, fine_rate, fine_cap, fine_grace_days')
@@ -90,7 +93,7 @@ export async function POST(request: NextRequest) {
   const bytes = await file.arrayBuffer()
   const buffer = Buffer.from(bytes)
 
-  // 2.5. File Hash — ป้องกัน duplicate เมื่อ OCR อ่าน trans_ref ไม่ได้ (null ≠ null ใน UNIQUE)
+  // 2.5. File Hash — ป้องกัน duplicate ไฟล์เดิมส่งซ้ำ
   const fileHash = createHash('sha256').update(buffer).digest('hex')
 
   const { data: hashDup } = await adminClient
@@ -115,131 +118,26 @@ export async function POST(request: NextRequest) {
     }, { status: 409 })
   }
 
-  // 3. Server-Side QR & Duplicate Check (Pre-check)
-  const qrData = await extractQRCode(buffer)
-  if (qrData) {
-    const parsed = parseSlipQR(qrData)
-    if (parsed.isValid && parsed.transRef) {
-      const { data: dupPayment } = await adminClient
-        .from('payments')
-        .select('id, user_id, status')
-        .eq('trans_ref', parsed.transRef)
-        .neq('status', 'rejected')
-        .maybeSingle()
+  // ────────────────────────────────────────────────────────────────────────────
+  // 3. Resolve QR Payload
+  //    Priority: (1) client-sent payload → (2) server-side scan
+  // ────────────────────────────────────────────────────────────────────────────
+  let qrPayload: string | null = clientQrPayload || null
 
-      if (dupPayment) {
-        const isOwnSlip = dupPayment.user_id === profile.id
-        await notifyAdmins('Duplicate Slip Blocked', [
-          `ผู้ส่ง: ${profile.fullname}`,
-          `งวด: ${cycleTitle}`,
-          `เหตุผล: สลิปนี้ซ้ำในระบบ (Ref: ${parsed.transRef})`
-        ], 'warning')
-
-        return NextResponse.json({
-          error: isOwnSlip 
-            ? 'คุณเคยส่งสลิปรายการโอนนี้ในระบบแล้ว' 
-            : 'สลิปนี้ถูกใช้ชำระเงินโดยนักศึกษาคนอื่นในระบบแล้ว',
-          code: 'DUPLICATE_SLIP'
-        }, { status: 409 })
+  if (!qrPayload) {
+    // Fallback: extract QR from image on the server
+    const serverQrData = await extractQRCode(buffer)
+    if (serverQrData) {
+      const parsed = parseSlipQR(serverQrData)
+      if (parsed.isValid) {
+        qrPayload = serverQrData
       }
     }
   }
 
-  // 4. OCR Verify (external API call)
-  const ocrResult = await verifySlip(file)
-
-  // --- QUOTA EXCEEDED PATH ---
-  // When Thunder API quota is exhausted, skip OCR validation and save slip for manual review
-  if (ocrResult.quota_exceeded) {
-    console.warn('[Upload] Thunder quota exceeded — saving slip for manual review')
-    await notifyAdmins('🔔 สลิปรอตรวจมือ (API Quota หมด)', [
-      `ผู้ส่ง: ${profile?.fullname}`,
-      `รหัสนักศึกษา: ${profile?.student_id}`,
-      `รายการ: ${cycleTitle}`,
-      `เหตุผล: Thunder API quota หมดแล้ว กรุณาตรวจสลิปด้วยตนเอง`
-    ], 'warning')
-
-    // Upload file first
-    const ext = file.type.split('/')[1]
-    const filename = `${profile.id}/period-${period_id}-${Date.now()}.${ext}`
-    const { error: uploadError } = await adminClient.storage.from('slips').upload(filename, buffer, { contentType: file.type, upsert: true })
-    if (uploadError) return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
-    const { data: { publicUrl } } = supabase.storage.from('slips').getPublicUrl(filename)
-
-    const paymentData = {
-      user_id: profile.id,
-      period_id,
-      amount: 0,           // Unknown until manual review
-      trans_ref: null,
-      slip_url: publicUrl,
-      status: 'pending' as const,
-      file_hash: fileHash,
-    }
-
-    const { data: payment, error: paymentError } = existing
-      ? await adminClient.from('payments').update(paymentData).eq('id', existing.id).select().single()
-      : await adminClient.from('payments').insert(paymentData).select().single()
-
-    if (paymentError) {
-      await adminClient.storage.from('slips').remove([filename])
-      return NextResponse.json({ error: 'Failed to save payment record' }, { status: 500 })
-    }
-
-    // Try to set verified_by_api flag (column may not exist if migration not run yet)
-    try {
-      await adminClient.from('payments').update({ verified_by_api: false }).eq('id', payment.id)
-    } catch (_) {
-      // Column not yet migrated — safe to ignore
-    }
-
-    await logAction({ actorId: profile.id, action: 'payment_uploaded', targetId: payment.id, newValue: { ...paymentData, note: 'quota_exceeded' } })
-
-    return NextResponse.json({ 
-      success: true, 
-      payment: { ...payment, verified_by_api: false }, 
-      ocr: null,
-      quota_exceeded: true,
-      message: 'ส่งสลิปสำเร็จ — เหรัญญิกจะตรวจสอบยอดเงินด้วยตนเองเนื่องจาก API หมด quota'
-    })
-  }
-
-  // --- NORMAL PATH ---
-  if (!ocrResult.is_valid) {
-    await notifyAdmins('Invalid Slip Attempt', [
-      `ผู้ส่ง: ${profile?.fullname || user.id}`,
-      `งวด: ${cycleTitle}`,
-      `เหตุผล: ไม่พบข้อมูลการโอนเงิน`
-    ], 'error')
-    
-    return NextResponse.json({ 
-      error: 'ตรวจสอบสลิปไม่สำเร็จ: ไม่พบข้อมูลการโอนเงินหรือสลิปไม่ถูกต้อง', 
-      code: 'INVALID_SLIP' 
-    }, { status: 400 })
-  }
-
-  // 5. Receiver Validation
-  const receiverName = ocrResult.raw?.data?.rawSlip?.receiver?.account?.name?.en || 
-                       ocrResult.raw?.data?.rawSlip?.receiver?.account?.name?.th || ""
-
-  const isValidReceiver = expectedName
-    ? receiverName.toLowerCase().includes(expectedName.toLowerCase())
-    : true
-
-  if (!isValidReceiver) {
-    await notifyAdmins('Receiver Mismatch', [
-      `ผู้ส่ง: ${profile.fullname}`,
-      `งวด: ${cycleTitle}`,
-      `โอนไปที่: ${receiverName || 'ไม่ระบุ'}`,
-      `ยอดเงิน: ฿${ocrResult.amount}`
-    ], 'warning')
-
-    return NextResponse.json({ 
-      error: `สลิปไม่ถูกต้อง: ชื่อผู้รับโอนคือ "${receiverName}" ซึ่งไม่ตรงกับบัญชีที่กำหนด`, 
-      code: 'RECEIVER_MISMATCH' 
-    }, { status: 400 })
-  }
-
-  // Check if student has pending credit for this period
+  // ────────────────────────────────────────────────────────────────────────────
+  // 4. Load tier/fine settings (needed for matchAmount and amount validation)
+  // ────────────────────────────────────────────────────────────────────────────
   const { data: pendingCredit } = await adminClient
     .from('payment_credits')
     .select('id, amount')
@@ -248,7 +146,6 @@ export async function POST(request: NextRequest) {
     .eq('status', 'pending')
     .maybeSingle()
 
-  // Load tier settings to calculate expected amount
   const { data: settings } = await adminClient.from('system_settings').select('*')
   const tierAmounts = {
     A: parseFloat(settings?.find((s: any) => s.key === 'tier_a_amount')?.value || '60'),
@@ -257,7 +154,6 @@ export async function POST(request: NextRequest) {
   }
   const tierAmount = tierAmounts[profile.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
 
-  // Determine if late fine is applicable (only if no credit and it's past deadline)
   const lateFine = calculateLateFine(
     {
       deadline: periodSetting?.deadline || new Date().toISOString(),
@@ -272,22 +168,189 @@ export async function POST(request: NextRequest) {
   )
   const expectedStudentAmount = tierAmount + lateFine
 
-  // 6. Amount Validation — server-side comparison AFTER OCR
-  if (ocrResult.amount !== null && ocrResult.amount !== expectedStudentAmount) {
-    await notifyAdmins('Amount Mismatch Blocked', [
-      `ผู้ส่ง: ${profile.fullname}`,
-      `งวด: ${cycleTitle}`,
-      `ยอดเงินในสลิป: ฿${ocrResult.amount}`,
-      `ยอดเงินที่ต้องการ: ฿${expectedStudentAmount}`
+  // ────────────────────────────────────────────────────────────────────────────
+  // 5. NO QR PATH — save for manual review if user explicitly confirmed
+  // ────────────────────────────────────────────────────────────────────────────
+  if (!qrPayload) {
+    if (!manualConfirm) {
+      return NextResponse.json({
+        error: 'ไม่พบ QR Code ในสลิป กรุณาส่งสลิปที่มี QR Code ชัดเจน หรือยืนยันส่งเพื่อให้เหรัญญิกตรวจสอบ',
+        code: 'NO_QR_CODE'
+      }, { status: 400 })
+    }
+
+    console.warn('[Upload] No QR found — saving slip for manual review (user confirmed)')
+    await notifyAdmins('🔔 สลิปรอตรวจมือ (ไม่มี QR Code)', [
+      `ผู้ส่ง: ${profile?.fullname}`,
+      `รหัสนักศึกษา: ${profile?.student_id}`,
+      `รายการ: ${cycleTitle}`,
+      `เหตุผล: ไม่พบ QR Code ในสลิป กรุณาตรวจสลิปด้วยตนเอง`
     ], 'warning')
 
-    return NextResponse.json({ 
-      error: `ยอดเงินในสลิป (฿${ocrResult.amount}) ไม่ตรงกับยอดชำระที่กำหนดของงวดนี้ (฿${expectedStudentAmount})`, 
-      code: 'AMOUNT_MISMATCH' 
+    const ext = file.type.split('/')[1]
+    const filename = `${profile.id}/period-${period_id}-${Date.now()}.${ext}`
+    const { error: uploadError } = await adminClient.storage.from('slips').upload(filename, buffer, { contentType: file.type, upsert: true })
+    if (uploadError) return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
+    const { data: { publicUrl } } = supabase.storage.from('slips').getPublicUrl(filename)
+
+    const paymentData = {
+      user_id: profile.id,
+      period_id,
+      amount: 0,
+      trans_ref: null,
+      slip_url: publicUrl,
+      status: 'pending' as const,
+      file_hash: fileHash,
+      note: 'no_qr_code',
+    }
+
+    const { data: payment, error: paymentError } = existing
+      ? await adminClient.from('payments').update(paymentData).eq('id', existing.id).select().single()
+      : await adminClient.from('payments').insert(paymentData).select().single()
+
+    if (paymentError) {
+      await adminClient.storage.from('slips').remove([filename])
+      return NextResponse.json({ error: 'Failed to save payment record' }, { status: 500 })
+    }
+
+    try {
+      await adminClient.from('payments').update({ verified_by_api: false }).eq('id', payment.id)
+    } catch (_) { /* column may not exist yet */ }
+
+    await logAction({ actorId: profile.id, action: 'payment_uploaded', targetId: payment.id, newValue: { ...paymentData, note: 'no_qr_code' } })
+
+    return NextResponse.json({
+      success: true,
+      payment: { ...payment, verified_by_api: false },
+      ocr: null,
+      quota_exceeded: false,
+      message: 'ส่งสลิปสำเร็จ — เหรัญญิกจะตรวจสอบสลิปของคุณด้วยตนเองเนื่องจากไม่พบ QR Code'
+    })
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // 6. QR PATH — check transRef duplicate in DB first
+  // ────────────────────────────────────────────────────────────────────────────
+  const parsedQR = parseSlipQR(qrPayload)
+  if (parsedQR.isValid && parsedQR.transRef) {
+    const { data: dupPayment } = await adminClient
+      .from('payments')
+      .select('id, user_id, status')
+      .eq('trans_ref', parsedQR.transRef)
+      .neq('status', 'rejected')
+      .maybeSingle()
+
+    if (dupPayment) {
+      const isOwnSlip = dupPayment.user_id === profile.id
+      await notifyAdmins('Duplicate Slip Blocked (TransRef)', [
+        `ผู้ส่ง: ${profile.fullname}`,
+        `งวด: ${cycleTitle}`,
+        `เหตุผล: สลิปนี้ซ้ำในระบบ (Trans Ref: ${parsedQR.transRef})`
+      ], 'warning')
+
+      return NextResponse.json({
+        error: isOwnSlip
+          ? 'คุณเคยส่งสลิปรายการโอนนี้ในระบบแล้ว'
+          : 'สลิปนี้ถูกใช้ชำระเงินโดยนักศึกษาคนอื่นในระบบแล้ว',
+        code: 'DUPLICATE_SLIP'
+      }, { status: 409 })
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // 7. Call Thunder API with Payload + matchAccount + matchAmount
+  // ────────────────────────────────────────────────────────────────────────────
+  const apiResult = await verifySlipByPayload(qrPayload, {
+    matchAccount: true,
+    matchAmount: expectedStudentAmount,
+    remark: `Period - ${cycleTitle} | ${profile.student_id}`,
+  })
+
+  // --- QUOTA EXCEEDED PATH ---
+  if (apiResult.quota_exceeded) {
+    console.warn('[Upload] Thunder quota exceeded — saving slip for manual review')
+    await notifyAdmins('🔔 สลิปรอตรวจมือ (API Quota หมด)', [
+      `ผู้ส่ง: ${profile?.fullname}`,
+      `รหัสนักศึกษา: ${profile?.student_id}`,
+      `รายการ: ${cycleTitle}`,
+      `เหตุผล: Thunder API quota หมดแล้ว กรุณาตรวจสลิปด้วยตนเอง`
+    ], 'warning')
+
+    const ext = file.type.split('/')[1]
+    const filename = `${profile.id}/period-${period_id}-${Date.now()}.${ext}`
+    const { error: uploadError } = await adminClient.storage.from('slips').upload(filename, buffer, { contentType: file.type, upsert: true })
+    if (uploadError) return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
+    const { data: { publicUrl } } = supabase.storage.from('slips').getPublicUrl(filename)
+
+    const paymentData = {
+      user_id: profile.id,
+      period_id,
+      amount: 0,
+      trans_ref: parsedQR.isValid ? parsedQR.transRef : null,
+      slip_url: publicUrl,
+      status: 'pending' as const,
+      file_hash: fileHash,
+    }
+
+    const { data: payment, error: paymentError } = existing
+      ? await adminClient.from('payments').update(paymentData).eq('id', existing.id).select().single()
+      : await adminClient.from('payments').insert(paymentData).select().single()
+
+    if (paymentError) {
+      await adminClient.storage.from('slips').remove([filename])
+      return NextResponse.json({ error: 'Failed to save payment record' }, { status: 500 })
+    }
+
+    try {
+      await adminClient.from('payments').update({ verified_by_api: false }).eq('id', payment.id)
+    } catch (_) { /* column may not exist yet */ }
+
+    await logAction({ actorId: profile.id, action: 'payment_uploaded', targetId: payment.id, newValue: { ...paymentData, note: 'quota_exceeded' } })
+
+    return NextResponse.json({
+      success: true,
+      payment: { ...payment, verified_by_api: false },
+      ocr: null,
+      quota_exceeded: true,
+      message: 'ส่งสลิปสำเร็จ — เหรัญญิกจะตรวจสอบยอดเงินด้วยตนเองเนื่องจาก API หมด quota'
+    })
+  }
+
+  // --- NORMAL VERIFICATION PATH ---
+  if (!apiResult.is_valid) {
+    await notifyAdmins('Invalid Slip Attempt', [
+      `ผู้ส่ง: ${profile?.fullname || user.id}`,
+      `งวด: ${cycleTitle}`,
+      `เหตุผล: ไม่พบข้อมูลการโอนเงินหรือ QR Payload ไม่ถูกต้อง`
+    ], 'error')
+
+    return NextResponse.json({
+      error: 'ตรวจสอบสลิปไม่สำเร็จ: ไม่พบข้อมูลการโอนเงินหรือ QR Code ไม่ถูกต้องตามมาตรฐานธนาคาร',
+      code: 'INVALID_SLIP'
     }, { status: 400 })
   }
 
-  // 7. Storage & DB (Upload image only after all validations pass!)
+  // 8. Amount Validation — use isAmountMatched from API if available, fallback to manual compare
+  const slipAmount = apiResult.amount
+  const amountMatched = apiResult.is_amount_matched !== null
+    ? apiResult.is_amount_matched
+    : (slipAmount === null || slipAmount === expectedStudentAmount)
+
+  if (!amountMatched) {
+    await notifyAdmins('Amount Mismatch Blocked', [
+      `ผู้ส่ง: ${profile.fullname}`,
+      `งวด: ${cycleTitle}`,
+      `ยอดเงินในสลิป: ฿${slipAmount}`,
+      `ยอดเงินที่ต้องการ: ฿${expectedStudentAmount}`
+    ], 'warning')
+
+    return NextResponse.json({
+      error: `ยอดเงินในสลิป (฿${slipAmount}) ไม่ตรงกับยอดชำระที่กำหนดของงวดนี้ (฿${expectedStudentAmount})`,
+      code: 'AMOUNT_MISMATCH'
+    }, { status: 400 })
+  }
+
+  // 9. Storage & DB — Upload image only after all validations pass!
   const ext = file.type.split('/')[1]
   const filename = `${profile.id}/period-${period_id}-${Date.now()}.${ext}`
   const { error: uploadError } = await adminClient.storage.from('slips').upload(filename, buffer, { contentType: file.type, upsert: true })
@@ -296,11 +359,12 @@ export async function POST(request: NextRequest) {
 
   // If student has credit and uploaded a valid slip, auto-approve the payment and resolve credit
   const autoApprove = !!pendingCredit
+  const transRef = apiResult.trans_ref || (parsedQR.isValid ? parsedQR.transRef : null)
   const paymentData = {
     user_id: profile.id,
     period_id,
-    amount: ocrResult.amount || 0,
-    trans_ref: ocrResult.trans_ref,
+    amount: slipAmount || expectedStudentAmount,
+    trans_ref: transRef,
     slip_url: publicUrl,
     status: autoApprove ? ('approved' as const) : ('pending' as const),
     verified_at: autoApprove ? new Date().toISOString() : null,
@@ -328,18 +392,14 @@ export async function POST(request: NextRequest) {
       .eq('id', pendingCredit.id)
   }
 
-  // Try to set verified_by_api flag (column may not exist if migration not run yet)
   try {
     await adminClient.from('payments').update({ verified_by_api: true }).eq('id', payment.id)
-  } catch (_) {
-    // Column not yet migrated — safe to ignore
-  }
+  } catch (_) { /* column may not exist yet */ }
 
   await logAction({ actorId: profile.id, action: 'payment_uploaded', targetId: payment.id, newValue: paymentData })
 
-  // 8. Notify (auto-approve path vs. normal pending path)
+  // 10. Notify
   if (autoApprove) {
-    // Auto-approved because student had a pending credit — notify them
     const thaiDate = new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
     await adminClient.from('notifications').insert({
       user_id: profile.id,
@@ -365,9 +425,22 @@ export async function POST(request: NextRequest) {
       `จาก: ${profile.fullname}`,
       `รหัสนักศึกษา: ${profile.student_id}`,
       `รายการ: ${cycleTitle}`,
-      `ยอดเงิน: ฿${paymentData.amount.toLocaleString()}`
+      `ยอดเงิน: ฿${paymentData.amount.toLocaleString()}`,
+      `Trans Ref: ${transRef || 'ไม่ระบุ'}`
     ], 'info')
   }
 
-  return NextResponse.json({ success: true, payment, ocr: ocrResult })
+  return NextResponse.json({
+    success: true,
+    payment,
+    ocr: {
+      amount: slipAmount,
+      trans_ref: transRef,
+      date: apiResult.date,
+      bank: apiResult.bank,
+    }
+  })
 }
+
+
+
