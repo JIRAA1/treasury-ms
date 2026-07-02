@@ -69,7 +69,8 @@ export default async function AdminReportsPage({
     const paidCount = cyclePayments.length
     const pendingCount = payments?.filter(p => p.period_id === s.id && p.status === 'pending').length || 0
     const rate = students?.length ? Math.round((paidCount / students.length) * 100) : 0
-    return { ...s, collected, paidCount, pendingCount, rate }
+    const targetAmount = (tierACount * tierSettings.A) + (tierBCount * tierSettings.B) + (tierCCount * tierSettings.C)
+    return { ...s, collected, paidCount, pendingCount, rate, targetAmount }
   }) || []
 
   const approvedOtherIncomes = incomes?.filter(i => i.approved_by).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) || []
@@ -169,13 +170,10 @@ export default async function AdminReportsPage({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Cycle Summary */}
           <div className="bg-background-secondary border border-border rounded-xl p-5">
-            <div className="text-[13px] font-bold text-text-primary mb-1 flex items-center gap-2">
+            <div className="text-[13px] font-bold text-text-primary mb-4 flex items-center gap-2">
               <CreditCard className="w-4 h-4 text-brand" />
               สรุปตามงวดการชำระ
             </div>
-            <p className="text-[10px] text-text-muted mb-4">
-              * เป้าหมายคำนวณจาก period.amount × จำนวนนักศึกษา (อาจไม่ตรงสำหรับระบบหลาย tier)
-            </p>
             <div className="space-y-2">
               {cycleData.map((c) => (
                 <div key={c.id} className="flex items-center gap-3 p-3 bg-background border border-border rounded-lg">
@@ -196,7 +194,7 @@ export default async function AdminReportsPage({
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <div className="text-[12px] font-bold text-brand">{formatCurrency(c.collected)}</div>
+                    <div className="text-[12px] font-bold text-brand">{formatCurrency(c.collected)} / {formatCurrency(c.targetAmount)}</div>
                     <div className={cn(
                       "text-[10px] font-bold px-1.5 py-0.5 rounded-full mt-0.5",
                       c.rate >= 80 ? "bg-emerald-50 text-emerald-600" :
