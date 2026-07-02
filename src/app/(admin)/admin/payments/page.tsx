@@ -6,7 +6,7 @@ import StatusPill from '@/components/payments/StatusPill'
 import { formatCurrency, formatDate, getTierConfig } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
 import { th } from 'date-fns/locale'
-import { Search, ExternalLink, CheckCircle, XCircle, AlertTriangle, Loader2, Bell } from 'lucide-react'
+import { Search, ExternalLink, CheckCircle, XCircle, AlertTriangle, Loader2, Bell, Banknote, Smartphone } from 'lucide-react'
 import { toast } from 'sonner'
 import { useDialog } from '@/components/shared/GlobalDialog'
 
@@ -16,6 +16,7 @@ interface Payment {
   amount: number
   trans_ref: string | null
   slip_url: string | null
+  note?: string | null
   status: 'pending' | 'approved' | 'rejected'
   created_at: string
   verified_by_api?: boolean | null
@@ -220,7 +221,7 @@ export default function AdminPaymentsPage() {
           <table className="w-full text-[12.5px]">
             <thead className="bg-background-tertiary border-b border-border sticky top-0">
               <tr>
-                {['นักศึกษา', 'รหัส', 'สัปดาห์', 'จำนวน', 'Trans Ref', 'ส่งเมื่อ', 'สถานะ', 'การดำเนินการ'].map((h) => (
+                {['นักศึกษา', 'รหัส', 'สัปดาห์', 'จำนวน', 'วิธีชำระ / Ref', 'ส่งเมื่อ', 'สถานะ', 'การดำเนินการ'].map((h) => (
                   <th key={h} className="px-4 py-2.5 text-left font-medium text-text-muted text-[11px] uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -261,7 +262,20 @@ export default function AdminPaymentsPage() {
                   <td className="px-4 py-3 text-text-muted">{p.user?.student_id}</td>
                   <td className="px-4 py-3 font-medium">{p.period?.label || '—'}</td>
                   <td className="px-4 py-3 font-semibold text-text-primary">{formatCurrency(p.amount)}</td>
-                  <td className="px-4 py-3 font-mono text-[11.5px] text-text-muted">{p.trans_ref ?? '—'}</td>
+                  <td className="px-4 py-3">
+                    {p.note?.includes('เงินสด') ? (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 border border-emerald-200 font-medium text-[10px]">
+                        <Banknote className="w-3 h-3" /> เงินสด
+                      </span>
+                    ) : (
+                      <div className="flex flex-col gap-0.5">
+                        <span className="inline-flex items-center gap-1 w-max px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200 font-medium text-[10px]">
+                          <Smartphone className="w-3 h-3" /> โอนเงิน
+                        </span>
+                        {p.trans_ref && <span className="font-mono text-[10.5px] text-text-muted opacity-80">{p.trans_ref}</span>}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-text-muted">{formatDistanceToNow(new Date(p.created_at), { locale: th, addSuffix: true })}</td>
                   <td className="px-4 py-3">
                     <StatusPill status={p.status === 'approved' ? 'paid' : p.status === 'pending' ? 'pending' : 'rejected'} />
@@ -358,6 +372,7 @@ export default function AdminPaymentsPage() {
                 ['รหัสนักศึกษา', selectedPayment.user?.student_id],
                 ['งวด', selectedPayment.period?.label || '—'],
                 ['จำนวน', formatCurrency(selectedPayment.amount)],
+                ['วิธีชำระ', selectedPayment.note?.includes('เงินสด') ? 'เงินสด' : 'โอนเงิน'],
                 ['Trans Ref', selectedPayment.trans_ref ?? '—'],
                 ['วันที่ส่ง', formatDate(selectedPayment.created_at)],
               ].map(([k, v]) => (
@@ -367,6 +382,14 @@ export default function AdminPaymentsPage() {
                 </div>
               ))}
             </div>
+
+            {/* Note Display */}
+            {selectedPayment.note && (
+              <div className="p-3 bg-background-tertiary rounded-xl text-[12px]">
+                <div className="font-semibold text-text-secondary mb-1">หมายเหตุ</div>
+                <div className="text-text-primary">{selectedPayment.note}</div>
+              </div>
+            )}
 
             {/* Reject Reason */}
             {selectedPayment.status === 'pending' && (
