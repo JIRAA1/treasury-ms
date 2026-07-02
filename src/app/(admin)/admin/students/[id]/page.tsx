@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import Topbar from '@/components/layout/Topbar'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { calculateLateFine } from '@/lib/fine'
 import { ArrowLeft, User, Calendar, MessageSquare, CreditCard } from 'lucide-react'
 import Link from 'next/link'
 import type { PeriodStatus } from '@/types'
@@ -55,22 +56,50 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
 
   const periodIds = (periods ?? []).map(p => p.id)
 
-  const { data: payments } = await adminClient
-    .from('payments')
-    .select('*, period:period_id(label, period_order)')
-    .eq('user_id', id)
-    .in('period_id', periodIds.length > 0 ? periodIds : ['00000000-0000-0000-0000-000000000000'])
+  const [paymentsRes, settingsRes, creditsRes] = await Promise.all([
+    adminClient
+      .from('payments')
+      .select('*, period:period_id(label, period_order)')
+      .eq('user_id', id)
+      .in('period_id', periodIds.length > 0 ? periodIds : ['00000000-0000-0000-0000-000000000000']),
+    adminClient.from('system_settings').select('*'),
+    periodIds.length > 0
+      ? adminClient
+          .from('payment_credits')
+          .select('*')
+          .eq('user_id', id)
+          .eq('status', 'pending')
+          .in('period_id', periodIds)
+      : Promise.resolve({ data: [] }),
+  ])
+
+  const payments = paymentsRes.data ?? []
+  const settings = settingsRes.data ?? []
+  const credits = (creditsRes as { data: any[] | null }).data ?? []
+
+  // Tier amounts from system_settings
+  const tierAmounts: Record<string, number> = {
+    A: parseFloat(settings.find((s: any) => s.key === 'tier_a_amount')?.value ?? '60'),
+    B: parseFloat(settings.find((s: any) => s.key === 'tier_b_amount')?.value ?? '50'),
+    C: parseFloat(settings.find((s: any) => s.key === 'tier_c_amount')?.value ?? '30'),
+  }
+  const tierAmount = tierAmounts[student.tier as string] ?? tierAmounts.B
+
+  const now = new Date()
 
   const totalCycles = periods?.length ?? 0
-  const paidCount = payments?.filter(p => p.status === 'approved').length ?? 0
-  const pendingCount = payments?.filter(p => p.status === 'pending').length ?? 0
-  const rejectedCount = payments?.filter(p => p.status === 'rejected').length ?? 0
-  const totalPaid = payments?.filter(p => p.status === 'approved').reduce((s, p) => s + p.amount, 0) ?? 0
+  const paidCount = payments.filter(p => p.status === 'approved').length
+  const pendingCount = payments.filter(p => p.status === 'pending').length
+  const rejectedCount = payments.filter(p => p.status === 'rejected').length
+  const totalPaid = payments.filter(p => p.status === 'approved').reduce((s: number, p: any) => s + p.amount, 0)
   const completionPct = totalCycles > 0 ? Math.round((paidCount / totalCycles) * 100) : 0
 
-  // Build period status array
+  // Build period status array — use tier-adjusted amount + late fine
   const periodStatuses: PeriodStatus[] = (periods ?? []).map(p => {
-    const payment = payments?.find(pay => pay.period_id === p.id)
+    const payment = payments.find((pay: any) => pay.period_id === p.id)
+    const hasPendingCredit = credits.some((c: any) => c.period_id === p.id)
+    const fine = payment?.status === 'approved' ? 0 : calculateLateFine(p, now, hasPendingCredit)
+    const expectedAmount = tierAmount + fine
     const status = payment?.status === 'approved' ? 'paid'
                  : payment?.status === 'pending' ? 'pending'
                  : payment?.status === 'rejected' ? 'rejected'
@@ -78,9 +107,10 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
     return {
       period: p,
       status,
-      // Use actual payment amount if approved, otherwise use period.amount as default display
-      amount: payment?.status === 'approved' ? (payment?.amount ?? p.amount) : p.amount,
+      // ถ้าจ่ายแล้วใช้ยอดที่จ่ายจริง มิฉะนั้นใช้ยอดตาม tier + ค่าปรับ
+      amount: payment?.status === 'approved' ? (payment?.amount ?? expectedAmount) : expectedAmount,
       payment,
+      fine,
     }
   })
 

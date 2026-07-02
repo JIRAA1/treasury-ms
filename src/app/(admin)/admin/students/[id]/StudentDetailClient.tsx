@@ -28,10 +28,11 @@ export default function StudentDetailClient({ student, periodStatuses, actorRole
 
   // ---- Cash payment ----
   const handleCashPayment = (ps: PeriodStatus) => {
+    const fineText = (ps.fine ?? 0) > 0 ? ` (รวมค่าปรับ ${formatCurrency(ps.fine ?? 0)})` : ''
     dialog.show({
       type: 'confirm',
       title: 'รับเงินสด',
-      message: `ยืนยันรับเงินสดจำนวน ${formatCurrency(ps.period.amount)} สำหรับ "${ps.period.label}" ใช่หรือไม่?`,
+      message: `ยืนยันรับเงินสดจำนวน ${formatCurrency(ps.amount)}${fineText} สำหรับ "${ps.period.label}" ใช่หรือไม่?`,
       confirmText: '✓ บันทึกเงินสด',
       onConfirm: async () => {
         dialog.setLoading(true)
@@ -40,7 +41,7 @@ export default function StudentDetailClient({ student, periodStatuses, actorRole
           const paymentData = {
             user_id: student.id as string,
             period_id: ps.period.id,
-            amount: ps.period.amount,
+            amount: ps.amount,  // tier-adjusted amount + fine
             status: 'approved',
             note: 'ชำระด้วยเงินสด (บันทึกโดยเหรัญญิก)',
             verified_at: new Date().toISOString(),
@@ -48,13 +49,15 @@ export default function StudentDetailClient({ student, periodStatuses, actorRole
 
           let paymentId: string
           if (ps.payment?.id) {
-            const res = await fetch(`/api/payments/verify`, {
-              method: 'PATCH',
+            // existing pending/rejected → update via cash API to ensure correct amount
+            const res = await fetch('/api/payments/cash', {
+              method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: ps.payment.id, action: 'approve' }),
+              body: JSON.stringify(paymentData),
             })
-            if (!res.ok) throw new Error((await res.json()).error)
-            paymentId = ps.payment.id
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error)
+            paymentId = data.payment.id
           } else {
             const res = await fetch('/api/payments/cash', {
               method: 'POST',
@@ -240,13 +243,20 @@ export default function StudentDetailClient({ student, periodStatuses, actorRole
 
               {/* Right: amount + status + actions */}
               <div className="flex items-center gap-4">
+                {/* Fine badge */}
+                {(ps.fine ?? 0) > 0 && ps.status !== 'paid' && (
+                  <div className="text-[9.5px] font-black text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full border border-red-200">
+                    +{formatCurrency(ps.fine ?? 0)} ปรับ
+                  </div>
+                )}
+
                 {ps.payment ? (
                   <div className="text-right">
                     <div className="text-[12.5px] font-semibold text-text-primary">{formatCurrency(ps.payment.amount)}</div>
                     <div className="text-[10.5px] text-text-muted">{formatDate(ps.payment.created_at)}</div>
                   </div>
                 ) : (
-                  <div className="text-[12px] text-text-muted">{formatCurrency(ps.period.amount)}</div>
+                  <div className="text-[12px] text-text-muted">{formatCurrency(ps.amount)}</div>
                 )}
 
                 {ps.payment?.slip_url && (

@@ -60,28 +60,42 @@ export default async function StudentStatementPage({ params }: { params: Promise
 
   const periodIds = (periods ?? []).map(p => p.id)
 
-  // Payments in active semester
-  const { data: payments } = await adminClient
-    .from('payments')
-    .select('*')
-    .eq('user_id', id)
-    .in('period_id', periodIds.length > 0 ? periodIds : ['00000000-0000-0000-0000-000000000000'])
-    .order('created_at', { ascending: false })
+  // Payments, credits, and system_settings
+  const [paymentsRes, creditsRes, settingsRes] = await Promise.all([
+    adminClient
+      .from('payments')
+      .select('*')
+      .eq('user_id', id)
+      .in('period_id', periodIds.length > 0 ? periodIds : ['00000000-0000-0000-0000-000000000000'])
+      .order('created_at', { ascending: false }),
+    adminClient
+      .from('payment_credits')
+      .select('*, period:period_id(label, deadline)')
+      .eq('user_id', id)
+      .order('created_at', { ascending: false }),
+    adminClient.from('system_settings').select('*'),
+  ])
 
-  // Pending credits
-  const { data: credits } = await adminClient
-    .from('payment_credits')
-    .select('*, period:period_id(label, deadline)')
-    .eq('user_id', id)
-    .order('created_at', { ascending: false })
+  const payments = paymentsRes.data
+  const credits = creditsRes.data
+  const settings = settingsRes.data ?? []
+
+  // Tier amounts from system_settings
+  const tierAmounts: Record<string, number> = {
+    A: parseFloat(settings.find((s: any) => s.key === 'tier_a_amount')?.value ?? '60'),
+    B: parseFloat(settings.find((s: any) => s.key === 'tier_b_amount')?.value ?? '50'),
+    C: parseFloat(settings.find((s: any) => s.key === 'tier_c_amount')?.value ?? '30'),
+  }
+  const tierAmount = tierAmounts[student.tier as string] ?? tierAmounts.B
 
   const now = new Date()
 
-  // Build period status with fine calculation
+  // Build period status with fine calculation — use tier-adjusted amount
   const periodStatuses: (PeriodStatus & { fine: number })[] = (periods ?? []).map(p => {
     const payment = payments?.find(pay => pay.period_id === p.id)
     const hasPendingCredit = credits?.some(c => c.period_id === p.id && c.status === 'pending') ?? false
     const fine = payment?.status === 'approved' ? 0 : calculateLateFine(p, now, hasPendingCredit)
+    const expectedAmount = tierAmount + fine
     const status = payment?.status === 'approved' ? 'paid'
       : payment?.status === 'pending' ? 'pending'
       : payment?.status === 'rejected' ? 'rejected'
@@ -89,7 +103,7 @@ export default async function StudentStatementPage({ params }: { params: Promise
     return {
       period: p,
       status,
-      amount: payment?.status === 'approved' ? (payment?.amount ?? p.amount) : p.amount,
+      amount: payment?.status === 'approved' ? (payment?.amount ?? expectedAmount) : expectedAmount,
       payment,
       fine,
     }
@@ -208,7 +222,7 @@ export default async function StudentStatementPage({ params }: { params: Promise
                   {/* Amount */}
                   <div className="text-right flex-shrink-0">
                     <div className="text-[12.5px] font-semibold text-text-primary">
-                      {ps.status === 'paid' ? formatCurrency(ps.amount) : formatCurrency(ps.period.amount + ps.fine)}
+                      {formatCurrency(ps.amount)}
                     </div>
                     {ps.payment?.created_at && (
                       <div className="text-[10px] text-text-muted">{formatDate(ps.payment.created_at)}</div>
@@ -230,7 +244,7 @@ export default async function StudentStatementPage({ params }: { params: Promise
                 {formatCurrency(
                   periodStatuses
                     .filter(ps => ps.status !== 'paid')
-                    .reduce((s, ps) => s + ps.period.amount + ps.fine, 0)
+                    .reduce((s, ps) => s + ps.amount, 0)
                 )}
               </span>
             </div>

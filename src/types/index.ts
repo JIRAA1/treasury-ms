@@ -123,6 +123,8 @@ export interface PeriodStatus {
   /** ยอดที่ปรับตาม tier + ค่าปรับ (tier-adjusted amount) */
   amount: number
   payment?: Payment
+  /** ค่าปรับล่าช้า (ถ้ามี) สำหรับแสดงผลใน admin */
+  fine?: number
 }
 
 export interface DashboardStats {
