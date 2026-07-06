@@ -50,6 +50,7 @@ export default function UploadPage() {
   const [unpaidCycles, setUnpaidCycles] = useState<PaymentPeriod[]>([])
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [payAccumulated, setPayAccumulated] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
@@ -147,6 +148,10 @@ export default function UploadPage() {
   const selectedCycle = unpaidCycles.find(c => c.id === selectedPeriodId)
   const selectedWindowStatus = selectedCycle ? getWindowStatus(selectedCycle) : null
   const isWindowLocked = selectedWindowStatus === 'upcoming' || selectedWindowStatus === 'closed'
+
+  // ยอดรวมกรณีชำระทบงวด: รวมทุกงวดที่ค้างชำระ
+  const accumulatedPeriodIds = unpaidCycles.map(c => c.id)
+  const totalAccumulatedAmount = unpaidCycles.reduce((sum, c) => sum + c.amount, 0)
 
   const step = selectedPeriodId === null ? 1 : 2
 
@@ -287,13 +292,25 @@ export default function UploadPage() {
                 <div className="absolute top-0 right-1/4 w-32 h-32 bg-brand/5 rounded-full filter blur-2xl pointer-events-none" />
 
                 {/* Header */}
-                <div className="flex items-center justify-between mb-6 pb-4 border-b border-border-strong">
+                <div className="flex items-center justify-between mb-5 pb-4 border-b border-border-strong">
                   <div>
-                    <div className="text-[10px] text-text-muted uppercase tracking-wider font-extrabold mb-0.5">กำลังนำส่งสลิปชำระเงิน</div>
-                    <div className="text-[16px] font-black text-text-primary">{selectedCycle.label}</div>
-                    <div className="text-[13px] font-bold text-brand mt-0.5">ยอดเงินโอนที่กำหนด: ฿{selectedCycle.amount.toLocaleString()}</div>
+                    <div className="text-[10px] text-text-muted uppercase tracking-wider font-extrabold mb-0.5">
+                      {payAccumulated ? 'ชำระเงินรวมยอดค้างชำระทั้งหมด' : 'กำลังนำส่งสลิปชำระเงิน'}
+                    </div>
+                    <div className="text-[16px] font-black text-text-primary">
+                      {payAccumulated
+                        ? unpaidCycles.map(c => c.label).join(' + ')
+                        : selectedCycle.label
+                      }
+                    </div>
+                    <div className="text-[13px] font-bold text-brand mt-0.5">
+                      ยอดเงินโอนที่กำหนด: ฿{(payAccumulated ? totalAccumulatedAmount : selectedCycle.amount).toLocaleString()}
+                      {payAccumulated && unpaidCycles.length > 1 && (
+                        <span className="ml-2 text-[11px] font-semibold text-text-muted">({unpaidCycles.length} งวดรวมกัน)</span>
+                      )}
+                    </div>
                   </div>
-                  {unpaidCycles.length > 1 && (
+                  {unpaidCycles.length > 1 && !payAccumulated && (
                     <button
                       onClick={() => setSelectedPeriodId(null)}
                       className="text-[12px] text-brand hover:text-brand-hover font-bold hover:underline transition-colors px-3 py-1.5 rounded-lg bg-brand/5 hover:bg-brand/10"
@@ -302,6 +319,62 @@ export default function UploadPage() {
                     </button>
                   )}
                 </div>
+
+                {/* Accumulated Payment Banner — แสดงเฉพาะกรณีมีงวดค้างชำระมากกว่า 1 งวด */}
+                {unpaidCycles.length > 1 && (
+                  <div className={`mb-5 rounded-xl border p-3.5 transition-all duration-200 ${
+                    payAccumulated
+                      ? 'border-amber-300 bg-amber-50 dark:bg-amber-950/20'
+                      : 'border-border bg-background-tertiary/40'
+                  }`}>
+                    <div className="flex items-start gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                        payAccumulated ? 'bg-amber-100 dark:bg-amber-900/40' : 'bg-background-muted'
+                      }`}>
+                        <span className="text-[14px]">{payAccumulated ? '✅' : '💳'}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12.5px] font-bold text-text-primary mb-0.5">
+                          {payAccumulated
+                            ? 'โหมดชำระรวมยอดค้างชำระทั้งหมด'
+                            : `คุณมียอดค้างชำระ ${unpaidCycles.length} งวด`
+                          }
+                        </div>
+                        <div className="text-[11px] text-text-muted">
+                          {payAccumulated
+                            ? `โอน ฿${totalAccumulatedAmount.toLocaleString()} ในสลิปเดียวเพื่อเคลียร์ยอดค้างทั้งหมด (${unpaidCycles.map(c => c.label).join(', ')})`
+                            : `ทำการโอนเงิน ฿${totalAccumulatedAmount.toLocaleString()} เพียงครั้งเดียวเพื่อเคลียร์ยอดค้างทั้ง ${unpaidCycles.length} งวดพร้อมกัน`
+                          }
+                        </div>
+                      </div>
+                      <button
+                        id="btn-toggle-accumulated"
+                        onClick={() => setPayAccumulated(v => !v)}
+                        className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-[11.5px] font-bold transition-all duration-200 ${
+                          payAccumulated
+                            ? 'bg-amber-500 text-white hover:bg-amber-600'
+                            : 'bg-brand text-white hover:bg-brand-hover'
+                        }`}
+                      >
+                        {payAccumulated ? 'ยกเลิก' : 'จ่ายรวม'}
+                      </button>
+                    </div>
+                    {payAccumulated && (
+                      <div className="mt-3 pt-3 border-t border-amber-200 dark:border-amber-800/50 space-y-1.5">
+                        {unpaidCycles.map(c => (
+                          <div key={c.id} className="flex items-center justify-between text-[11px]">
+                            <span className="text-text-muted">{c.label}</span>
+                            <span className="font-semibold text-text-primary">฿{c.amount.toLocaleString()}</span>
+                          </div>
+                        ))}
+                        <div className="flex items-center justify-between text-[12px] pt-1.5 border-t border-amber-200 dark:border-amber-800/50 font-black">
+                          <span className="text-amber-700 dark:text-amber-400">ยอดรวมที่ต้องโอน</span>
+                          <span className="text-amber-700 dark:text-amber-400">฿{totalAccumulatedAmount.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* QR Code — compact premium horizontal card */}
                 {selectedCycle.qr_url && !isWindowLocked && (
@@ -327,9 +400,11 @@ export default function UploadPage() {
                           <span className="text-[10px] font-black text-white/80 uppercase tracking-widest">QR Code การโอนเงิน</span>
                         </div>
                         <div className="text-[26px] font-black leading-none tracking-tight">
-                          ฿{selectedCycle.amount.toLocaleString()}
+                          ฿{(payAccumulated ? totalAccumulatedAmount : selectedCycle.amount).toLocaleString()}
                         </div>
-                        <div className="text-[11px] text-white/80 mt-1 truncate font-medium">{selectedCycle.label}</div>
+                        <div className="text-[11px] text-white/80 mt-1 truncate font-medium">
+                          {payAccumulated ? unpaidCycles.map(c => c.label).join(' + ') : selectedCycle.label}
+                        </div>
                         <div className="mt-3 flex items-center gap-1.5 bg-white/20 backdrop-blur-md rounded-lg px-2.5 py-1.5 w-fit border border-white/10 shadow-sm">
                           <Upload className="w-3 h-3 text-white shrink-0" />
                           <span className="text-[10.5px] font-extrabold">สแกนชำระแล้วแนบหลักฐานด้านล่าง</span>
@@ -368,7 +443,10 @@ export default function UploadPage() {
                   <SlipUploader
                     periodId={selectedPeriodId!}
                     unpaidCycles={unpaidCycles}
-                    onPeriodChange={setSelectedPeriodId}
+                    onPeriodChange={payAccumulated ? undefined : setSelectedPeriodId}
+                    payAccumulated={payAccumulated}
+                    accumulatedPeriodIds={payAccumulated ? accumulatedPeriodIds : []}
+                    totalAccumulatedAmount={payAccumulated ? totalAccumulatedAmount : undefined}
                     onSuccess={() => {
                       setTimeout(() => router.push('/student/dashboard'), 2500)
                     }}
@@ -382,3 +460,4 @@ export default function UploadPage() {
     </div>
   )
 }
+

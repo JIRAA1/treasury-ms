@@ -21,6 +21,12 @@ interface SlipUploaderProps {
   onPeriodChange?: (periodId: string) => void;
   onSuccess?: () => void;
   onError?: (error: string) => void;
+  /** จ่ายแบบทบงวด: ถ้า true จะชำระยอดค้างชำระทุกงวดพร้อมกันในสลิปเดียว */
+  payAccumulated?: boolean;
+  /** IDs ของงวดที่ชำระรวม (รวมงวดหลักด้วย) */
+  accumulatedPeriodIds?: string[];
+  /** ยอดรวมที่ต้องชำระจริง (สำหรับ validate ยอดเงิน QR) */
+  totalAccumulatedAmount?: number;
 }
 
 type Step = 'upload' | 'verifying' | 'success' | 'failed'
@@ -49,7 +55,7 @@ interface StepResult {
   message?: string
 }
 
-export default function SlipUploader({ periodId, unpaidCycles, onPeriodChange, onSuccess, onError }: SlipUploaderProps) {
+export default function SlipUploader({ periodId, unpaidCycles, onPeriodChange, onSuccess, onError, payAccumulated = false, accumulatedPeriodIds = [], totalAccumulatedAmount }: SlipUploaderProps) {
   const dialog = useDialog()
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
@@ -177,12 +183,17 @@ export default function SlipUploader({ periodId, unpaidCycles, onPeriodChange, o
           return
         }
 
-        // Amount Check
-        if (parsed.amount !== null && selectedCycle && parsed.amount !== selectedCycle.amount) {
-          // Look for other unpaid period matching the slip amount
-          const match = unpaidCycles.find(c => c.amount === parsed.amount && c.id !== periodId)
-          if (match) {
-            setSuggestedWeek(match)
+        // Amount Check — ใช้ยอดรวม (totalAccumulatedAmount) ถ้าอยู่ในโหมดทบงวด
+        const expectedAmount = (payAccumulated && totalAccumulatedAmount) ? totalAccumulatedAmount : selectedCycle?.amount
+        if (parsed.amount !== null && expectedAmount && parsed.amount !== expectedAmount) {
+          // Look for other unpaid period matching the slip amount (only in single-period mode)
+          if (!payAccumulated) {
+            const match = unpaidCycles.find(c => c.amount === parsed.amount && c.id !== periodId)
+            if (match) {
+              setSuggestedWeek(match)
+            } else {
+              setAmountMismatch(true)
+            }
           } else {
             setAmountMismatch(true)
           }
@@ -220,8 +231,9 @@ export default function SlipUploader({ periodId, unpaidCycles, onPeriodChange, o
     }
   }
 
-  // Trigger re-check if user changes the period manually
+  // Trigger re-check if user changes the period manually (single-period mode only)
   useEffect(() => {
+    if (payAccumulated) return // โหมดทบงวดไม่สลับงวดได้
     if (file && qrStatus.scanned && qrStatus.isValid) {
       // Re-evaluate amount match for the new selected period
       const currentCycle = unpaidCycles.find(c => c.id === periodId)
@@ -241,7 +253,7 @@ export default function SlipUploader({ periodId, unpaidCycles, onPeriodChange, o
         }
       }
     }
-  }, [periodId, unpaidCycles, file, qrStatus.scanned, qrStatus.isValid, qrStatus.amount])
+  }, [periodId, unpaidCycles, file, qrStatus.scanned, qrStatus.isValid, qrStatus.amount, payAccumulated])
 
   const handleSubmit = async () => {
     if (!file) return
@@ -269,6 +281,11 @@ export default function SlipUploader({ periodId, unpaidCycles, onPeriodChange, o
     if (rawQrPayload) formData.append('qr_payload', rawQrPayload)
     // If user bypassed missing-QR warning, tell the server about it
     if (manualConfirm) formData.append('manual_confirm', 'true')
+    // Accumulated payment mode
+    if (payAccumulated && accumulatedPeriodIds.length > 0) {
+      formData.append('pay_accumulated', 'true')
+      formData.append('accumulated_period_ids', JSON.stringify(accumulatedPeriodIds))
+    }
 
     try {
       await updateStep(1)

@@ -22,6 +22,14 @@ export async function POST(request: NextRequest) {
   // manual_confirm: true when user explicitly bypasses missing-QR warning
   const manualConfirmRaw = formData.get('manual_confirm') as string | null
   const manualConfirm = manualConfirmRaw === 'true'
+  // pay_accumulated: ชำระเงินรวมยอดค้างชำระทุกงวดในสลิปเดียว
+  const payAccumulatedRaw = formData.get('pay_accumulated') as string | null
+  const payAccumulated = payAccumulatedRaw === 'true'
+  // accumulated_period_ids: รายการ period_id ที่ต้องการชำระรวม (JSON string)
+  const accumulatedPeriodIdsRaw = formData.get('accumulated_period_ids') as string | null
+  const accumulatedPeriodIds: string[] = payAccumulated && accumulatedPeriodIdsRaw
+    ? JSON.parse(accumulatedPeriodIdsRaw)
+    : []
 
   if (!file || !period_id) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
@@ -233,12 +241,15 @@ export async function POST(request: NextRequest) {
   // ────────────────────────────────────────────────────────────────────────────
   const parsedQR = parseSlipQR(qrPayload)
   if (parsedQR.isValid && parsedQR.transRef) {
-    const { data: dupPayment } = await adminClient
+    // ตรวจสอบสลิปซ้ำ: ครอบคลุมทั้ง trans_ref ตรง และ _carry_ suffix
+    const { data: dupRows } = await adminClient
       .from('payments')
       .select('id, user_id, status')
-      .eq('trans_ref', parsedQR.transRef)
+      .or(`trans_ref.eq.${parsedQR.transRef},trans_ref.like.${parsedQR.transRef}_carry_%`)
       .neq('status', 'rejected')
-      .maybeSingle()
+      .limit(1)
+
+    const dupPayment = dupRows?.[0] ?? null
 
     if (dupPayment) {
       const isOwnSlip = dupPayment.user_id === profile.id
@@ -258,12 +269,57 @@ export async function POST(request: NextRequest) {
   }
 
   // ────────────────────────────────────────────────────────────────────────────
-  // 7. Call Thunder API with Payload + matchAccount + matchAmount
+  // 7. คำนวณยอดรวมกรณีทบงวด และ Call Thunder API
   // ────────────────────────────────────────────────────────────────────────────
+  let accumulatedPeriodDetails: { id: string; label: string; tierAmount: number; lateFine: number; totalAmount: number }[] = []
+  let totalExpectedAmount = expectedStudentAmount
+
+  if (payAccumulated && accumulatedPeriodIds.length > 0) {
+    // ดึงข้อมูลงวดที่ค้างชำระทั้งหมดมาคำนวณยอดรวม
+    const { data: accPeriods } = await adminClient
+      .from('periods')
+      .select('id, label, amount, deadline, late_fine_amount, fine_type, fine_rate, fine_cap, fine_grace_days')
+      .in('id', accumulatedPeriodIds)
+
+    if (accPeriods && accPeriods.length > 0) {
+      for (const ap of accPeriods) {
+        if (ap.id === period_id) continue // งวดหลักคิดไปแล้วใน expectedStudentAmount
+        const { data: accCredit } = await adminClient
+          .from('payment_credits')
+          .select('id')
+          .eq('user_id', profile.id)
+          .eq('period_id', ap.id)
+          .eq('status', 'pending')
+          .maybeSingle()
+
+        const accFine = calculateLateFine(
+          {
+            deadline: ap.deadline,
+            fine_type: ap.fine_type ?? 'flat',
+            fine_rate: ap.fine_rate ?? 0,
+            fine_cap: ap.fine_cap ?? null,
+            fine_grace_days: ap.fine_grace_days ?? 0,
+            late_fine_amount: ap.late_fine_amount ?? 0,
+          },
+          new Date(),
+          !!accCredit
+        )
+        const accTierAmount = tierAmounts[profile.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
+        const accTotal = accTierAmount + accFine
+        accumulatedPeriodDetails.push({ id: ap.id, label: ap.label, tierAmount: accTierAmount, lateFine: accFine, totalAmount: accTotal })
+        totalExpectedAmount += accTotal
+      }
+    }
+  }
+
+  const remarkPeriods = payAccumulated && accumulatedPeriodDetails.length > 0
+    ? `${cycleTitle} + ${accumulatedPeriodDetails.map(p => p.label).join(', ')}`
+    : cycleTitle
+
   const apiResult = await verifySlipByPayload(qrPayload, {
     matchAccount: true,
-    matchAmount: expectedStudentAmount,
-    remark: `Period - ${cycleTitle} | ${profile.student_id}`,
+    matchAmount: totalExpectedAmount,
+    remark: `Period - ${remarkPeriods} | ${profile.student_id}`,
   })
 
   // --- QUOTA EXCEEDED PATH ---
@@ -331,21 +387,22 @@ export async function POST(request: NextRequest) {
   }
 
   // 8. Amount Validation — use isAmountMatched from API if available, fallback to manual compare
+  //    กรณีทบงวด: ตรวจสอบกับยอดรวม (totalExpectedAmount)
   const slipAmount = apiResult.amount
   const amountMatched = apiResult.is_amount_matched !== null
     ? apiResult.is_amount_matched
-    : (slipAmount === null || slipAmount === expectedStudentAmount)
+    : (slipAmount === null || slipAmount === totalExpectedAmount)
 
   if (!amountMatched) {
     await notifyAdmins('Amount Mismatch Blocked', [
       `ผู้ส่ง: ${profile.fullname}`,
-      `งวด: ${cycleTitle}`,
+      `งวด: ${remarkPeriods}`,
       `ยอดเงินในสลิป: ฿${slipAmount}`,
-      `ยอดเงินที่ต้องการ: ฿${expectedStudentAmount}`
+      `ยอดเงินที่ต้องการ: ฿${totalExpectedAmount}${payAccumulated ? ' (รวมยอดทบงวด)' : ''}`
     ], 'warning')
 
     return NextResponse.json({
-      error: `ยอดเงินในสลิป (฿${slipAmount}) ไม่ตรงกับยอดชำระที่กำหนดของงวดนี้ (฿${expectedStudentAmount})`,
+      error: `ยอดเงินในสลิป (฿${slipAmount}) ไม่ตรงกับยอดชำระที่กำหนด (฿${totalExpectedAmount})${payAccumulated ? ' — รวมยอดค้างชำระทุกงวดที่เลือก' : ''}`,
       code: 'AMOUNT_MISMATCH'
     }, { status: 400 })
   }
@@ -360,10 +417,12 @@ export async function POST(request: NextRequest) {
   // If student has credit and uploaded a valid slip, auto-approve the payment and resolve credit
   const autoApprove = !!pendingCredit
   const transRef = apiResult.trans_ref || (parsedQR.isValid ? parsedQR.transRef : null)
+
+  // ─── 9a. บันทึก payment งวดหลัก ────────────────────────────────────────────
   const paymentData = {
     user_id: profile.id,
     period_id,
-    amount: slipAmount || expectedStudentAmount,
+    amount: payAccumulated ? expectedStudentAmount : (slipAmount || expectedStudentAmount),
     trans_ref: transRef,
     slip_url: publicUrl,
     status: autoApprove ? ('approved' as const) : ('pending' as const),
@@ -398,18 +457,82 @@ export async function POST(request: NextRequest) {
 
   await logAction({ actorId: profile.id, action: 'payment_uploaded', targetId: payment.id, newValue: paymentData })
 
+  // ─── 9b. กรณีทบงวด: บันทึก payment งวดค้างแต่ละงวดด้วย _carry_ suffix ────
+  const carryPayments: Array<{ period_id: string; label: string; amount: number }> = []
+
+  if (payAccumulated && accumulatedPeriodDetails.length > 0) {
+    const carryStatus = autoApprove ? ('approved' as const) : ('pending' as const)
+
+    for (const acc of accumulatedPeriodDetails) {
+      const carryTransRef = transRef ? `${transRef}_carry_${acc.id}` : null
+      const carryPaymentData = {
+        user_id: profile.id,
+        period_id: acc.id,
+        amount: acc.totalAmount,
+        trans_ref: carryTransRef,
+        slip_url: publicUrl,              // ใช้รูปสลิปเดียวกัน
+        file_hash: carryTransRef          // ใช้ carry trans_ref เป็น hash เพื่อหลีกเลี่ยง unique constraint ของ file_hash
+          ? createHash('sha256').update(carryTransRef).digest('hex')
+          : fileHash,
+        status: carryStatus,
+        verified_at: autoApprove ? new Date().toISOString() : null,
+        note: `accumulated_with:${period_id}`,
+      }
+
+      // ตรวจสอบว่างวดค้างนั้นเคยชำระและถูก rejected หรือยังไม่มีรายการ
+      const { data: existingCarry } = await adminClient
+        .from('payments')
+        .select('id, status')
+        .eq('user_id', profile.id)
+        .eq('period_id', acc.id)
+        .maybeSingle()
+
+      const { data: carryPayment, error: carryError } = existingCarry
+        ? await adminClient.from('payments').update(carryPaymentData).eq('id', existingCarry.id).select().single()
+        : await adminClient.from('payments').insert(carryPaymentData).select().single()
+
+      if (carryError) {
+        console.error(`[Upload Accumulated] Failed to save carry payment for period ${acc.id}:`, carryError)
+        // ไม่ abort ทั้ง transaction เพราะงวดหลักบันทึกแล้ว แจ้ง warning แทน
+        await notifyAdmins('⚠️ Carry Payment Insert Failed', [
+          `จาก: ${profile.fullname}`,
+          `รายการ: ${acc.label}`,
+          `ข้อผิดพลาด: ${carryError.message}`,
+          `สลิปหลักบันทึกแล้ว (period: ${cycleTitle}) กรุณาแก้ไขด้วยตนเอง`
+        ], 'error')
+        continue
+      }
+
+      if (carryPayment) {
+        try {
+          await adminClient.from('payments').update({ verified_by_api: true }).eq('id', carryPayment.id)
+        } catch (_) { /* column may not exist yet */ }
+        await logAction({
+          actorId: profile.id,
+          action: 'payment_uploaded',
+          targetId: carryPayment.id,
+          newValue: { ...carryPaymentData, carry_for_period: period_id },
+        })
+        carryPayments.push({ period_id: acc.id, label: acc.label, amount: acc.totalAmount })
+      }
+    }
+  }
+
   // 10. Notify
+  const isAccumulated = payAccumulated && carryPayments.length > 0
   if (autoApprove) {
     const thaiDate = new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
     await adminClient.from('notifications').insert({
       user_id: profile.id,
-      title: 'ชำระเงินสำเร็จ (หักล้างยอดค้าง)',
-      message: `รายการ "${cycleTitle}" จำนวน ฿${paymentData.amount.toLocaleString()} ได้รับการอนุมัติอัตโนมัติเนื่องจากยอดค้างชำระถูกเคลียร์แล้ว`,
+      title: isAccumulated ? 'ชำระเงินสำเร็จ (หักล้างยอดค้าง — รวมทบงวด)' : 'ชำระเงินสำเร็จ (หักล้างยอดค้าง)',
+      message: isAccumulated
+        ? `ชำระสำเร็จ ${[cycleTitle, ...carryPayments.map(p => p.label)].join(', ')} รวม ฿${totalExpectedAmount.toLocaleString()} (อนุมัติอัตโนมัติ)`
+        : `รายการ "${cycleTitle}" จำนวน ฿${paymentData.amount.toLocaleString()} ได้รับการอนุมัติอัตโนมัติเนื่องจากยอดค้างชำระถูกเคลียร์แล้ว`,
       type: 'success',
     })
     if (profile.line_user_id) {
       try {
-        await sendPaymentApproved(profile.line_user_id, cycleTitle, paymentData.amount, thaiDate)
+        await sendPaymentApproved(profile.line_user_id, remarkPeriods, totalExpectedAmount, thaiDate)
       } catch (e) {
         console.error('[Upload AutoApprove] Failed to send LINE notification:', e)
       }
@@ -417,15 +540,15 @@ export async function POST(request: NextRequest) {
     await notifyAdmins('Slip Auto-Approved (Credit)', [
       `จาก: ${profile.fullname}`,
       `รหัสนักศึกษา: ${profile.student_id}`,
-      `รายการ: ${cycleTitle}`,
-      `ยอดเงิน: ฿${paymentData.amount.toLocaleString()} (อนุมัติอัตโนมัติ — มียอดค้างชำระ credit)`
+      `รายการ: ${remarkPeriods}`,
+      `ยอดเงิน: ฿${totalExpectedAmount.toLocaleString()} (อนุมัติอัตโนมัติ — มียอดค้างชำระ credit)`
     ], 'info')
   } else {
-    await notifyAdmins('New Slip Received', [
+    await notifyAdmins(isAccumulated ? 'New Slip Received (รวมทบงวด)' : 'New Slip Received', [
       `จาก: ${profile.fullname}`,
       `รหัสนักศึกษา: ${profile.student_id}`,
-      `รายการ: ${cycleTitle}`,
-      `ยอดเงิน: ฿${paymentData.amount.toLocaleString()}`,
+      `รายการ: ${remarkPeriods}`,
+      `ยอดเงิน: ฿${totalExpectedAmount.toLocaleString()}${isAccumulated ? ` (รวม ${carryPayments.length + 1} งวด)` : ''}`,
       `Trans Ref: ${transRef || 'ไม่ระบุ'}`
     ], 'info')
   }
@@ -433,6 +556,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     success: true,
     payment,
+    accumulated: isAccumulated ? carryPayments : [],
     ocr: {
       amount: slipAmount,
       trans_ref: transRef,
