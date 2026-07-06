@@ -310,7 +310,7 @@ export async function POST(request: NextRequest) {
         )
         const accBaseAmount = (ap.amount ?? 0) * tierRatio
         const accTotal = accBaseAmount + accFine
-        accumulatedPeriodDetails.push({ id: ap.id, label: ap.label, tierAmount: tierAmount, lateFine: accFine, totalAmount: accTotal })
+        accumulatedPeriodDetails.push({ id: ap.id, label: ap.label, tierAmount: accBaseAmount, lateFine: accFine, totalAmount: accTotal })
         totalExpectedAmount += accTotal
       }
     }
