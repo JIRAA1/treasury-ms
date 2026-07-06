@@ -162,7 +162,10 @@ export async function POST(request: NextRequest) {
 
     const now = new Date()
     const results = await sendBulkReminder(lineTargets.map((s) => {
-      const studentAmount = tierAmounts[s.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
+      const tierAmount = tierAmounts[s.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
+      const standardAmount = tierAmounts.B || 50
+      const ratio = tierAmount / standardAmount
+      const studentAmount = (cycleSetting.amount ?? 0) * ratio
       // คำนวณค่าปรับรายบุคคล — ถ้ามี pending credit → exempt (ไม่ปรับ)
       const hasPendingCredit = pendingCreditUserIds.has(s.id)
       const fineAmount = calculateLateFine(

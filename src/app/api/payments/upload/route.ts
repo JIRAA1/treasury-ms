@@ -161,6 +161,10 @@ export async function POST(request: NextRequest) {
     C: parseFloat(settings?.find((s: any) => s.key === 'tier_c_amount')?.value || '30'),
   }
   const tierAmount = tierAmounts[profile.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
+  // คำนวณยอดเงินฐานตามสัดส่วน Tier × ยอดของงวดที่ชำระ
+  // สูตร: period.amount × (tierAmount / Tier B standard)
+  const standardAmount = tierAmounts.B || 50
+  const tierRatio = tierAmount / standardAmount
 
   const lateFine = calculateLateFine(
     {
@@ -174,7 +178,7 @@ export async function POST(request: NextRequest) {
     new Date(),
     !!pendingCredit
   )
-  const expectedStudentAmount = tierAmount + lateFine
+  const expectedStudentAmount = (periodSetting?.amount ?? 0) * tierRatio + lateFine
 
   // ────────────────────────────────────────────────────────────────────────────
   // 5. NO QR PATH — save for manual review if user explicitly confirmed
@@ -304,9 +308,9 @@ export async function POST(request: NextRequest) {
           new Date(),
           !!accCredit
         )
-        const accTierAmount = tierAmounts[profile.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
-        const accTotal = accTierAmount + accFine
-        accumulatedPeriodDetails.push({ id: ap.id, label: ap.label, tierAmount: accTierAmount, lateFine: accFine, totalAmount: accTotal })
+        const accBaseAmount = (ap.amount ?? 0) * tierRatio
+        const accTotal = accBaseAmount + accFine
+        accumulatedPeriodDetails.push({ id: ap.id, label: ap.label, tierAmount: tierAmount, lateFine: accFine, totalAmount: accTotal })
         totalExpectedAmount += accTotal
       }
     }

@@ -95,7 +95,10 @@ export default async function StudentStatementPage({ params }: { params: Promise
     const payment = payments?.find(pay => pay.period_id === p.id)
     const hasPendingCredit = credits?.some(c => c.period_id === p.id && c.status === 'pending') ?? false
     const fine = payment?.status === 'approved' ? 0 : calculateLateFine(p, now, hasPendingCredit)
-    const expectedAmount = tierAmount + fine
+    const standardAmount = tierAmounts.B || 50
+    const ratio = tierAmount / standardAmount
+    const expectedBaseAmount = p.amount * ratio
+    const expectedAmount = expectedBaseAmount + fine
     const status = payment?.status === 'approved' ? 'paid'
       : payment?.status === 'pending' ? 'pending'
       : payment?.status === 'rejected' ? 'rejected'

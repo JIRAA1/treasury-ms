@@ -74,7 +74,7 @@ export default function PeriodGrid({ periods, onPeriodClick, currentPeriodId, cl
               <span className={cn(
                 'text-[8px] sm:text-[9px] font-black uppercase tracking-wider opacity-70',
               )}>
-                ฿{(ps.payment?.amount ?? ps.period.amount).toLocaleString()}
+                ฿{(ps.payment?.amount ?? ps.amount).toLocaleString()}
               </span>
             </div>
 

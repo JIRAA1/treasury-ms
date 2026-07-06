@@ -87,6 +87,8 @@ export default function UploadPage() {
           C: parseFloat(sysSettings?.find((s: any) => s.key === 'tier_c_amount')?.value || '30'),
         }
         const tierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
+        const standardAmount = tierAmounts.B || 50
+        const tierRatio = tierAmount / standardAmount
         const pendingCreditPeriodIds = new Set(pendingCredits?.map(c => c.period_id) || [])
 
         const unpaid: PaymentPeriod[] = []
@@ -107,7 +109,10 @@ export default function UploadPage() {
               new Date(),
               hasPendingCredit
             )
-            const expectedAmount = tierAmount + lateFine
+            // คำนวณยอดฐานตามสัดส่วน Tier × ยอดของงวดนั้นๆ
+            // สูตร: period.amount × (tierAmount / Tier B standard)
+            const expectedBaseAmount = s.amount * tierRatio
+            const expectedAmount = expectedBaseAmount + lateFine
             const fineDescription = lateFine > 0
               ? formatFineDescription({
                   deadline: s.deadline,

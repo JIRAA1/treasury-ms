@@ -50,7 +50,7 @@ export default function StudentDashboard({
     const payment = payments?.find((p) => p.period_id === period.id)
     // ใช้ยอดตาม tier ของ student
     const tierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
-    
+
     // ตรวจสอบว่านักศึกษามีเครดิตค้างจ่าย (ผ่อนผัน) ในงวดนี้หรือไม่
     const hasPendingCredit = pendingCredits.some((c) => c.period_id === period.id && c.status === 'pending')
 
@@ -67,7 +67,14 @@ export default function StudentDashboard({
       new Date(),
       hasPendingCredit
     )
-    const expectedAmount = tierAmount + lateFine
+
+    // คำนวณยอดเงินฐานตามสัดส่วน Tier × ยอดของงวดนั้นๆ
+    // สูตร: period.amount × (tierAmount / Tier B standard)
+    // เช่น Tier C (30) / Tier B (50) = 60% → งวด ฿50 จ่าย ฿30, งวด ฿30 จ่าย ฿18
+    const standardAmount = tierAmounts.B || 50
+    const tierRatio = tierAmount / standardAmount
+    const expectedBaseAmount = period.amount * tierRatio
+    const expectedAmount = expectedBaseAmount + lateFine
 
     return {
       period,
