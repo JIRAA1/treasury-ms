@@ -107,6 +107,18 @@ export default function StudentDashboard({
   const windowStatus = currentPeriod ? getWindowStatus(currentPeriod) : 'open'
   const isLocked = windowStatus === 'upcoming' || windowStatus === 'closed'
 
+  // ดึงรายการงวดทั้งหมดที่ยังไม่ได้จ่าย (สถานะเป็น unpaid หรือ rejected) เพื่อเช็คการชำระรวมสะสม
+  const unpaidPeriods = periodStatuses.filter(
+    (p) => p.status === 'unpaid' || p.status === 'rejected'
+  )
+  const hasAccumulatedUnpaid = unpaidPeriods.length > 1
+  const totalUnpaidAmount = unpaidPeriods.reduce((sum, p) => sum + p.amount, 0)
+
+  const displayAmount = hasAccumulatedUnpaid ? totalUnpaidAmount : (currentPeriodStatus?.amount ?? 0)
+  const displayLabel = hasAccumulatedUnpaid
+    ? `ยอดรวมค้างชำระทั้งหมด (${unpaidPeriods.map(p => p.period.label).join(' + ')})`
+    : (currentPeriod?.label || 'งวดปัจจุบัน')
+
   // จำนวนงวดที่ค้างชำระทั้งหมด (รวมงวดที่ปิดรับสลิปแล้ว) — ใช้แสดงปุ่ม "จ่ายสะสม"
   const totalUnpaidCount = periodStatuses.filter(
     (p) => p.status !== 'paid' && p.status !== 'pending'
@@ -202,7 +214,7 @@ export default function StudentDashboard({
                   {/* Left: Period info */}
                   <div className="flex-1">
                     <h1 className="text-[15px] sm:text-[22px] md:text-[30px] font-black text-white tracking-tight leading-tight mb-2">
-                      {currentPeriod?.label || 'งวดปัจจุบัน'}
+                      {displayLabel}
                     </h1>
                     <div className="flex items-center gap-1.5 text-white/50 text-[10px] sm:text-[12px] font-medium">
                       <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
@@ -217,11 +229,32 @@ export default function StudentDashboard({
                       <div className="text-[9px] sm:text-[11px] font-black text-white/40 uppercase tracking-widest mb-1">ยอดที่ต้องชำระ</div>
                       <div className="text-[22px] sm:text-[36px] md:text-[48px] font-black text-white tracking-tighter leading-none">
                         <span className="text-[13px] sm:text-[20px] md:text-[28px] text-white/60 mr-1">฿</span>
-                        {currentPeriodStatus.amount.toLocaleString()}
+                        {displayAmount.toLocaleString()}
                       </div>
                       {(() => {
+                        if (hasAccumulatedUnpaid) {
+                          const totalBaseAmount = unpaidPeriods.reduce((sum, p) => {
+                            const tierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
+                            const standardAmount = tierAmounts.B || 50
+                            const ratio = tierAmount / standardAmount
+                            return sum + (p.period.amount * ratio)
+                          }, 0)
+                          const totalFine = totalUnpaidAmount - totalBaseAmount
+                          if (totalFine > 0) {
+                            return (
+                              <div className="text-[8.5px] sm:text-[10px] text-red-300 font-bold mt-1">
+                                รวมค่าปรับทั้งหมด ฿{totalFine.toLocaleString()}
+                              </div>
+                            )
+                          }
+                          return null
+                        }
+
                         const baseTierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
-                        const finePaid = currentPeriodStatus.amount - baseTierAmount
+                        const standardAmount = tierAmounts.B || 50
+                        const ratio = baseTierAmount / standardAmount
+                        const expectedBaseAmount = (currentPeriod?.amount ?? 0) * ratio
+                        const finePaid = currentPeriodStatus.amount - expectedBaseAmount
                         if (finePaid > 0 && currentPeriodStatus.status !== 'paid') {
                           const fineDesc = formatFineDescription({
                             deadline: currentPeriod?.deadline || new Date().toISOString(),
@@ -421,8 +454,8 @@ export default function StudentDashboard({
           onClose={() => setIsQrModalOpen(false)}
           promptPayId={promptPayConfig.promptpay_id}
           promptPayName={promptPayConfig.promptpay_name}
-          title={currentPeriod?.label || `งวดปัจจุบัน`}
-          amount={currentPeriodStatus.amount}
+          title={displayLabel}
+          amount={displayAmount}
         />
       )}
     </div>

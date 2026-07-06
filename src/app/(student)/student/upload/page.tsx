@@ -139,7 +139,12 @@ export default function UploadPage() {
         })
 
         setUnpaidCycles(unpaid)
-        if (unpaid.length === 1) setSelectedPeriodId(unpaid[0].id)
+        if (unpaid.length === 1) {
+          setSelectedPeriodId(unpaid[0].id)
+        } else if (unpaid.length > 1) {
+          setSelectedPeriodId(unpaid[0].id)
+          setPayAccumulated(true)
+        }
       } catch (error) {
         console.error('Failed to fetch upload data:', error)
       } finally {
@@ -371,17 +376,23 @@ export default function UploadPage() {
                           }
                         </div>
                       </div>
-                      <button
-                        id="btn-toggle-accumulated"
-                        onClick={() => setPayAccumulated(v => !v)}
-                        className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-[11.5px] font-bold transition-all duration-200 ${
-                          payAccumulated
-                            ? 'bg-amber-500 text-white hover:bg-amber-600'
-                            : 'bg-brand text-white hover:bg-brand-hover'
-                        }`}
-                      >
-                        {payAccumulated ? 'ยกเลิก' : 'จ่ายรวม'}
-                      </button>
+                      {unpaidCycles.length > 1 ? (
+                        <div className="flex-shrink-0 px-2.5 py-1.5 bg-red-500 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm select-none">
+                          จำเป็นต้องจ่ายรวม
+                        </div>
+                      ) : (
+                        <button
+                          id="btn-toggle-accumulated"
+                          onClick={() => setPayAccumulated(v => !v)}
+                          className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-[11.5px] font-bold transition-all duration-200 ${
+                            payAccumulated
+                              ? 'bg-amber-500 text-white hover:bg-amber-600'
+                              : 'bg-brand text-white hover:bg-brand-hover'
+                          }`}
+                        >
+                          {payAccumulated ? 'ยกเลิก' : 'จ่ายรวม'}
+                        </button>
+                      )}
                     </div>
                     {payAccumulated && (
                       <div className="mt-3 pt-3 border-t border-amber-200 dark:border-amber-800/50 space-y-1.5">
