@@ -43,7 +43,10 @@ export default async function AdminReportsPage({
     adminClient.from('system_settings').select('key, value')
   ])
 
-  const totalPayments = payments?.filter(p => p.status === 'approved').reduce((s, p) => s + (p.amount || 0), 0) || 0
+  const selectedPeriodIds = new Set(periods?.map(p => p.id) || [])
+  const semesterPayments = payments?.filter(p => selectedPeriodIds.has(p.period_id)) || []
+
+  const totalPayments = semesterPayments.filter(p => p.status === 'approved').reduce((s, p) => s + (p.amount || 0), 0) || 0
   const totalOtherIncomes = incomes?.filter(i => i.approved_by).reduce((s, i) => s + (i.amount || 0), 0) || 0
   const totalIncome = totalPayments + totalOtherIncomes
   const totalExpense = expenses?.filter(e => e.approved_by).reduce((s, e) => s + (e.amount || 0), 0) || 0
@@ -64,12 +67,18 @@ export default async function AdminReportsPage({
 
   // Cycle summary
   const cycleData = periods?.map((s) => {
-    const cyclePayments = payments?.filter(p => p.period_id === s.id && p.status === 'approved') || []
+    const cyclePayments = semesterPayments.filter(p => p.period_id === s.id && p.status === 'approved')
     const collected = cyclePayments.reduce((sum, p) => sum + (p.amount || 0), 0)
     const paidCount = cyclePayments.length
-    const pendingCount = payments?.filter(p => p.period_id === s.id && p.status === 'pending').length || 0
+    const pendingCount = semesterPayments.filter(p => p.period_id === s.id && p.status === 'pending').length
     const rate = students?.length ? Math.round((paidCount / students.length) * 100) : 0
-    const targetAmount = (tierACount * tierSettings.A) + (tierBCount * tierSettings.B) + (tierCCount * tierSettings.C)
+    
+    const standardAmount = tierSettings.B || 50
+    const targetAmount = 
+      (tierACount * (s.amount * (tierSettings.A / standardAmount))) + 
+      (tierBCount * (s.amount * (tierSettings.B / standardAmount))) + 
+      (tierCCount * (s.amount * (tierSettings.C / standardAmount)))
+      
     return { ...s, collected, paidCount, pendingCount, rate, targetAmount }
   }) || []
 
@@ -226,8 +235,8 @@ export default async function AdminReportsPage({
             </div>
             <div className="divide-y divide-border">
               {students?.slice(0, 8).map((s: any) => {
-                const paidCount = payments?.filter(p => p.user_id === s.id && p.status === 'approved').length || 0
-                const pendingCount = payments?.filter(p => p.user_id === s.id && p.status === 'pending').length || 0
+                const paidCount = semesterPayments.filter(p => p.user_id === s.id && p.status === 'approved').length
+                const pendingCount = semesterPayments.filter(p => p.user_id === s.id && p.status === 'pending').length
                 const isFullyPaid = paidCount >= (periods?.length || 0)
                 return (
                   <div key={s.id} className="py-2 flex items-center justify-between gap-2">

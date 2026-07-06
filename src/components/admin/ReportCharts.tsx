@@ -82,10 +82,14 @@ export default function ReportCharts({ cycleData, studentCount, tierBreakdown, t
    */
   const calcPeriodTarget = (periodBaseAmount: number): number => {
     if (tierBreakdown && tierAmounts) {
+      const standardAmount = tierAmounts.B || 50
+      const ratioA = tierAmounts.A / standardAmount
+      const ratioB = tierAmounts.B / standardAmount
+      const ratioC = tierAmounts.C / standardAmount
       return (
-        tierBreakdown.A * tierAmounts.A +
-        tierBreakdown.B * tierAmounts.B +
-        tierBreakdown.C * tierAmounts.C
+        tierBreakdown.A * (periodBaseAmount * ratioA) +
+        tierBreakdown.B * (periodBaseAmount * ratioB) +
+        tierBreakdown.C * (periodBaseAmount * ratioC)
       )
     }
     return studentCount * periodBaseAmount
