@@ -6,7 +6,7 @@ import Topbar from '@/components/layout/Topbar'
 import SlipUploader from '@/components/payments/SlipUploader'
 import EmptyState from '@/components/shared/EmptyState'
 import UploadPageLoading from './loading'
-import { CheckCircle2, Clock, Lock, Calendar, ChevronRight, QrCode, Upload } from 'lucide-react'
+import { CheckCircle2, Clock, Lock, Calendar, ChevronRight, QrCode, Upload, AlertCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { calculateLateFine, formatFineDescription } from '@/lib/fine'
 
@@ -147,7 +147,12 @@ export default function UploadPage() {
 
   const selectedCycle = unpaidCycles.find(c => c.id === selectedPeriodId)
   const selectedWindowStatus = selectedCycle ? getWindowStatus(selectedCycle) : null
-  const isWindowLocked = selectedWindowStatus === 'upcoming' || selectedWindowStatus === 'closed'
+  const selectedIsUnpaidOrRejected = selectedCycle?.status === 'unpaid' || selectedCycle?.status === 'rejected'
+  // ล็อก Step 2 เฉพาะ: งวดยังไม่ถึงเวลาเปิด (upcoming)
+  // หรือ: งวดปิดไปแล้วและไม่ใช่งวดค้างชำระ
+  // งวดค้างชำระที่ปิดไปแล้ว → ปลดล็อก ให้ส่งสลิปย้อนหลังได้
+  const isWindowLocked = selectedWindowStatus === 'upcoming' ||
+    (selectedWindowStatus === 'closed' && !selectedIsUnpaidOrRejected)
 
   // ยอดรวมกรณีชำระทบงวด: รวมทุกงวดที่ค้างชำระ
   const accumulatedPeriodIds = unpaidCycles.map(c => c.id)
@@ -211,7 +216,12 @@ export default function UploadPage() {
                 <div className="divide-y divide-border">
                   {unpaidCycles.map((cycle, idx) => {
                     const winStatus = getWindowStatus(cycle)
-                    const locked = winStatus === 'upcoming' || winStatus === 'closed'
+                    const isUnpaidOrRejected = cycle.status === 'unpaid' || cycle.status === 'rejected'
+                    // ล็อกเฉพาะ: ยังไม่ถึงเวลาเปิด (upcoming)
+                    // หรือ: ปิดไปแล้ว แต่เป็นงวดที่จ่ายไปแล้วปกติ (ไม่ใช่งวดค้าง)
+                    // งวดค้างที่ปิดไปแล้ว → ปลดล็อก เพื่อให้ชำระย้อนหลังได้
+                    const locked = winStatus === 'upcoming' || (winStatus === 'closed' && !isUnpaidOrRejected)
+                    const isClosedUnpaid = winStatus === 'closed' && isUnpaidOrRejected
                     const isRejected = cycle.status === 'rejected'
                     return (
                       <button
@@ -224,19 +234,25 @@ export default function UploadPage() {
                             ? 'opacity-50 cursor-not-allowed'
                             : isRejected
                               ? 'hover:bg-red-50/50'
-                              : 'hover:bg-background-muted cursor-pointer'
+                              : isClosedUnpaid
+                                ? 'hover:bg-orange-50/50 cursor-pointer'
+                                : 'hover:bg-background-muted cursor-pointer'
                         }`}
                       >
                         {/* Status icon */}
                         <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
                           locked ? 'bg-background-muted' :
-                          isRejected ? 'bg-red-50' : 'bg-brand/5'
+                          isRejected ? 'bg-red-50' :
+                          isClosedUnpaid ? 'bg-orange-50' :
+                          'bg-brand/5'
                         }`}>
                           {locked
                             ? <Lock className="w-4 h-4 text-text-disabled" />
                             : isRejected
                               ? <Clock className="w-4 h-4 text-red-500" />
-                              : <ChevronRight className="w-4 h-4 text-brand" />}
+                              : isClosedUnpaid
+                                ? <ChevronRight className="w-4 h-4 text-orange-500" />
+                                : <ChevronRight className="w-4 h-4 text-brand" />}
                         </div>
 
                         {/* Info */}
@@ -245,6 +261,9 @@ export default function UploadPage() {
                             <span className="text-[14px] font-bold text-text-primary">{cycle.label}</span>
                             {isRejected && (
                               <span className="text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider">ถูกปฏิเสธ</span>
+                            )}
+                            {isClosedUnpaid && !isRejected && (
+                              <span className="text-[9px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider">ชำระย้อนหลัง</span>
                             )}
                           </div>
                           <div className="flex items-center gap-3 flex-wrap">
@@ -259,10 +278,10 @@ export default function UploadPage() {
                                 เปิด {formatThaiDate(cycle.open_at)}
                               </span>
                             )}
-                            {winStatus === 'closed' && (
-                              <span className="text-[10px] bg-red-50 text-red-600 px-2 py-0.5 rounded-full border border-red-100 font-bold flex items-center gap-1">
-                                <Lock className="w-2.5 h-2.5" />
-                                ปิดรับสลิปแล้ว
+                            {isClosedUnpaid && (
+                              <span className="text-[10px] bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full border border-orange-100 font-bold flex items-center gap-1">
+                                <AlertCircle className="w-2.5 h-2.5" />
+                                ค้างชำระ — สามารถจ่ายย้อนหลังได้
                               </span>
                             )}
                             {winStatus === 'open' && (cycle.open_at || cycle.close_at) && (

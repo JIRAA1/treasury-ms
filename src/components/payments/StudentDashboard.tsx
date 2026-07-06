@@ -81,13 +81,34 @@ export default function StudentDashboard({
     }
   })
 
-  const currentPeriodStatus = periodStatuses.find((p) => p.status !== 'paid') ?? periodStatuses[periodStatuses.length - 1]
+  // เลือกงวดที่จะแสดงบน Hero Card:
+  // 1. งวดที่ยังไม่จ่ายและยังเปิดรับสลิปอยู่ (open / noWindow)
+  // 2. fallback: งวดที่ยังไม่จ่าย (แม้ว่าช่วงรับสลิปจะปิดแล้ว — เพื่อแจ้งยอดค้าง)
+  // 3. fallback สุดท้าย: งวดล่าสุด (จ่ายครบแล้ว)
+  const currentPeriodStatus =
+    periodStatuses.find((p) => {
+      const ws = getWindowStatus(p.period)
+      return p.status !== 'paid' && ws === 'open'
+    }) ??
+    periodStatuses.find((p) => p.status !== 'paid') ??
+    periodStatuses[periodStatuses.length - 1]
+
   const currentPeriod = currentPeriodStatus?.period
   const currentDeadline = currentPeriod?.deadline ? new Date(currentPeriod.deadline) : null
   const isOverdue = currentDeadline ? new Date() > currentDeadline : false
-  
+
   const windowStatus = currentPeriod ? getWindowStatus(currentPeriod) : 'open'
   const isLocked = windowStatus === 'upcoming' || windowStatus === 'closed'
+
+  // จำนวนงวดที่ค้างชำระทั้งหมด (รวมงวดที่ปิดรับสลิปแล้ว) — ใช้แสดงปุ่ม "จ่ายสะสม"
+  const totalUnpaidCount = periodStatuses.filter(
+    (p) => p.status !== 'paid' && p.status !== 'pending'
+  ).length
+  // ถ้ามีงวดค้างที่ยังเปิดอยู่ ให้ยังแสดงปุ่มส่งสลิปได้
+  const hasPayableUnpaid = periodStatuses.some((p) => {
+    const ws = getWindowStatus(p.period)
+    return (p.status === 'unpaid' || p.status === 'rejected') && ws === 'open'
+  })
 
   const formatThaiDate = (date: Date) => {
     return date.toLocaleDateString('th-TH', {
@@ -111,7 +132,7 @@ export default function StudentDashboard({
         title={profile?.fullname ?? 'นักศึกษา'}
         subtitle="ภาพรวมระบบการเงินสาขา"
         actions={
-          currentPeriodStatus && currentPeriodStatus.status !== 'paid' && currentPeriodStatus.status !== 'pending' && !isLocked ? (
+          hasPayableUnpaid ? (
             <Link href="/student/upload" className="flex items-center gap-1.5 sm:gap-2 bg-brand text-white text-[12px] font-bold px-2.5 sm:px-4 py-2 rounded-xl hover:bg-brand-hover transition-all shadow-lg shadow-brand/10 active:scale-95">
               <Upload className="w-4 h-4" />
               <span className="hidden sm:inline">ส่งสลิป</span>
@@ -230,6 +251,7 @@ export default function StudentDashboard({
                     <div className="flex items-center gap-2 w-full md:w-auto">
                       {currentPeriodStatus.status !== 'paid' && currentPeriodStatus.status !== 'pending' && (
                         <>
+                          {/* ถ้า Hero Card งวดยังเปิดอยู่ แสดงปุ่มส่งสลิปปกติ */}
                           {!isLocked ? (
                             <>
                               <button
@@ -248,10 +270,21 @@ export default function StudentDashboard({
                               </Link>
                             </>
                           ) : (
-                            <div className="flex items-center gap-1.5 sm:gap-2 py-1.5 sm:py-2.5 px-3 sm:px-4 bg-white/5 border border-white/10 rounded-xl text-[10.5px] sm:text-[12px] font-bold text-white/50 w-full justify-center md:w-auto">
-                              <Lock className="w-4 h-4" />
-                              {windowStatus === 'upcoming' ? 'รอเปิดรับสลิป' : 'ปิดรับสลิปแล้ว'}
-                            </div>
+                            /* Hero Card งวดปิด — ตรวจว่ามีงวดอื่นที่ยังเปิดอยู่หรือไม่ */
+                            hasPayableUnpaid ? (
+                              <Link
+                                href="/student/upload"
+                                className="flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 sm:gap-2 bg-white text-brand text-[10.5px] sm:text-[12px] font-black px-3.5 sm:px-6 py-1.5 sm:py-2.5 rounded-xl hover:bg-white/90 transition-all active:scale-95 shadow-xl shadow-black/20"
+                              >
+                                <Upload className="w-4 h-4" />
+                                ส่งสลิปงวดอื่น
+                              </Link>
+                            ) : (
+                              <div className="flex items-center gap-1.5 sm:gap-2 py-1.5 sm:py-2.5 px-3 sm:px-4 bg-white/5 border border-white/10 rounded-xl text-[10.5px] sm:text-[12px] font-bold text-white/50 w-full justify-center md:w-auto">
+                                <Lock className="w-4 h-4" />
+                                {windowStatus === 'upcoming' ? 'รอเปิดรับสลิป' : 'ปิดรับสลิปทุกงวดแล้ว'}
+                              </div>
+                            )
                           )}
                         </>
                       )}
