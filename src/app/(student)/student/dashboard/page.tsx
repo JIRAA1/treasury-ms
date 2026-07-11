@@ -17,20 +17,28 @@ export default async function StudentDashboardPage() {
   try {
     const studentId = authUser.user_metadata?.student_id || 'UNKNOWN'
 
-    const { data: profile } = await adminClient
-      .from('users')
-      .select('*')
-      .or(`id.eq.${authUser.id},student_id.eq.${studentId}`)
-      .maybeSingle()
+    // Stage 1: fetch profile + active semester + settings in parallel
+    const [profileRes, semesterRes, settingsRes] = await Promise.all([
+      adminClient
+        .from('users')
+        .select('*')
+        .or(`id.eq.${authUser.id},student_id.eq.${studentId}`)
+        .maybeSingle(),
+      adminClient
+        .from('semesters')
+        .select('id')
+        .eq('is_active', true)
+        .maybeSingle(),
+      adminClient
+        .from('system_settings')
+        .select('*'),
+    ])
 
+    const profile = profileRes.data
     if (!profile) redirect('/bind')
 
-    // Find active semester
-    const { data: activeSemester } = await adminClient
-      .from('semesters')
-      .select('id')
-      .eq('is_active', true)
-      .maybeSingle()
+    const activeSemester = semesterRes.data
+    const settings = settingsRes.data || []
 
     let periods: any[] = []
     let periodIds: string[] = []
@@ -44,17 +52,16 @@ export default async function StudentDashboardPage() {
       periodIds = periods.map(p => p.id)
     }
 
+    // Stage 2: fetch payments + expenses + credits in parallel (depends on periodIds)
     const [
       paymentsRes,
       expensesRes,
-      settingsRes,
       creditsRes,
     ] = await Promise.all([
       periodIds.length > 0
         ? adminClient.from('payments').select('*').eq('user_id', profile.id).in('period_id', periodIds)
         : { data: [] },
       adminClient.from('expenses').select('*, creator:created_by(fullname)').not('approved_by', 'is', null).order('created_at', { ascending: false }).limit(3),
-      adminClient.from('system_settings').select('*'),
       // pending credits for this student
       periodIds.length > 0
         ? adminClient.from('payment_credits').select('*, period_info:period_id(label)').eq('user_id', profile.id).eq('status', 'pending').in('period_id', periodIds).order('created_at', { ascending: false })
@@ -63,7 +70,6 @@ export default async function StudentDashboardPage() {
 
     const payments = paymentsRes.data || []
     const expenses = expensesRes.data || []
-    const settings = settingsRes.data || []
     const credits = creditsRes.data || []
 
     const promptPayConfig = {

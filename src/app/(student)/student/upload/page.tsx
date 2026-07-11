@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Topbar from '@/components/layout/Topbar'
 import SlipUploader from '@/components/payments/SlipUploader'
@@ -51,7 +51,8 @@ export default function UploadPage() {
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [payAccumulated, setPayAccumulated] = useState(false)
-  const supabase = createClient()
+  // useMemo เพื่อ stable reference ไม่สร้าง client ใหม่ทุก render (performance fix)
+  const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
     async function fetchData() {
@@ -139,10 +140,15 @@ export default function UploadPage() {
         })
 
         setUnpaidCycles(unpaid)
-        if (unpaid.length === 1) {
-          setSelectedPeriodId(unpaid[0].id)
-        } else if (unpaid.length > 1) {
-          setSelectedPeriodId(unpaid[0].id)
+        // แยกเฉพาะงวดที่จ่ายได้จริง (ไม่รวม upcoming ที่ยังไม่เปิด)
+        const payable = unpaid.filter(c => {
+          const ws = getWindowStatus(c)
+          return ws !== 'upcoming'
+        })
+        if (payable.length === 1) {
+          setSelectedPeriodId(payable[0].id)
+        } else if (payable.length > 1) {
+          setSelectedPeriodId(payable[0].id)
           setPayAccumulated(true)
         }
       } catch (error) {
@@ -164,9 +170,13 @@ export default function UploadPage() {
   const isWindowLocked = selectedWindowStatus === 'upcoming' ||
     (selectedWindowStatus === 'closed' && !selectedIsUnpaidOrRejected)
 
-  // ยอดรวมกรณีชำระทบงวด: รวมทุกงวดที่ค้างชำระ
-  const accumulatedPeriodIds = unpaidCycles.map(c => c.id)
-  const totalAccumulatedAmount = unpaidCycles.reduce((sum, c) => sum + c.amount, 0)
+  // ยอดรวมกรณีชำระทบงวด: รวมเฉพาะงวดที่เปิดรับชำระแล้ว (ไม่รวม upcoming)
+  const payableCycles = unpaidCycles.filter(c => {
+    const ws = getWindowStatus(c)
+    return ws !== 'upcoming'
+  })
+  const accumulatedPeriodIds = payableCycles.map(c => c.id)
+  const totalAccumulatedAmount = payableCycles.reduce((sum, c) => sum + c.amount, 0)
 
   const step = selectedPeriodId === null ? 1 : 2
 
@@ -328,18 +338,18 @@ export default function UploadPage() {
                     </div>
                     <div className="text-[16px] font-black text-text-primary">
                       {payAccumulated
-                        ? unpaidCycles.map(c => c.label).join(' + ')
+                        ? payableCycles.map(c => c.label).join(' + ')
                         : selectedCycle.label
                       }
                     </div>
                     <div className="text-[13px] font-bold text-brand mt-0.5">
                       ยอดเงินโอนที่กำหนด: ฿{(payAccumulated ? totalAccumulatedAmount : selectedCycle.amount).toLocaleString()}
-                      {payAccumulated && unpaidCycles.length > 1 && (
-                        <span className="ml-2 text-[11px] font-semibold text-text-muted">({unpaidCycles.length} งวดรวมกัน)</span>
+                      {payAccumulated && payableCycles.length > 1 && (
+                        <span className="ml-2 text-[11px] font-semibold text-text-muted">({payableCycles.length} งวดรวมกัน)</span>
                       )}
                     </div>
                   </div>
-                  {unpaidCycles.length > 1 && !payAccumulated && (
+                  {payableCycles.length > 1 && !payAccumulated && (
                     <button
                       onClick={() => setSelectedPeriodId(null)}
                       className="text-[12px] text-brand hover:text-brand-hover font-bold hover:underline transition-colors px-3 py-1.5 rounded-lg bg-brand/5 hover:bg-brand/10"
@@ -350,7 +360,7 @@ export default function UploadPage() {
                 </div>
 
                 {/* Accumulated Payment Banner — แสดงเฉพาะกรณีมีงวดค้างชำระมากกว่า 1 งวด */}
-                {unpaidCycles.length > 1 && (
+                {payableCycles.length > 1 && (
                   <div className={`mb-5 rounded-xl border p-3.5 transition-all duration-200 ${
                     payAccumulated
                       ? 'border-amber-300 bg-amber-50 dark:bg-amber-950/20'
@@ -366,17 +376,17 @@ export default function UploadPage() {
                         <div className="text-[12.5px] font-bold text-text-primary mb-0.5">
                           {payAccumulated
                             ? 'โหมดชำระรวมยอดค้างชำระทั้งหมด'
-                            : `คุณมียอดค้างชำระ ${unpaidCycles.length} งวด`
+                            : `คุณมียอดค้างชำระ ${payableCycles.length} งวด`
                           }
                         </div>
                         <div className="text-[11px] text-text-muted">
                           {payAccumulated
-                            ? `โอน ฿${totalAccumulatedAmount.toLocaleString()} ในสลิปเดียวเพื่อเคลียร์ยอดค้างทั้งหมด (${unpaidCycles.map(c => c.label).join(', ')})`
-                            : `ทำการโอนเงิน ฿${totalAccumulatedAmount.toLocaleString()} เพียงครั้งเดียวเพื่อเคลียร์ยอดค้างทั้ง ${unpaidCycles.length} งวดพร้อมกัน`
+                            ? `โอน ฿${totalAccumulatedAmount.toLocaleString()} ในสลิปเดียวเพื่อเคลียร์ยอดค้างทั้งหมด (${payableCycles.map(c => c.label).join(', ')})`
+                            : `ทำการโอนเงิน ฿${totalAccumulatedAmount.toLocaleString()} เพียงครั้งเดียวเพื่อเคลียร์ยอดค้างทั้ง ${payableCycles.length} งวดพร้อมกัน`
                           }
                         </div>
                       </div>
-                      {unpaidCycles.length > 1 ? (
+                      {payableCycles.length > 1 ? (
                         <div className="flex-shrink-0 px-2.5 py-1.5 bg-red-500 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm select-none">
                           จำเป็นต้องจ่ายรวม
                         </div>
@@ -396,7 +406,7 @@ export default function UploadPage() {
                     </div>
                     {payAccumulated && (
                       <div className="mt-3 pt-3 border-t border-amber-200 dark:border-amber-800/50 space-y-1.5">
-                        {unpaidCycles.map(c => (
+                        {payableCycles.map(c => (
                           <div key={c.id} className="flex items-center justify-between text-[11px]">
                             <span className="text-text-muted">{c.label}</span>
                             <span className="font-semibold text-text-primary">฿{c.amount.toLocaleString()}</span>
@@ -438,7 +448,7 @@ export default function UploadPage() {
                           ฿{(payAccumulated ? totalAccumulatedAmount : selectedCycle.amount).toLocaleString()}
                         </div>
                         <div className="text-[11px] text-white/80 mt-1 truncate font-medium">
-                          {payAccumulated ? unpaidCycles.map(c => c.label).join(' + ') : selectedCycle.label}
+                          {payAccumulated ? payableCycles.map(c => c.label).join(' + ') : selectedCycle.label}
                         </div>
                         <div className="mt-3 flex items-center gap-1.5 bg-white/20 backdrop-blur-md rounded-lg px-2.5 py-1.5 w-fit border border-white/10 shadow-sm">
                           <Upload className="w-3 h-3 text-white shrink-0" />
@@ -477,7 +487,7 @@ export default function UploadPage() {
                 ) : (
                   <SlipUploader
                     periodId={selectedPeriodId!}
-                    unpaidCycles={unpaidCycles}
+                    unpaidCycles={payableCycles}
                     onPeriodChange={payAccumulated ? undefined : setSelectedPeriodId}
                     payAccumulated={payAccumulated}
                     accumulatedPeriodIds={payAccumulated ? accumulatedPeriodIds : []}

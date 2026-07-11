@@ -282,11 +282,23 @@ export async function POST(request: NextRequest) {
     // ดึงข้อมูลงวดที่ค้างชำระทั้งหมดมาคำนวณยอดรวม
     const { data: accPeriods } = await adminClient
       .from('periods')
-      .select('id, label, amount, deadline, late_fine_amount, fine_type, fine_rate, fine_cap, fine_grace_days')
+      .select('id, label, amount, deadline, open_at, late_fine_amount, fine_type, fine_rate, fine_cap, fine_grace_days')
       .in('id', accumulatedPeriodIds)
 
     if (accPeriods && accPeriods.length > 0) {
-      for (const ap of accPeriods) {
+      // Server-side validation: กรองงวดที่ยังไม่เปิดรับชำระ (upcoming) ออก
+      const now = new Date()
+      const validAccPeriods = accPeriods.filter(ap => {
+        if (!ap.open_at) return true // ไม่มี open_at = เปิดรับเสมอ
+        return new Date(ap.open_at) <= now
+      })
+
+      if (validAccPeriods.length < accPeriods.length) {
+        const blockedPeriods = accPeriods.filter(ap => ap.open_at && new Date(ap.open_at) > now)
+        console.warn(`[Upload] Blocked ${blockedPeriods.length} upcoming period(s) from accumulated payment: ${blockedPeriods.map(p => p.label).join(', ')}`)
+      }
+
+      for (const ap of validAccPeriods) {
         if (ap.id === period_id) continue // งวดหลักคิดไปแล้วใน expectedStudentAmount
         const { data: accCredit } = await adminClient
           .from('payment_credits')

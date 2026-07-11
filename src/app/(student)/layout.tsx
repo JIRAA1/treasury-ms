@@ -36,7 +36,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
     }
   }
 
-  // Check for unpaid cycles — use active semester periods
+  // Parallel: fetch active semester + check unpaid cycles in one go
   const { data: activeSemester } = await admin
     .from('semesters')
     .select('id')
@@ -45,21 +45,25 @@ export default async function StudentLayout({ children }: { children: React.Reac
 
   let hasUnpaidCycle = false
   if (activeSemester) {
-    const { data: periods } = await admin
-      .from('periods')
-      .select('id')
-      .eq('semester_id', activeSemester.id)
-
-    if (periods && periods.length > 0) {
-      const periodIds = periods.map((p) => p.id)
-      const { data: payments } = await admin
+    // Parallel: fetch periods + payments at the same time
+    const [periodsRes, paymentsRes] = await Promise.all([
+      admin
+        .from('periods')
+        .select('id')
+        .eq('semester_id', activeSemester.id),
+      admin
         .from('payments')
         .select('period_id, status')
         .eq('user_id', profile.id)
-        .in('period_id', periodIds)
+    ])
 
+    const periods = periodsRes.data || []
+    const payments = paymentsRes.data || []
+
+    if (periods.length > 0) {
+      const periodIds = new Set(periods.map((p) => p.id))
       hasUnpaidCycle = periods.some(
-        (p) => !payments?.find((pay) => pay.period_id === p.id && (pay.status === 'approved' || pay.status === 'pending'))
+        (p) => !payments.find((pay) => pay.period_id === p.id && periodIds.has(pay.period_id) && (pay.status === 'approved' || pay.status === 'pending'))
       )
     }
   }
@@ -70,3 +74,4 @@ export default async function StudentLayout({ children }: { children: React.Reac
     </AppShell>
   )
 }
+

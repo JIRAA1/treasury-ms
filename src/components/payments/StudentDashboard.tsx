@@ -107,10 +107,13 @@ export default function StudentDashboard({
   const windowStatus = currentPeriod ? getWindowStatus(currentPeriod) : 'open'
   const isLocked = windowStatus === 'upcoming' || windowStatus === 'closed'
 
-  // ดึงรายการงวดทั้งหมดที่ยังไม่ได้จ่าย (สถานะเป็น unpaid หรือ rejected) เพื่อเช็คการชำระรวมสะสม
-  const unpaidPeriods = periodStatuses.filter(
-    (p) => p.status === 'unpaid' || p.status === 'rejected'
-  )
+  // ดึงรายการงวดทั้งหมดที่ยังไม่ได้จ่าย (สถานะเป็น unpaid หรือ rejected)
+  // ** กรอง upcoming ออก: ไม่รวมงวดที่ยังไม่เปิดรับชำระเข้ายอดค้าง **
+  const unpaidPeriods = periodStatuses.filter((p) => {
+    if (p.status !== 'unpaid' && p.status !== 'rejected') return false
+    const ws = getWindowStatus(p.period)
+    return ws !== 'upcoming'
+  })
   const hasAccumulatedUnpaid = unpaidPeriods.length > 1
   const totalUnpaidAmount = unpaidPeriods.reduce((sum, p) => sum + p.amount, 0)
 
@@ -119,10 +122,12 @@ export default function StudentDashboard({
     ? `ยอดรวมค้างชำระทั้งหมด (${unpaidPeriods.map(p => p.period.label).join(' + ')})`
     : (currentPeriod?.label || 'งวดปัจจุบัน')
 
-  // จำนวนงวดที่ค้างชำระทั้งหมด (รวมงวดที่ปิดรับสลิปแล้ว) — ใช้แสดงปุ่ม "จ่ายสะสม"
-  const totalUnpaidCount = periodStatuses.filter(
-    (p) => p.status !== 'paid' && p.status !== 'pending'
-  ).length
+  // จำนวนงวดที่ค้างชำระทั้งหมด (ไม่รวม upcoming) — ใช้แสดงปุ่ม "จ่ายสะสม"
+  const totalUnpaidCount = periodStatuses.filter((p) => {
+    if (p.status === 'paid' || p.status === 'pending') return false
+    const ws = getWindowStatus(p.period)
+    return ws !== 'upcoming'
+  }).length
   // ถ้ามีงวดค้างที่ยังเปิดอยู่ ให้ยังแสดงปุ่มส่งสลิปได้
   const hasPayableUnpaid = periodStatuses.some((p) => {
     const ws = getWindowStatus(p.period)
