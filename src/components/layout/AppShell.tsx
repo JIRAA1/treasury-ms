@@ -8,6 +8,7 @@ import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import ErrorBoundary from '@/components/shared/ErrorBoundary'
 import { usePendingCount } from '@/hooks/usePendingCount'
+import { useStudentPaymentStatus } from '@/hooks/useStudentPaymentStatus'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -18,7 +19,7 @@ interface AppShellProps {
   hasUnpaidWeek?: boolean
 }
 
-export default function AppShell({ children, role, user = null, pendingCount: initialPending = 0, pendingCredits: initialCredits = 0, hasUnpaidWeek = false }: AppShellProps) {
+export default function AppShell({ children, role, user = null, pendingCount: initialPending = 0, pendingCredits: initialCredits = 0, hasUnpaidWeek: initialUnpaid = false }: AppShellProps) {
   const { isSidebarOpen, closeSidebar } = useUIStore()
   const pathname = usePathname()
   const isAdmin = role === 'admin' || role === 'treasurer'
@@ -27,6 +28,12 @@ export default function AppShell({ children, role, user = null, pendingCount: in
   const { pendingCount, pendingCredits } = usePendingCount(
     isAdmin ? initialPending : 0,
     isAdmin ? initialCredits : 0,
+  )
+
+  // Real-time student unpaid status & payments listener (active only for student role)
+  const { hasUnpaidWeek } = useStudentPaymentStatus(
+    !isAdmin ? user?.id : null,
+    initialUnpaid
   )
 
   // Close sidebar on navigation

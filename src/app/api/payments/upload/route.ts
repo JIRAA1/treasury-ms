@@ -91,10 +91,16 @@ export async function POST(request: NextRequest) {
     }
 
     if (closeAt && now > closeAt) {
-      return NextResponse.json({
-        error: `หมดเวลารับสลิปของ${cycleTitle} แล้ว (ปิดรับเมื่อวันที่ ${closeAt.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })})`,
-        code: 'WINDOW_CLOSED'
-      }, { status: 403 })
+      // ตรวจสอบก่อน: ถ้าเป็นงวดค้างชำระ (ยังไม่จ่าย/ถูก reject) → อนุญาตให้จ่ายย้อนหลังได้
+      const isUnpaidPeriod = !existing || existing.status === 'rejected'
+      if (!isUnpaidPeriod) {
+        return NextResponse.json({
+          error: `หมดเวลารับสลิปของ${cycleTitle} แล้ว (ปิดรับเมื่อวันที่ ${closeAt.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })})`,
+          code: 'WINDOW_CLOSED'
+        }, { status: 403 })
+      }
+      // งวดค้างชำระ → ปลดล็อก close_at ให้จ่ายย้อนหลังได้
+      console.log(`[Upload] Allowing late payment for unpaid period: ${cycleTitle}`)
     }
   }
 
@@ -300,13 +306,19 @@ export async function POST(request: NextRequest) {
 
       for (const ap of validAccPeriods) {
         if (ap.id === period_id) continue // งวดหลักคิดไปแล้วใน expectedStudentAmount
-        const { data: accCredit } = await adminClient
-          .from('payment_credits')
-          .select('id')
-          .eq('user_id', profile.id)
-          .eq('period_id', ap.id)
-          .eq('status', 'pending')
-          .maybeSingle()
+      }
+
+      // Batch fetch: ดึง pending credits ของ accumulated periods ทั้งหมดล่วงหน้า (1 query แทน N queries)
+      const accPeriodIds = validAccPeriods.filter(ap => ap.id !== period_id).map(ap => ap.id)
+      const { data: allAccCredits } = accPeriodIds.length > 0
+        ? await adminClient.from('payment_credits').select('id, period_id')
+            .eq('user_id', profile.id).in('period_id', accPeriodIds).eq('status', 'pending')
+        : { data: [] }
+      const accCreditsMap = new Map((allAccCredits || []).map(c => [c.period_id, c]))
+
+      for (const ap of validAccPeriods) {
+        if (ap.id === period_id) continue
+        const accCredit = accCreditsMap.get(ap.id) || null
 
         const accFine = calculateLateFine(
           {
@@ -495,17 +507,15 @@ export async function POST(request: NextRequest) {
         note: `accumulated_with:${period_id}`,
       }
 
-      // ตรวจสอบว่างวดค้างนั้นเคยชำระและถูก rejected หรือยังไม่มีรายการ
-      const { data: existingCarry } = await adminClient
+      // ใช้ upsert on conflict (user_id, period_id) เพื่อป้องกัน race condition
+      const { data: carryPayment, error: carryError } = await adminClient
         .from('payments')
-        .select('id, status')
-        .eq('user_id', profile.id)
-        .eq('period_id', acc.id)
-        .maybeSingle()
-
-      const { data: carryPayment, error: carryError } = existingCarry
-        ? await adminClient.from('payments').update(carryPaymentData).eq('id', existingCarry.id).select().single()
-        : await adminClient.from('payments').insert(carryPaymentData).select().single()
+        .upsert(
+          { ...carryPaymentData, user_id: profile.id, period_id: acc.id },
+          { onConflict: 'user_id,period_id' }
+        )
+        .select()
+        .single()
 
       if (carryError) {
         console.error(`[Upload Accumulated] Failed to save carry payment for period ${acc.id}:`, carryError)

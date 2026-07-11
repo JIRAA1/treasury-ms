@@ -11,7 +11,7 @@ import EmptyState from '@/components/shared/EmptyState'
 import QrModal from '@/components/payments/QrModal'
 import { formatCurrency, formatDate, getTierConfig } from '@/lib/utils'
 import { calculateLateFine, formatFineDescription } from '@/lib/fine'
-import { FileText, Upload, ArrowRight, AlertCircle, Clock, QrCode, Lock, Calendar, CreditCard } from 'lucide-react'
+import { FileText, Upload, ArrowRight, AlertCircle, Clock, QrCode, Lock, Calendar, CreditCard, CheckCircle2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { PeriodStatus, PaymentCredit, Period } from '@/types'
@@ -117,10 +117,13 @@ export default function StudentDashboard({
   const hasAccumulatedUnpaid = unpaidPeriods.length > 1
   const totalUnpaidAmount = unpaidPeriods.reduce((sum, p) => sum + p.amount, 0)
 
-  const displayAmount = hasAccumulatedUnpaid ? totalUnpaidAmount : (currentPeriodStatus?.amount ?? 0)
-  const displayLabel = hasAccumulatedUnpaid
-    ? `ยอดรวมค้างชำระทั้งหมด (${unpaidPeriods.map(p => p.period.label).join(' + ')})`
-    : (currentPeriod?.label || 'งวดปัจจุบัน')
+  const allPayablePaid = unpaidPeriods.length === 0
+  const displayAmount = allPayablePaid ? 0 : (hasAccumulatedUnpaid ? totalUnpaidAmount : (currentPeriodStatus?.amount ?? 0))
+  const displayLabel = allPayablePaid
+    ? (currentPeriodStatus?.status === 'paid' ? 'ชำระเงินครบทุกงวดแล้ว 🎉' : 'รอเปิดงวดถัดไป')
+    : (hasAccumulatedUnpaid
+        ? `ยอดรวมค้างชำระทั้งหมด (${unpaidPeriods.map(p => p.period.label).join(' + ')})`
+        : (currentPeriod?.label || 'งวดปัจจุบัน'))
 
   // จำนวนงวดที่ค้างชำระทั้งหมด (ไม่รวม upcoming) — ใช้แสดงปุ่ม "จ่ายสะสม"
   const totalUnpaidCount = periodStatuses.filter((p) => {
@@ -183,9 +186,16 @@ export default function StudentDashboard({
               <div className="relative z-10 p-3.5 sm:p-6 md:p-10">
                 {/* Top badges row */}
                 <div className="flex items-center gap-2 flex-wrap mb-3.5 sm:mb-5">
-                  <span className="text-[9px] font-black uppercase tracking-[0.25em] text-white/40 bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg">
-                    งวดปัจจุบัน
-                  </span>
+                  {allPayablePaid ? (
+                    <span className="flex items-center gap-1 text-[9px] bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-400/20 font-black uppercase">
+                      <CheckCircle2 className="w-2.5 h-2.5 text-emerald-300" />
+                      ชำระครบแล้ว
+                    </span>
+                  ) : (
+                    <span className="text-[9px] font-black uppercase tracking-[0.25em] text-white/40 bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg">
+                      งวดปัจจุบัน
+                    </span>
+                  )}
                   {(() => {
                     const tierCfg = getTierConfig(profile?.tier ?? 'B')
                     const amountVal = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
@@ -195,19 +205,19 @@ export default function StudentDashboard({
                       </span>
                     )
                   })()}
-                  {isOverdue && currentPeriodStatus.status !== 'paid' && (
+                  {isOverdue && currentPeriodStatus.status !== 'paid' && !allPayablePaid && (
                     <span className="flex items-center gap-1 text-[9px] bg-red-500/20 text-red-300 px-2.5 py-1 rounded-lg border border-red-400/20 font-black uppercase">
                       <AlertCircle className="w-2.5 h-2.5" />
                       เกินกำหนด
                     </span>
                   )}
-                  {windowStatus === 'upcoming' && (
+                  {windowStatus === 'upcoming' && !allPayablePaid && (
                     <span className="flex items-center gap-1 text-[9px] bg-amber-500/20 text-amber-300 px-2.5 py-1 rounded-lg border border-amber-400/20 font-black uppercase">
                       <Calendar className="w-2.5 h-2.5" />
                       รอเปิด
                     </span>
                   )}
-                  {windowStatus === 'closed' && (
+                  {windowStatus === 'closed' && !allPayablePaid && (
                     <span className="flex items-center gap-1 text-[9px] bg-red-500/20 text-red-300 px-2.5 py-1 rounded-lg border border-red-400/20 font-black uppercase">
                       <Lock className="w-2.5 h-2.5" />
                       ปิดรับสลิป
@@ -237,6 +247,7 @@ export default function StudentDashboard({
                         {displayAmount.toLocaleString()}
                       </div>
                       {(() => {
+                        if (allPayablePaid) return null
                         if (hasAccumulatedUnpaid) {
                           const totalBaseAmount = unpaidPeriods.reduce((sum, p) => {
                             const tierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
@@ -282,19 +293,30 @@ export default function StudentDashboard({
                     {/* Status pill */}
                     <StatusPill 
                       status={
-                        currentPeriodStatus.status === 'paid' ? 'paid'
-                        : currentPeriodStatus.status === 'pending' ? 'pending'
-                        : currentPeriodStatus.status === 'rejected' ? 'rejected'
-                        : 'unpaid'
+                        allPayablePaid ? 'paid'
+                        : (currentPeriodStatus.status === 'paid' ? 'paid'
+                           : currentPeriodStatus.status === 'pending' ? 'pending'
+                           : currentPeriodStatus.status === 'rejected' ? 'rejected'
+                           : 'unpaid')
                       } 
-                      note={currentPeriodStatus.payment?.note}
+                      note={allPayablePaid ? undefined : currentPeriodStatus.payment?.note}
                       size="lg"
                       className="md:text-[13px] md:px-3.5 md:py-1.5 text-[10.5px] px-2.5 py-0.5"
                     />
 
                     {/* CTA buttons */}
                     <div className="flex items-center gap-2 w-full md:w-auto">
-                      {currentPeriodStatus.status !== 'paid' && currentPeriodStatus.status !== 'pending' && (
+                      {currentPeriodStatus.status === 'pending' ? (
+                        <div className="flex items-center justify-center gap-1.5 sm:gap-2 py-1.5 sm:py-2.5 px-4 sm:px-5 bg-white/10 border border-white/15 rounded-xl text-[10.5px] sm:text-[12px] font-bold text-white/70 backdrop-blur-sm w-full md:w-auto">
+                          <Clock className="w-4 h-4" />
+                          รออนุมัติสลิป
+                        </div>
+                      ) : allPayablePaid ? (
+                        <div className="flex items-center gap-1.5 sm:gap-2 py-1.5 sm:py-2.5 px-3 sm:px-4 bg-white/5 border border-white/10 rounded-xl text-[10.5px] sm:text-[12px] font-bold text-white/50 w-full justify-center md:w-auto">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          ไม่มีรายการค้างชำระ
+                        </div>
+                      ) : (
                         <>
                           {/* ถ้า Hero Card งวดยังเปิดอยู่ แสดงปุ่มส่งสลิปปกติ */}
                           {!isLocked ? (
@@ -332,12 +354,6 @@ export default function StudentDashboard({
                             )
                           )}
                         </>
-                      )}
-                      {currentPeriodStatus.status === 'pending' && (
-                        <div className="flex items-center justify-center gap-1.5 sm:gap-2 py-1.5 sm:py-2.5 px-4 sm:px-5 bg-white/10 border border-white/15 rounded-xl text-[10.5px] sm:text-[12px] font-bold text-white/70 backdrop-blur-sm w-full md:w-auto">
-                          <Clock className="w-4 h-4" />
-                          รออนุมัติสลิป
-                        </div>
                       )}
                     </div>
                   </div>

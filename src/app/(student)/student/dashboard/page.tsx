@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import StudentDashboard from '@/components/payments/StudentDashboard'
+import { getProfile, getActiveSemester, getSettings } from '@/lib/data'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -17,28 +18,14 @@ export default async function StudentDashboardPage() {
   try {
     const studentId = authUser.user_metadata?.student_id || 'UNKNOWN'
 
-    // Stage 1: fetch profile + active semester + settings in parallel
-    const [profileRes, semesterRes, settingsRes] = await Promise.all([
-      adminClient
-        .from('users')
-        .select('*')
-        .or(`id.eq.${authUser.id},student_id.eq.${studentId}`)
-        .maybeSingle(),
-      adminClient
-        .from('semesters')
-        .select('id')
-        .eq('is_active', true)
-        .maybeSingle(),
-      adminClient
-        .from('system_settings')
-        .select('*'),
+    // Stage 1: fetch profile + active semester + settings in parallel (using request-scoped cache!)
+    const [profile, activeSemester, settings] = await Promise.all([
+      getProfile(authUser.id, studentId),
+      getActiveSemester(),
+      getSettings(),
     ])
 
-    const profile = profileRes.data
     if (!profile) redirect('/bind')
-
-    const activeSemester = semesterRes.data
-    const settings = settingsRes.data || []
 
     let periods: any[] = []
     let periodIds: string[] = []
@@ -59,7 +46,7 @@ export default async function StudentDashboardPage() {
       creditsRes,
     ] = await Promise.all([
       periodIds.length > 0
-        ? adminClient.from('payments').select('*').eq('user_id', profile.id).in('period_id', periodIds)
+        ? adminClient.from('payments').select('id, user_id, period_id, amount, status, note, created_at').eq('user_id', profile.id).in('period_id', periodIds)
         : { data: [] },
       adminClient.from('expenses').select('*, creator:created_by(fullname)').not('approved_by', 'is', null).order('created_at', { ascending: false }).limit(3),
       // pending credits for this student
