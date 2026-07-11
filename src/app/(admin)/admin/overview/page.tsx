@@ -288,47 +288,10 @@ export default async function AdminOverviewPage() {
         </div>
 
         {/* Middle Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-          {/* Pending Payments Table */}
-          <div className="lg:col-span-3 bg-white border border-border rounded-2xl overflow-hidden card-shadow">
-            <div className="px-5 py-4 border-b border-border/70 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="text-[12.5px] font-black text-text-primary">รายการรอตรวจสอบ</span>
-                {(pendingCount ?? 0) > 0 && (
-                  <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[9px] font-black px-2 py-0.5 rounded-full">{pendingCount}</span>
-                )}
-              </div>
-              <Link href="/admin/payments" className="text-[10.5px] text-text-muted hover:text-brand font-semibold transition-colors">ดูทั้งหมด →</Link>
-            </div>
-            {pendingPayments && pendingPayments.length > 0 ? (
-              <div className="divide-y divide-border/50">
-                {pendingPayments.map((p) => {
-                  const user = p.user as { fullname: string; student_id: string } | null
-                  return (
-                    <div key={p.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-background-muted/50 transition-colors">
-                      <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-[10px] font-black"
-                        style={{ background: 'linear-gradient(135deg, #3d52d5, #7c94f8)' }}>
-                        {user?.fullname?.[0] ?? 'U'}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[11.5px] font-semibold text-text-primary truncate">{user?.fullname}</div>
-                        <div className="text-[10px] text-text-muted mt-0.5">{user?.student_id} · {p.period?.label || '—'}</div>
-                      </div>
-                      <div className="text-[12px] font-black text-text-primary tabular-nums">{formatCurrency(p.amount)}</div>
-                      <div className="flex items-center gap-1">
-                        <QuickApproveButton paymentId={p.id} />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <div className="py-10 text-center text-[12px] text-text-muted font-medium">✓ ไม่มีรายการรอตรวจสอบ</div>
-            )}
-          </div>
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
 
           {/* Right Column */}
-          <div className="lg:col-span-2 space-y-4">
+          <div className="lg:col-span-1 space-y-4">
             {/* Balance Card */}
             <div className="bg-white border border-border rounded-2xl p-5 card-shadow overflow-hidden relative">
               <div className="absolute inset-0 bg-gradient-to-br from-[#ecfdf5]/80 to-transparent pointer-events-none" />
@@ -338,6 +301,10 @@ export default async function AdminOverviewPage() {
                 <div className="text-[26px] font-black text-text-primary tracking-tight leading-none">{formatCurrency(balance ?? 0)}</div>
               </div>
             </div>
+
+
+          </div>
+          <div className="lg:col-span-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
 
             {/* Payment Rate Chart */}
             <div className="bg-white border border-border rounded-2xl p-5 card-shadow">
@@ -351,9 +318,7 @@ export default async function AdminOverviewPage() {
               <div className="text-[12px] font-black text-text-primary mb-0.5">ยอดคาดหวัง vs รับจริง</div>
               <div className="text-[9.5px] text-text-muted mb-4">{activeSemester?.name ?? '—'} (5 งวดล่าสุด)</div>
               <ExpectedVsActualChart data={expectedActualData} />
-            </div>
-
-            {/* Activity */}
+            </div>            {/* Activity */}
             <div className="bg-white border border-border rounded-2xl p-5 card-shadow">
               <div className="text-[12px] font-black text-text-primary mb-4">กิจกรรมล่าสุด</div>
               <ActivityFeed activities={activities.slice(0, 6)} />
@@ -401,6 +366,44 @@ export default async function AdminOverviewPage() {
             </Link>
           ))}
         </div>
+
+          {/* Pending Payments Table */}
+          <div className="bg-white border border-border rounded-2xl overflow-hidden card-shadow">
+            <div className="px-5 py-4 border-b border-border/70 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="text-[12.5px] font-black text-text-primary">รายการรอตรวจสอบ</span>
+                {(pendingCount ?? 0) > 0 && (
+                  <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[9px] font-black px-2 py-0.5 rounded-full">{pendingCount}</span>
+                )}
+              </div>
+              <Link href="/admin/payments" className="text-[10.5px] text-text-muted hover:text-brand font-semibold transition-colors">ดูทั้งหมด →</Link>
+            </div>
+            {pendingPayments && pendingPayments.length > 0 ? (
+              <div className="divide-y divide-border/50">
+                {pendingPayments.map((p) => {
+                  const user = p.user as { fullname: string; student_id: string } | null
+                  return (
+                    <div key={p.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-background-muted/50 transition-colors">
+                      <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-white text-[10px] font-black"
+                        style={{ background: 'linear-gradient(135deg, #3d52d5, #7c94f8)' }}>
+                        {user?.fullname?.[0] ?? 'U'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11.5px] font-semibold text-text-primary truncate">{user?.fullname}</div>
+                        <div className="text-[10px] text-text-muted mt-0.5">{user?.student_id} · {p.period?.label || '—'}</div>
+                      </div>
+                      <div className="text-[12px] font-black text-text-primary tabular-nums">{formatCurrency(p.amount)}</div>
+                      <div className="flex items-center gap-1">
+                        <QuickApproveButton paymentId={p.id} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="py-10 text-center text-[12px] text-text-muted font-medium">✓ ไม่มีรายการรอตรวจสอบ</div>
+            )}
+          </div>
       </div>
     </div>
   )
