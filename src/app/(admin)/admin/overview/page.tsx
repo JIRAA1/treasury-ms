@@ -12,6 +12,8 @@ import NotificationTrigger from '@/components/admin/NotificationTrigger'
 import QuickApproveButton from '@/components/admin/QuickApproveButton'
 import ExpenseDonutChart from '@/components/charts/ExpenseDonutChart'
 import CashFlowTrendChart from '@/components/charts/CashFlowTrendChart'
+import PaymentRateChart from '@/components/charts/PaymentRateChart'
+import ExpectedVsActualChart from '@/components/charts/ExpectedVsActualChart'
 import type { ExpenseCategory } from '@/types'
 
 export const metadata = { title: 'ภาพรวม — TreasuryMS Admin' }
@@ -40,7 +42,7 @@ export default async function AdminOverviewPage() {
     supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student'),
     supabase.from('users').select('tier').eq('role', 'student'),
     supabase.from('payment_credits').select('amount').eq('status', 'pending'),
-    supabase.from('system_settings').select('key, value').in('key', ['reserve_fund_monthly_target', 'tier_c_max_quota']),
+    supabase.from('system_settings').select('key, value').in('key', ['reserve_fund_monthly_target', 'tier_c_max_quota', 'tier_a_amount', 'tier_b_amount', 'tier_c_amount']),
   ])
 
   // Tier breakdown
@@ -65,17 +67,55 @@ export default async function AdminOverviewPage() {
 
   const { data: recentPeriods } = await supabase
     .from('periods')
-    .select('id, label, period_order')
+    .select('id, label, period_order, amount')
     .eq('semester_id', activeSemesterId)
     .order('period_order', { ascending: false })
     .limit(5)
 
-  const periodRates = await Promise.all(
+  // Calculate Expected vs Actual
+  const tierAmounts = {
+    A: parseFloat(sysSettings?.find((s: { key: string; value: string }) => s.key === 'tier_a_amount')?.value || '60'),
+    B: parseFloat(sysSettings?.find((s: { key: string; value: string }) => s.key === 'tier_b_amount')?.value || '50'),
+    C: parseFloat(sysSettings?.find((s: { key: string; value: string }) => s.key === 'tier_c_amount')?.value || '30'),
+  }
+  const standardAmount = tierAmounts.B || 50
+  const expectedPerPeriodBase = 
+    (tierBreakdown.A * (tierAmounts.A / standardAmount)) +
+    (tierBreakdown.B * (tierAmounts.B / standardAmount)) +
+    (tierBreakdown.C * (tierAmounts.C / standardAmount))
+
+  const expectedActualData = await Promise.all(
     [...(recentPeriods ?? [])].reverse().map(async (p) => {
-      const { data } = await supabase.rpc('get_period_collection_rate', { target_period_id: p.id })
-      return { id: p.id, label: p.label, rate: data ?? 0 }
+      const expected = p.amount * expectedPerPeriodBase;
+      const { data: paymentsForPeriod } = await supabase
+        .from('payments')
+        .select('amount')
+        .eq('period_id', p.id)
+        .eq('status', 'approved')
+      const actual = (paymentsForPeriod ?? []).reduce((sum, curr) => sum + curr.amount, 0)
+      return { label: p.label, expected, actual }
     })
   )
+
+  // Calculate Payment Rate by Tier
+  const { data: activeSemesterPayments } = await supabase
+    .from('payments')
+    .select('user_id, status, user:user_id(tier)')
+    .in('period_id', recentPeriods?.map(p => p.id) ?? [])
+    .eq('status', 'approved')
+
+  const paidCounts = { A: 0, B: 0, C: 0 }
+  for (const p of activeSemesterPayments ?? []) {
+    const t = (p.user as any)?.tier as 'A' | 'B' | 'C'
+    if (t) paidCounts[t]++
+  }
+
+  const numPeriods = recentPeriods?.length || 0
+  const tierPaymentData = [
+    { tier: 'Tier A', paid: paidCounts.A, unpaid: Math.max(0, (tierBreakdown.A * numPeriods) - paidCounts.A) },
+    { tier: 'Tier B', paid: paidCounts.B, unpaid: Math.max(0, (tierBreakdown.B * numPeriods) - paidCounts.B) },
+    { tier: 'Tier C', paid: paidCounts.C, unpaid: Math.max(0, (tierBreakdown.C * numPeriods) - paidCounts.C) },
+  ]
 
   const monthlyExpenseTotal = (monthExpenses ?? []).reduce((s, e) => s + e.amount, 0)
 
@@ -299,33 +339,18 @@ export default async function AdminOverviewPage() {
               </div>
             </div>
 
-            {/* Period Chart */}
+            {/* Payment Rate Chart */}
             <div className="bg-white border border-border rounded-2xl p-5 card-shadow">
-              <div className="text-[12px] font-black text-text-primary mb-0.5">อัตราการชำระ 5 งวดล่าสุด</div>
-              <div className="text-[9.5px] text-text-muted mb-4">{activeSemester?.name ?? '—'}</div>
-              <div className="flex items-end gap-2" style={{ height: '72px' }}>
-                {periodRates.map((p, i) => {
-                  const isLatest = i === periodRates.length - 1
-                  const barH = Math.max((p.rate / 100) * 60, 4)
-                  return (
-                    <div key={p.id} className="flex-1 flex flex-col items-center gap-1.5" title={`${p.label}: ${p.rate}%`}>
-                      <span className="text-[8px] font-bold text-text-muted">{p.rate > 0 ? `${p.rate}%` : ''}</span>
-                      <div
-                        className={`w-full rounded-t-lg bar-grow ${
-                          isLatest
-                            ? 'bg-gradient-to-t from-brand to-[#7c94f8]'
-                            : 'bg-gradient-to-t from-background-muted to-slate-200'
-                        }`}
-                        style={{ height: `${barH}px`, animationDelay: `${i * 80}ms` }}
-                      />
-                      <div className="text-[7.5px] text-text-muted truncate w-full text-center font-semibold" title={p.label}>{p.label}</div>
-                    </div>
-                  )
-                })}
-                {periodRates.length === 0 && (
-                  <div className="text-[11px] text-text-muted text-center w-full italic self-center">ยังไม่มีงวดชำระเงิน</div>
-                )}
-              </div>
+              <div className="text-[12px] font-black text-text-primary mb-0.5">การชำระเงินแยกตามชั้นปี</div>
+              <div className="text-[9.5px] text-text-muted mb-4">{activeSemester?.name ?? '—'} (รวม 5 งวดล่าสุด)</div>
+              <PaymentRateChart data={tierPaymentData} />
+            </div>
+
+            {/* Expected vs Actual Chart */}
+            <div className="bg-white border border-border rounded-2xl p-5 card-shadow">
+              <div className="text-[12px] font-black text-text-primary mb-0.5">ยอดคาดหวัง vs รับจริง</div>
+              <div className="text-[9.5px] text-text-muted mb-4">{activeSemester?.name ?? '—'} (5 งวดล่าสุด)</div>
+              <ExpectedVsActualChart data={expectedActualData} />
             </div>
 
             {/* Activity */}
