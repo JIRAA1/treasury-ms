@@ -287,42 +287,26 @@ export default async function AdminOverviewPage() {
           </div>
         </div>
 
-        {/* Middle Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-
-          {/* Right Column */}
-          <div className="lg:col-span-1 space-y-4">
-            {/* Balance Card */}
-            <div className="bg-white border border-border rounded-2xl p-5 card-shadow overflow-hidden relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-[#ecfdf5]/80 to-transparent pointer-events-none" />
-              <div className="absolute top-0 inset-x-0 h-[3px] rounded-t-2xl bg-gradient-to-r from-emerald-500 to-teal-400" />
-              <div className="relative">
-                <div className="text-[9.5px] uppercase tracking-[0.22em] font-black text-text-muted mb-2">ยอดคงเหลือคลัง</div>
-                <div className="text-[26px] font-black text-text-primary tracking-tight leading-none">{formatCurrency(balance ?? 0)}</div>
-              </div>
-            </div>
-
-
+        {/* Middle Section (Charts & Activities) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Payment Rate Chart */}
+          <div className="bg-white border border-border rounded-2xl p-5 card-shadow">
+            <div className="text-[12px] font-black text-text-primary mb-0.5">การชำระเงินแยกตามชั้นปี</div>
+            <div className="text-[9.5px] text-text-muted mb-4">{activeSemester?.name ?? '—'} (รวม 5 งวดล่าสุด)</div>
+            <PaymentRateChart data={tierPaymentData} />
           </div>
-          <div className="lg:col-span-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-            {/* Payment Rate Chart */}
-            <div className="bg-white border border-border rounded-2xl p-5 card-shadow">
-              <div className="text-[12px] font-black text-text-primary mb-0.5">การชำระเงินแยกตามชั้นปี</div>
-              <div className="text-[9.5px] text-text-muted mb-4">{activeSemester?.name ?? '—'} (รวม 5 งวดล่าสุด)</div>
-              <PaymentRateChart data={tierPaymentData} />
-            </div>
+          {/* Expected vs Actual Chart */}
+          <div className="bg-white border border-border rounded-2xl p-5 card-shadow">
+            <div className="text-[12px] font-black text-text-primary mb-0.5">ยอดคาดหวัง vs รับจริง</div>
+            <div className="text-[9.5px] text-text-muted mb-4">{activeSemester?.name ?? '—'} (5 งวดล่าสุด)</div>
+            <ExpectedVsActualChart data={expectedActualData} />
+          </div>
 
-            {/* Expected vs Actual Chart */}
-            <div className="bg-white border border-border rounded-2xl p-5 card-shadow">
-              <div className="text-[12px] font-black text-text-primary mb-0.5">ยอดคาดหวัง vs รับจริง</div>
-              <div className="text-[9.5px] text-text-muted mb-4">{activeSemester?.name ?? '—'} (5 งวดล่าสุด)</div>
-              <ExpectedVsActualChart data={expectedActualData} />
-            </div>            {/* Activity */}
-            <div className="bg-white border border-border rounded-2xl p-5 card-shadow">
-              <div className="text-[12px] font-black text-text-primary mb-4">กิจกรรมล่าสุด</div>
-              <ActivityFeed activities={activities.slice(0, 6)} />
-            </div>
+          {/* Activity */}
+          <div className="bg-white border border-border rounded-2xl p-5 card-shadow">
+            <div className="text-[12px] font-black text-text-primary mb-4">กิจกรรมล่าสุด</div>
+            <ActivityFeed activities={activities.slice(0, 8)} />
           </div>
         </div>
 
