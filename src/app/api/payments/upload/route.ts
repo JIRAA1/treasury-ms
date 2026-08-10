@@ -356,7 +356,7 @@ export async function POST(request: NextRequest) {
     await notifyAdmins('🔔 สลิปรอตรวจมือ (API ไม่พร้อมให้บริการ)', [
       `ผู้ส่ง: ${profile?.fullname}`,
       `รหัสนักศึกษา: ${profile?.student_id}`,
-      `รายการ: ${cycleTitle}`,
+      `รายการ: ${remarkPeriods}`,
       `เหตุผล: Thunder API ไม่พร้อมให้บริการ (quota หมด / service หมดอายุ) กรุณาตรวจสลิปด้วยตนเอง`
     ], 'warning')
 
@@ -366,11 +366,14 @@ export async function POST(request: NextRequest) {
     if (uploadError) return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
     const { data: { publicUrl } } = supabase.storage.from('slips').getPublicUrl(filename)
 
+    const quotaTransRef = parsedQR.isValid ? parsedQR.transRef : null
+
+    // ─── บันทึก payment งวดหลัก (ใช้ยอดงวดนั้นๆ เท่านั้น ไม่ใช่ยอดรวมทบงวด) ───
     const paymentData = {
       user_id: profile.id,
       period_id,
-      amount: payAccumulated ? totalExpectedAmount : expectedStudentAmount, // ใช้ยอดจากระบบ (Tier+fine) แทน 0 เพื่อให้แอดมินเห็นยอดตอนอนุมัติ
-      trans_ref: parsedQR.isValid ? parsedQR.transRef : null,
+      amount: expectedStudentAmount, // ยอดงวดหลักเดียว ไม่รวม carry
+      trans_ref: quotaTransRef,
       slip_url: publicUrl,
       status: 'pending' as const,
       file_hash: fileHash,
@@ -391,14 +394,74 @@ export async function POST(request: NextRequest) {
 
     await logAction({ actorId: profile.id, action: 'payment_uploaded', targetId: payment.id, newValue: { ...paymentData, note: 'quota_exceeded' } })
 
+    // ─── กรณีทบงวด: บันทึก carry payments แต่ละงวด (เหมือน normal path) ───
+    const quotaCarryPayments: Array<{ period_id: string; label: string; amount: number }> = []
+
+    if (payAccumulated && accumulatedPeriodDetails.length > 0) {
+      for (const acc of accumulatedPeriodDetails) {
+        const carryTransRef = quotaTransRef ? `${quotaTransRef}_carry_${acc.id}` : null
+        const carryPaymentData = {
+          user_id: profile.id,
+          period_id: acc.id,
+          amount: acc.totalAmount,
+          trans_ref: carryTransRef,
+          slip_url: publicUrl,
+          file_hash: carryTransRef
+            ? createHash('sha256').update(carryTransRef).digest('hex')
+            : fileHash,
+          status: 'pending' as const,
+          verified_at: null,
+          note: `accumulated_with:${period_id}`,
+        }
+
+        const { data: carryPayment, error: carryError } = await adminClient
+          .from('payments')
+          .upsert(
+            { ...carryPaymentData, user_id: profile.id, period_id: acc.id },
+            { onConflict: 'user_id,period_id' }
+          )
+          .select()
+          .single()
+
+        if (carryError) {
+          console.error(`[Upload Quota Accumulated] Failed to save carry payment for period ${acc.id}:`, carryError)
+          await notifyAdmins('⚠️ Carry Payment Insert Failed (Quota)', [
+            `จาก: ${profile.fullname}`,
+            `รายการ: ${acc.label}`,
+            `ข้อผิดพลาด: ${carryError.message}`,
+          ], 'error')
+          continue
+        }
+
+        if (carryPayment) {
+          try {
+            await adminClient.from('payments').update({ verified_by_api: false }).eq('id', carryPayment.id)
+          } catch (_) { /* column may not exist yet */ }
+          await logAction({
+            actorId: profile.id,
+            action: 'payment_uploaded',
+            targetId: carryPayment.id,
+            newValue: { ...carryPaymentData, carry_for_period: period_id, note: 'quota_exceeded' },
+          })
+          quotaCarryPayments.push({ period_id: acc.id, label: acc.label, amount: acc.totalAmount })
+        }
+      }
+    }
+
+    const isQuotaAccumulated = payAccumulated && quotaCarryPayments.length > 0
+
     return NextResponse.json({
       success: true,
       payment: { ...payment, verified_by_api: false },
+      accumulated: isQuotaAccumulated ? quotaCarryPayments : [],
       ocr: null,
       quota_exceeded: true,
-      message: 'ส่งสลิปสำเร็จ — เหรัญญิกจะตรวจสอบยอดเงินด้วยตนเองเนื่องจาก API หมด quota'
+      message: isQuotaAccumulated
+        ? `ส่งสลิปสำเร็จ (รวม ${quotaCarryPayments.length + 1} งวด) — เหรัญญิกจะตรวจสอบยอดเงินด้วยตนเองเนื่องจาก API หมด quota`
+        : 'ส่งสลิปสำเร็จ — เหรัญญิกจะตรวจสอบยอดเงินด้วยตนเองเนื่องจาก API หมด quota'
     })
   }
+
 
   // --- NORMAL VERIFICATION PATH ---
   if (!apiResult.is_valid) {
