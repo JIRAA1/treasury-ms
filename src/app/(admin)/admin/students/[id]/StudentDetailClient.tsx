@@ -253,7 +253,8 @@ export default function StudentDetailClient({ student, periodStatuses, actorRole
                 {ps.payment ? (
                   <div className="text-right">
                     <div className="text-[12.5px] font-semibold text-text-primary">
-                      {formatCurrency(ps.payment.amount > 0 ? ps.payment.amount : ps.amount)}
+                      {/* สำหรับงวดที่ยังไม่อนุมัติ ให้แสดงยอดที่ถูกต้องตาม tier (ps.amount) ไม่ใช่ยอดใน DB ที่อาจบันทึกผิด */}
+                      {formatCurrency(ps.status === 'paid' ? ps.payment.amount : ps.amount)}
                     </div>
                     <div className="text-[10.5px] text-text-muted">{formatDate(ps.payment.created_at)}</div>
                   </div>

@@ -48,38 +48,47 @@ export async function POST(request: NextRequest) {
 
   if (!payment) return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
 
-  // 1a. If payment.amount is 0 (e.g. uploaded when API was down), auto-calculate expected amount
-  if (!payment.amount || payment.amount <= 0) {
-    try {
-      const { data: userData } = await adminClient.from('users').select('tier').eq('id', payment.user_id).maybeSingle()
-      const { data: periodData } = await adminClient.from('periods').select('*').eq('id', payment.period_id).maybeSingle()
-      const { data: settings } = await adminClient.from('system_settings').select('*')
-      if (periodData) {
-        const tierAmounts: Record<string, number> = {
-          A: parseFloat(settings?.find((s: any) => s.key === 'tier_a_amount')?.value ?? '60'),
-          B: parseFloat(settings?.find((s: any) => s.key === 'tier_b_amount')?.value ?? '50'),
-          C: parseFloat(settings?.find((s: any) => s.key === 'tier_c_amount')?.value ?? '30'),
-        }
-        const userTier = userData?.tier ?? 'B'
-        const tierAmount = tierAmounts[userTier] ?? tierAmounts.B
-        const standardAmount = tierAmounts.B || 50
-        const tierRatio = tierAmount / standardAmount
-
-        const { data: pendingCredit } = await adminClient
-          .from('payment_credits')
-          .select('id')
-          .eq('user_id', payment.user_id)
-          .eq('period_id', payment.period_id)
-          .eq('status', 'pending')
-          .maybeSingle()
-
-        const lateFine = calculateLateFine(periodData, new Date(payment.created_at || Date.now()), !!pendingCredit)
-        payment.amount = (periodData.amount ?? 0) * tierRatio + lateFine
+  // 1a. Recalculate correct expected amount (tier × period + fine as of submission time)
+  //     This fixes cases where stored amount in DB is wrong (e.g. accumulated payment saved total instead of individual)
+  let recalculatedExpectedAmount: number | null = null
+  try {
+    const { data: userData } = await adminClient.from('users').select('tier').eq('id', payment.user_id).maybeSingle()
+    const { data: periodData } = await adminClient.from('periods').select('*').eq('id', payment.period_id).maybeSingle()
+    const { data: settings } = await adminClient.from('system_settings').select('*')
+    if (periodData) {
+      const tierAmounts: Record<string, number> = {
+        A: parseFloat(settings?.find((s: any) => s.key === 'tier_a_amount')?.value ?? '60'),
+        B: parseFloat(settings?.find((s: any) => s.key === 'tier_b_amount')?.value ?? '50'),
+        C: parseFloat(settings?.find((s: any) => s.key === 'tier_c_amount')?.value ?? '30'),
       }
-    } catch (e) {
-      console.error('[Verify] Error calculating fallback amount:', e)
+      const userTier = userData?.tier ?? 'B'
+      const tierAmount = tierAmounts[userTier] ?? tierAmounts.B
+      const standardAmount = tierAmounts.B || 50
+      const tierRatio = tierAmount / standardAmount
+
+      const { data: pendingCredit } = await adminClient
+        .from('payment_credits')
+        .select('id')
+        .eq('user_id', payment.user_id)
+        .eq('period_id', payment.period_id)
+        .eq('status', 'pending')
+        .maybeSingle()
+
+      const lateFine = calculateLateFine(periodData, new Date(payment.created_at || Date.now()), !!pendingCredit)
+      recalculatedExpectedAmount = (periodData.amount ?? 0) * tierRatio + lateFine
+    }
+  } catch (e) {
+    console.error('[Verify] Error calculating expected amount:', e)
+  }
+
+  // Fix stored amount if it's 0, negative, or greater than expected (e.g. accumulated total saved incorrectly)
+  if (recalculatedExpectedAmount !== null) {
+    if (!payment.amount || payment.amount <= 0 || payment.amount > recalculatedExpectedAmount) {
+      console.log(`[Verify] Correcting payment.amount from ${payment.amount} → ${recalculatedExpectedAmount}`)
+      payment.amount = recalculatedExpectedAmount
     }
   }
+
 
   const student = payment.user as any
   const cycleTitle = (payment as any).period?.label || `งวดที่ ${(payment as any).period?.period_order || '—'}`
