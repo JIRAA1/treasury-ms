@@ -252,7 +252,9 @@ export default function StudentDetailClient({ student, periodStatuses, actorRole
 
                 {ps.payment ? (
                   <div className="text-right">
-                    <div className="text-[12.5px] font-semibold text-text-primary">{formatCurrency(ps.payment.amount)}</div>
+                    <div className="text-[12.5px] font-semibold text-text-primary">
+                      {formatCurrency(ps.payment.amount > 0 ? ps.payment.amount : ps.amount)}
+                    </div>
                     <div className="text-[10.5px] text-text-muted">{formatDate(ps.payment.created_at)}</div>
                   </div>
                 ) : (
@@ -296,15 +298,14 @@ export default function StudentDetailClient({ student, periodStatuses, actorRole
                             <Check className="w-3.5 h-3.5" />
                           </button>
                         )}
-                        {(ps.status === 'unpaid' || ps.status === 'rejected') && (
-                          <button
-                            onClick={() => handleCashPayment(ps)}
-                            className="flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 text-[10.5px] font-bold rounded-lg border border-emerald-100 hover:bg-emerald-100 transition-colors"
-                          >
-                            <Banknote className="w-3 h-3" />
-                            เงินสด
-                          </button>
-                        )}
+                        <button
+                          onClick={() => handleCashPayment(ps)}
+                          title="บันทึกชำระเงินสด"
+                          className="flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 text-[10.5px] font-bold rounded-lg border border-emerald-100 hover:bg-emerald-100 transition-colors"
+                        >
+                          <Banknote className="w-3 h-3" />
+                          เงินสด
+                        </button>
                       </>
                     )}
                   </div>

@@ -87,13 +87,6 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
 
   const now = new Date()
 
-  const totalCycles = periods?.length ?? 0
-  const paidCount = payments.filter(p => p.status === 'approved').length
-  const pendingCount = payments.filter(p => p.status === 'pending').length
-  const rejectedCount = payments.filter(p => p.status === 'rejected').length
-  const totalPaid = payments.filter(p => p.status === 'approved').reduce((s: number, p: any) => s + p.amount, 0)
-  const completionPct = totalCycles > 0 ? Math.round((paidCount / totalCycles) * 100) : 0
-
   // Build period status array — use tier-adjusted amount + late fine
   const periodStatuses: PeriodStatus[] = (periods ?? []).map(p => {
     const payment = payments.find((pay: any) => pay.period_id === p.id)
@@ -103,6 +96,12 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
     const ratio = tierAmount / standardAmount
     const expectedBaseAmount = p.amount * ratio
     const expectedAmount = expectedBaseAmount + fine
+
+    // If payment exists but amount is 0 (from previous API outage), fallback to expected amount
+    if (payment && (!payment.amount || payment.amount <= 0)) {
+      payment.amount = expectedAmount
+    }
+
     const status = payment?.status === 'approved' ? 'paid'
                  : payment?.status === 'pending' ? 'pending'
                  : payment?.status === 'rejected' ? 'rejected'
@@ -111,11 +110,18 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
       period: p,
       status,
       // ถ้าจ่ายแล้วใช้ยอดที่จ่ายจริง มิฉะนั้นใช้ยอดตาม tier + ค่าปรับ
-      amount: payment?.status === 'approved' ? (payment?.amount ?? expectedAmount) : expectedAmount,
+      amount: payment?.status === 'approved' ? (payment?.amount && payment.amount > 0 ? payment.amount : expectedAmount) : expectedAmount,
       payment,
       fine,
     }
   })
+
+  const totalCycles = periods?.length ?? 0
+  const paidCount = payments.filter(p => p.status === 'approved').length
+  const pendingCount = payments.filter(p => p.status === 'pending').length
+  const rejectedCount = payments.filter(p => p.status === 'rejected').length
+  const totalPaid = periodStatuses.filter(ps => ps.status === 'paid').reduce((s, ps) => s + ps.amount, 0)
+  const completionPct = totalCycles > 0 ? Math.round((paidCount / totalCycles) * 100) : 0
 
 
   return (

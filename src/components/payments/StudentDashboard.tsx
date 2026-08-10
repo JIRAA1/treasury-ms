@@ -76,6 +76,11 @@ export default function StudentDashboard({
     const expectedBaseAmount = period.amount * tierRatio
     const expectedAmount = expectedBaseAmount + lateFine
 
+    // ถ้า payment มียอดเป็น 0 (สลิปเดิมส่งตอน API ล่ม) ให้ใช้ expectedAmount แทน
+    if (payment && (!payment.amount || payment.amount <= 0)) {
+      payment.amount = expectedAmount
+    }
+
     return {
       period,
       status: payment?.status === 'approved' ? 'paid'
@@ -83,7 +88,7 @@ export default function StudentDashboard({
              : payment?.status === 'rejected' ? 'rejected'
              : 'unpaid',
       // ถ้า payment ที่ชำระไปแล้วมียอดจริง ให้ใช้ยอดนั้น (approved) มิฉะนั้นใช้ตาม tier + fine
-      amount: payment?.status === 'approved' ? (payment?.amount ?? expectedAmount) : expectedAmount,
+      amount: payment?.status === 'approved' ? (payment?.amount && payment.amount > 0 ? payment.amount : expectedAmount) : expectedAmount,
       payment,
     }
   })
