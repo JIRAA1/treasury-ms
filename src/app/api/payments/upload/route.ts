@@ -353,11 +353,11 @@ export async function POST(request: NextRequest) {
   // --- QUOTA EXCEEDED PATH ---
   if (apiResult.quota_exceeded) {
     console.warn('[Upload] Thunder quota exceeded — saving slip for manual review')
-    await notifyAdmins('🔔 สลิปรอตรวจมือ (API Quota หมด)', [
+    await notifyAdmins('🔔 สลิปรอตรวจมือ (API ไม่พร้อมให้บริการ)', [
       `ผู้ส่ง: ${profile?.fullname}`,
       `รหัสนักศึกษา: ${profile?.student_id}`,
       `รายการ: ${cycleTitle}`,
-      `เหตุผล: Thunder API quota หมดแล้ว กรุณาตรวจสลิปด้วยตนเอง`
+      `เหตุผล: Thunder API ไม่พร้อมให้บริการ (quota หมด / service หมดอายุ) กรุณาตรวจสลิปด้วยตนเอง`
     ], 'warning')
 
     const ext = file.type.split('/')[1]

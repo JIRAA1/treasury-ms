@@ -120,7 +120,7 @@ export async function verifySlipByPayload(
     const result = (await response.json()) as ThunderResponse
     console.log('[Thunder V2 Payload] Result:', JSON.stringify(result))
 
-    // Detect quota errors from response body
+    // Detect quota errors and service expiry from response body
     const errorCode = result.error?.code?.toLowerCase() ?? ''
     const errorMsg = (result.error?.message ?? result.message ?? '').toLowerCase()
     const isQuotaError =
@@ -130,9 +130,15 @@ export async function verifySlipByPayload(
       errorMsg.includes('quota') ||
       errorMsg.includes('limit exceeded') ||
       errorMsg.includes('too many')
+    // SERVICE_EXPIRED = Thunder subscription has expired → treat same as quota exceeded
+    // (slip is saved as pending for manual admin review, duplicate already checked in DB)
+    const isServiceExpired =
+      errorCode === 'service_expired' ||
+      errorMsg.includes('service has expired') ||
+      errorMsg.includes('service expired')
 
-    if (isQuotaError) {
-      console.warn('[Thunder V2 Payload] Quota exceeded (body):', result.error?.message ?? result.message)
+    if (isQuotaError || isServiceExpired) {
+      console.warn('[Thunder V2 Payload] Service unavailable (quota/expired):', result.error?.message ?? result.message)
       return {
         amount: null,
         trans_ref: null,
@@ -220,7 +226,7 @@ export async function verifySlip(file: File): Promise<ThunderResult> {
     const result = (await response.json()) as ThunderResponse
     console.log('[Thunder V2] Result:', JSON.stringify(result))
 
-    // Also detect quota errors from response body
+    // Also detect quota errors and service expiry from response body
     const errorCode = result.error?.code?.toLowerCase() ?? ''
     const errorMsg = (result.error?.message ?? result.message ?? '').toLowerCase()
     const isQuotaError =
@@ -230,9 +236,14 @@ export async function verifySlip(file: File): Promise<ThunderResult> {
       errorMsg.includes('quota') ||
       errorMsg.includes('limit exceeded') ||
       errorMsg.includes('too many')
+    // SERVICE_EXPIRED = Thunder subscription has expired → treat same as quota exceeded
+    const isServiceExpired =
+      errorCode === 'service_expired' ||
+      errorMsg.includes('service has expired') ||
+      errorMsg.includes('service expired')
 
-    if (isQuotaError) {
-      console.warn('[Thunder V2] Quota exceeded (body):', result.error?.message ?? result.message)
+    if (isQuotaError || isServiceExpired) {
+      console.warn('[Thunder V2] Service unavailable (quota/expired):', result.error?.message ?? result.message)
       return {
         amount: null,
         trans_ref: null,
