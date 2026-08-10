@@ -214,7 +214,7 @@ export async function POST(request: NextRequest) {
     const paymentData = {
       user_id: profile.id,
       period_id,
-      amount: 0,
+      amount: expectedStudentAmount, // ใช้ยอดที่คำนวณจาก Tier+fine แทน 0 เพื่อให้แอดมินเห็นยอดตอนอนุมัติ
       trans_ref: null,
       slip_url: publicUrl,
       status: 'pending' as const,
@@ -369,7 +369,7 @@ export async function POST(request: NextRequest) {
     const paymentData = {
       user_id: profile.id,
       period_id,
-      amount: 0,
+      amount: payAccumulated ? totalExpectedAmount : expectedStudentAmount, // ใช้ยอดจากระบบ (Tier+fine) แทน 0 เพื่อให้แอดมินเห็นยอดตอนอนุมัติ
       trans_ref: parsedQR.isValid ? parsedQR.transRef : null,
       slip_url: publicUrl,
       status: 'pending' as const,
