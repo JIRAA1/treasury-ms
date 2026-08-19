@@ -89,7 +89,9 @@ export async function POST(
 
   // 1. Lock-in Payment Mode Choice (First time payment choice)
   let paymentMode = item.payment_mode
-  let chosenInstallments = item.chosen_installments || 1
+  let chosenInstallments = (item.chosen_installments && item.chosen_installments > 1)
+    ? item.chosen_installments
+    : (collection.max_installments && collection.max_installments > 1 ? collection.max_installments : 2)
 
   if (!paymentMode) {
     // Student is making their choice right now
@@ -102,7 +104,10 @@ export async function POST(
     }
 
     paymentMode = selectedPaymentMode
-    chosenInstallments = selectedPaymentMode === 'installment' ? (collection.max_installments || 2) : 1
+    const paramInstallments = parseInt(formData.get('chosen_installments') as string || '0')
+    chosenInstallments = selectedPaymentMode === 'installment'
+      ? (paramInstallments > 1 ? paramInstallments : (collection.max_installments || 2))
+      : 1
 
     // Update item with locked payment mode
     await adminClient
@@ -125,7 +130,7 @@ export async function POST(
     expectedSlipAmount = remainingAmount
   } else {
     // Normal installment amount
-    const perInstallment = Math.round((parseFloat(item.amount) / chosenInstallments) * 100) / 100
+    const perInstallment = Math.ceil(parseFloat(item.amount) / (chosenInstallments > 1 ? chosenInstallments : 1))
     expectedSlipAmount = Math.min(perInstallment, remainingAmount)
   }
 
