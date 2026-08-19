@@ -7,7 +7,6 @@ import {
   Plus,
   Calendar,
   Users,
-  CheckCircle2,
   Clock,
   ChevronRight,
   Sparkles,
@@ -16,6 +15,7 @@ import {
   Search,
 } from 'lucide-react'
 import CreateSpecialCollectionModal from '@/components/special-collections/CreateSpecialCollectionModal'
+import Topbar from '@/components/layout/Topbar'
 import type { SpecialCollection } from '@/types'
 
 export default function AdminSpecialCollectionsPage() {
@@ -52,29 +52,22 @@ export default function AdminSpecialCollectionsPage() {
   const totalPendingSlips = collections.reduce((acc, c) => acc + (c.stats?.total_pending || 0), 0)
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-text-primary tracking-tight flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-600">
-              <ShoppingBag className="w-5 h-5" />
-            </div>
-            การเก็บเงินพิเศษ
-          </h1>
-          <p className="text-xs text-text-muted mt-1">
-            จัดการการเก็บเงินค่าเสื้อ, ค่าอุปกรณ์, ค่าค่ายกิจกรรมเฉพาะ หรือรายการเงินพิเศษรายบุคคล
-          </p>
-        </div>
+    <div>
+      <Topbar
+        title="การเก็บเงินพิเศษ"
+        subtitle="จัดการการเก็บเงินค่าเสื้อ, ค่าอุปกรณ์, ค่ากิจกรรมพิเศษ"
+        actions={
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-brand text-white font-semibold text-xs hover:bg-brand-hover transition-all shadow-sm press-down"
+          >
+            <Plus className="w-4 h-4" />
+            สร้างรายการ
+          </button>
+        }
+      />
+      <div className="p-5 md:p-6 space-y-6">
 
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-brand text-white font-semibold text-xs hover:bg-brand-hover transition-all shadow-sm press-down"
-        >
-          <Plus className="w-4 h-4" />
-          สร้างรายการเก็บเงินพิเศษ
-        </button>
-      </div>
 
       {/* Overview KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -248,6 +241,7 @@ export default function AdminSpecialCollectionsPage() {
           onCreated={fetchCollections}
         />
       )}
+      </div>
     </div>
   )
 }

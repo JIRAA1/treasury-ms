@@ -15,6 +15,7 @@ import {
   Calendar,
   RefreshCw,
 } from 'lucide-react'
+import Topbar from '@/components/layout/Topbar'
 import type { SpecialCollection } from '@/types'
 
 export default function AdminSpecialCollectionDetailPage({
@@ -81,19 +82,29 @@ export default function AdminSpecialCollectionDetailPage({
 
   if (loading) {
     return (
-      <div className="py-16 text-center text-xs text-text-muted animate-pulse">
-        กำลังโหลดข้อมูลรายการเก็บเงินพิเศษ...
+      <div>
+        <Topbar title="การเก็บเงินพิเศษ" subtitle="รายละเอียด" />
+        <div className="p-5 md:p-6">
+          <div className="py-16 text-center text-xs text-text-muted animate-pulse">
+            กำลังโหลดข้อมูลรายการเก็บเงินพิเศษ...
+          </div>
+        </div>
       </div>
     )
   }
 
   if (!collection) {
     return (
-      <div className="py-16 text-center">
-        <p className="text-sm font-semibold text-text-secondary">ไม่พบรายการเก็บเงินพิเศษนี้</p>
-        <Link href="/admin/special-collections" className="text-xs text-brand mt-2 inline-block hover:underline">
-          &larr; กลับหน้าหลักการเก็บเงินพิเศษ
-        </Link>
+      <div>
+        <Topbar title="ไม่พบข้อมูล" />
+        <div className="p-5 md:p-6">
+          <div className="py-16 text-center">
+            <p className="text-sm font-semibold text-text-secondary">ไม่พบรายการเก็บเงินพิเศษนี้</p>
+            <Link href="/admin/special-collections" className="text-xs text-brand mt-2 inline-block hover:underline">
+              &larr; กลับหน้าหลักการเก็บเงินพิเศษ
+            </Link>
+          </div>
+        </div>
       </div>
     )
   }
@@ -116,7 +127,22 @@ export default function AdminSpecialCollectionDetailPage({
   }
 
   return (
-    <div className="space-y-6 pb-16">
+    <div>
+      <Topbar
+        title={collection.title}
+        subtitle="การเก็บเงินพิเศษ — รายละเอียด"
+        backHref="/admin/special-collections"
+        actions={
+          <button
+            onClick={fetchDetail}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-border text-xs font-semibold text-text-secondary hover:text-brand hover:border-brand/30 transition-all"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            รีเฟร็ชข้อมูล
+          </button>
+        }
+      />
+      <div className="p-5 md:p-6 space-y-6">
       {/* Header */}
       <div>
         <Link
@@ -146,19 +172,10 @@ export default function AdminSpecialCollectionDetailPage({
               )}
             </div>
 
-            <h1 className="text-xl font-bold text-text-primary tracking-tight">{collection.title}</h1>
             {collection.description && (
               <p className="text-xs text-text-muted mt-1 max-w-2xl">{collection.description}</p>
             )}
           </div>
-
-          <button
-            onClick={fetchDetail}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-border text-xs font-semibold text-text-secondary hover:text-brand hover:border-brand/30 transition-all"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            รีเฟรชข้อมูล
-          </button>
         </div>
       </div>
 
@@ -418,6 +435,7 @@ export default function AdminSpecialCollectionDetailPage({
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }

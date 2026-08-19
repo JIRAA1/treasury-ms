@@ -11,6 +11,7 @@ import {
   Eye,
   X,
 } from 'lucide-react'
+import Topbar from '@/components/layout/Topbar'
 import UploadSpecialSlipModal from '@/components/special-collections/UploadSpecialSlipModal'
 import type { SpecialCollectionItem } from '@/types'
 
@@ -40,19 +41,9 @@ export default function StudentSpecialCollectionsPage() {
   }, [])
 
   return (
-    <div className="space-y-6 pb-16">
-      {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold text-text-primary tracking-tight flex items-center gap-2.5">
-          <div className="p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-600">
-            <ShoppingBag className="w-5 h-5" />
-          </div>
-          การเก็บเงินพิเศษ
-        </h1>
-        <p className="text-xs text-text-muted mt-1">
-          รายการเก็บเงินค่าเสื้อสาขา, ค่าอุปกรณ์, หรือค่ากิจกรรมพิเศษของคุณ
-        </p>
-      </div>
+    <div>
+      <Topbar title="การเก็บเงินพิเศษ" subtitle="ค่าเสื้อ, ค่าอุปกรณ์ และค่ากิจกรรมพิเศษ" />
+      <div className="p-3 sm:p-4 md:p-6 space-y-6">
 
       {/* Main List */}
       {loading ? (
@@ -234,6 +225,7 @@ export default function StudentSpecialCollectionsPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }
