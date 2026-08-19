@@ -2,18 +2,19 @@
 
 import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
-  ShoppingBag,
-  Users,
   CheckCircle2,
   Clock,
   Eye,
   Check,
   X,
   Sparkles,
-  Calendar,
   RefreshCw,
+  Pencil,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react'
 import Topbar from '@/components/layout/Topbar'
 import type { SpecialCollection } from '@/types'
@@ -24,12 +25,30 @@ export default function AdminSpecialCollectionDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = use(params)
+  const router = useRouter()
   const [collection, setCollection] = useState<SpecialCollection | null>(null)
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [selectedSlip, setSelectedSlip] = useState<any | null>(null)
   const [rejectReason, setRejectReason] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+
+  // Edit state
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [editForm, setEditForm] = useState({
+    title: '',
+    description: '',
+    default_amount: '',
+    due_date: '',
+    is_active: true,
+    allow_installments: false,
+    max_installments: '1',
+  })
+  const [editLoading, setEditLoading] = useState(false)
+
+  // Delete state
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   const fetchDetail = async () => {
     setLoading(true)
@@ -49,6 +68,62 @@ export default function AdminSpecialCollectionDetailPage({
   useEffect(() => {
     fetchDetail()
   }, [id])
+
+  // Sync edit form when collection loads
+  useEffect(() => {
+    if (collection) {
+      setEditForm({
+        title: collection.title,
+        description: collection.description || '',
+        default_amount: String(collection.default_amount),
+        due_date: collection.due_date ? collection.due_date.slice(0, 10) : '',
+        is_active: collection.is_active,
+        allow_installments: collection.allow_installments,
+        max_installments: String(collection.max_installments),
+      })
+    }
+  }, [collection])
+
+  const handleEdit = async () => {
+    if (!editForm.title.trim()) {
+      alert('กรุณากรอกชื่อรายการเก็บเงิน')
+      return
+    }
+    setEditLoading(true)
+    try {
+      const res = await fetch(`/api/special-collections/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...editForm,
+          default_amount: parseFloat(editForm.default_amount),
+          max_installments: parseInt(editForm.max_installments),
+          due_date: editForm.due_date || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'แก้ไขไม่สำเร็จ')
+      setIsEditOpen(false)
+      fetchDetail()
+    } catch (err: any) {
+      alert(err.message)
+    } finally {
+      setEditLoading(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    setDeleteLoading(true)
+    try {
+      const res = await fetch(`/api/special-collections/${id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'ลบไม่สำเร็จ')
+      router.push('/admin/special-collections')
+    } catch (err: any) {
+      alert(err.message)
+      setDeleteLoading(false)
+    }
+  }
 
   const handleVerifySlip = async (slipId: string, action: 'approve' | 'reject') => {
     if (action === 'reject' && !rejectReason.trim()) {
@@ -133,13 +208,29 @@ export default function AdminSpecialCollectionDetailPage({
         subtitle="การเก็บเงินพิเศษ — รายละเอียด"
         backHref="/admin/special-collections"
         actions={
-          <button
-            onClick={fetchDetail}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-border text-xs font-semibold text-text-secondary hover:text-brand hover:border-brand/30 transition-all"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            รีเฟร็ชข้อมูล
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={fetchDetail}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-border text-xs font-semibold text-text-secondary hover:text-brand hover:border-brand/30 transition-all"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              รีเฟรช
+            </button>
+            <button
+              onClick={() => setIsEditOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand text-white text-xs font-semibold hover:bg-brand-hover transition-all shadow-sm"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              แก้ไข
+            </button>
+            <button
+              onClick={() => setIsDeleteOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-100 transition-all"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              ลบ
+            </button>
+          </div>
         }
       />
       <div className="p-5 md:p-6 space-y-6">
@@ -436,6 +527,182 @@ export default function AdminSpecialCollectionDetailPage({
         </div>
       )}
       </div>
+
+      {/* ── Edit Modal ───────────────────────────────────── */}
+      {isEditOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-lg bg-white border border-border rounded-2xl shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h3 className="text-sm font-bold text-text-primary">แก้ไขรายการเก็บเงินพิเศษ</h3>
+              <button onClick={() => setIsEditOpen(false)} className="text-text-muted hover:text-text-primary">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+              {/* Title */}
+              <div>
+                <label className="block text-xs font-semibold text-text-secondary mb-1.5">ชื่อรายการ <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  value={editForm.title}
+                  onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))}
+                  className="w-full px-3 py-2.5 rounded-xl border border-border text-xs text-text-primary focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/20 transition-all"
+                  placeholder="เช่น ค่าเสื้อสาขา รุ่น 67"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-semibold text-text-secondary mb-1.5">รายละเอียด</label>
+                <textarea
+                  value={editForm.description}
+                  onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+                  rows={2}
+                  className="w-full px-3 py-2.5 rounded-xl border border-border text-xs text-text-primary focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/20 transition-all resize-none"
+                  placeholder="รายละเอียดเพิ่มเติม..."
+                />
+              </div>
+
+              {/* Amount + Due Date */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-text-secondary mb-1.5">ยอดเงิน (฿)</label>
+                  <input
+                    type="number"
+                    value={editForm.default_amount}
+                    onChange={e => setEditForm(f => ({ ...f, default_amount: e.target.value }))}
+                    className="w-full px-3 py-2.5 rounded-xl border border-border text-xs text-text-primary focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/20 transition-all"
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-text-secondary mb-1.5">วันกำหนดชำระ</label>
+                  <input
+                    type="date"
+                    value={editForm.due_date}
+                    onChange={e => setEditForm(f => ({ ...f, due_date: e.target.value }))}
+                    className="w-full px-3 py-2.5 rounded-xl border border-border text-xs text-text-primary focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/20 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Toggles */}
+              <div className="space-y-3 pt-1">
+                <label className="flex items-center justify-between p-3 rounded-xl border border-border bg-background-tertiary cursor-pointer">
+                  <div>
+                    <div className="text-xs font-semibold text-text-primary">เปิดรับชำระ</div>
+                    <div className="text-[11px] text-text-muted mt-0.5">ปิดเมื่อหมดเขตรับชำระเงิน</div>
+                  </div>
+                  <div
+                    onClick={() => setEditForm(f => ({ ...f, is_active: !f.is_active }))}
+                    className={`relative w-10 h-5.5 rounded-full transition-colors cursor-pointer flex-shrink-0 ${
+                      editForm.is_active ? 'bg-brand' : 'bg-border'
+                    }`}
+                    style={{ height: '22px', width: '40px' }}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                      editForm.is_active ? 'translate-x-5' : 'translate-x-0.5'
+                    }`} />
+                  </div>
+                </label>
+
+                <label className="flex items-center justify-between p-3 rounded-xl border border-border bg-background-tertiary cursor-pointer">
+                  <div>
+                    <div className="text-xs font-semibold text-text-primary">อนุญาตให้ผ่อนชำระ</div>
+                    <div className="text-[11px] text-text-muted mt-0.5">นักศึกษาสามารถเลือกผ่อนได้</div>
+                  </div>
+                  <div
+                    onClick={() => setEditForm(f => ({ ...f, allow_installments: !f.allow_installments }))}
+                    className={`relative rounded-full transition-colors cursor-pointer flex-shrink-0 ${
+                      editForm.allow_installments ? 'bg-amber-500' : 'bg-border'
+                    }`}
+                    style={{ height: '22px', width: '40px' }}
+                  >
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                      editForm.allow_installments ? 'translate-x-5' : 'translate-x-0.5'
+                    }`} />
+                  </div>
+                </label>
+
+                {editForm.allow_installments && (
+                  <div>
+                    <label className="block text-xs font-semibold text-text-secondary mb-1.5">จำนวนงวดสูงสุด</label>
+                    <select
+                      value={editForm.max_installments}
+                      onChange={e => setEditForm(f => ({ ...f, max_installments: e.target.value }))}
+                      className="w-full px-3 py-2.5 rounded-xl border border-border text-xs text-text-primary focus:outline-none focus:border-brand transition-all bg-white"
+                    >
+                      {[2, 3, 4, 6].map(n => (
+                        <option key={n} value={n}>{n} งวด</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3 px-5 py-4 border-t border-border">
+              <button
+                onClick={() => setIsEditOpen(false)}
+                className="flex-1 py-2.5 rounded-xl border border-border text-xs font-semibold text-text-secondary hover:bg-background-tertiary transition-all"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={handleEdit}
+                disabled={editLoading}
+                className="flex-1 py-2.5 rounded-xl bg-brand text-white text-xs font-bold hover:bg-brand-hover transition-all disabled:opacity-60"
+              >
+                {editLoading ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirm Modal ──────────────────────────── */}
+      {isDeleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-white border border-border rounded-2xl shadow-2xl p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-500 flex-shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-text-primary">ยืนยันการลบรายการ</h3>
+                <p className="text-xs text-text-muted mt-1">
+                  คุณกำลังจะลบ <strong className="text-text-primary">&ldquo;{collection.title}&rdquo;</strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 space-y-1">
+              <div className="font-bold mb-1">การลบจะทำให้:</div>
+              <div>• ข้อมูลการเก็บเงินนี้ทั้งหมดถูกลบถาวร</div>
+              <div>• ประวัติการชำระเงินของนักศึกษาทุกคนในรายการนี้จะหายไป</div>
+              <div>• ไม่สามารถกู้คืนได้</div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setIsDeleteOpen(false)}
+                disabled={deleteLoading}
+                className="flex-1 py-2.5 rounded-xl border border-border text-xs font-semibold text-text-secondary hover:bg-background-tertiary transition-all"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleteLoading}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition-all disabled:opacity-60"
+              >
+                {deleteLoading ? 'กำลังลบ...' : 'ยืนยันลบ'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
