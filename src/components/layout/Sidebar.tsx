@@ -18,6 +18,7 @@ import {
   MessageSquare,
   TrendingUp,
   ArrowLeftRight,
+  ShoppingBag,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { User } from '@/types'
@@ -33,7 +34,8 @@ interface NavItem {
 
 const studentNav: NavItem[] = [
   { label: 'แดชบอร์ด', href: '/student/dashboard', icon: LayoutDashboard },
-  { label: 'ส่งสลิป', href: '/student/upload', icon: Upload },
+  { label: 'ส่งสลิปงวดปกติ', href: '/student/upload', icon: Upload },
+  { label: 'การเก็บเงินพิเศษ', href: '/student/special-collections', icon: ShoppingBag },
   { label: 'ประวัติการเงิน', href: '/student/history', icon: Clock },
   { label: 'รายชื่อในชั้น', href: '/student/classmates', icon: Users2 },
   { label: 'ความโปร่งใส', href: '/student/transparency', icon: Eye },
@@ -42,6 +44,7 @@ const studentNav: NavItem[] = [
 const adminNav = (pendingCount: number, pendingCredits = 0): NavItem[] => [
   { label: 'ภาพรวมระบบ', href: '/admin/overview', icon: LayoutDashboard },
   { label: 'จัดการการชำระ', href: '/admin/payments', icon: CreditCard, badge: pendingCount > 0 ? pendingCount : undefined },
+  { label: 'การเก็บเงินพิเศษ', href: '/admin/special-collections', icon: ShoppingBag },
   { label: 'รายรับ (แหล่งอื่น)', href: '/admin/incomes', icon: TrendingUp },
   { label: 'บัญชีรายจ่าย', href: '/admin/expenses', icon: Receipt },
   { label: 'บันทึก Credit', href: '/admin/credits', icon: Clock, badge: pendingCredits > 0 ? pendingCredits : undefined },

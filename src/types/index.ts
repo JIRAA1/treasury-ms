@@ -152,3 +152,63 @@ export interface TierConfig {
   border: string
 }
 
+export interface SpecialCollection {
+  id: string
+  title: string
+  description: string | null
+  default_amount: number
+  due_date: string | null
+  is_active: boolean
+  allow_installments: boolean
+  max_installments: number
+  qr_url: string | null
+  created_by: string | null
+  created_at: string
+  creator?: User
+  items?: SpecialCollectionItem[]
+  stats?: {
+    total_assigned: number
+    total_paid: number
+    total_partial?: number
+    total_pending: number
+    total_unpaid?: number
+    total_amount_expected: number
+    total_amount_collected: number
+  }
+}
+
+export interface SpecialCollectionItem {
+  id: string
+  collection_id: string
+  user_id: string
+  amount: number
+  paid_amount: number
+  payment_mode: 'full' | 'installment' | null
+  chosen_installments: number
+  status: 'unpaid' | 'partial' | 'pending' | 'approved' | 'rejected'
+  note: string | null
+  created_at: string
+  user?: User
+  collection?: SpecialCollection
+  slips?: SpecialCollectionSlip[]
+}
+
+export interface SpecialCollectionSlip {
+  id: string
+  item_id: string
+  installment_no: number
+  amount: number
+  is_payoff: boolean
+  slip_url: string
+  trans_ref: string | null
+  file_hash: string | null
+  status: 'pending' | 'approved' | 'rejected'
+  verified_by_api: boolean
+  verified_at: string | null
+  verified_by: string | null
+  rejection_reason: string | null
+  created_at: string
+  verifier?: User
+}
+
+

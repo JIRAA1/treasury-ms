@@ -141,12 +141,53 @@ CREATE UNIQUE INDEX IF NOT EXISTS semesters_one_active_idx
   WHERE is_active = true;
 
 -- ============================================================
--- Stored Procedure: assign_tier_c_safe
--- Purpose: Atomic Tier C assignment to prevent race condition
---          when two admins assign Tier C simultaneously
--- HOW TO DEPLOY: Run migration_tier_c_rpc.sql in Supabase SQL Editor
+-- Special Collections (การเก็บเงินพิเศษ / ค่าเสื้อ / ค่ากิจกรรมเฉพาะ)
 -- ============================================================
--- CREATE OR REPLACE FUNCTION assign_tier_c_safe(p_user_id UUID, p_max_quota INT)
--- RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER AS $$ ... $$;
--- GRANT EXECUTE ON FUNCTION assign_tier_c_safe(UUID, INT) TO service_role;
--- (See migration_tier_c_rpc.sql for full implementation)
+
+CREATE TABLE public.special_collections (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  description text,
+  default_amount numeric NOT NULL DEFAULT 0.00,
+  due_date timestamp with time zone,
+  is_active boolean NOT NULL DEFAULT true,
+  allow_installments boolean NOT NULL DEFAULT false,
+  max_installments integer NOT NULL DEFAULT 1,
+  qr_url text,
+  created_by uuid REFERENCES public.users(id),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT special_collections_pkey PRIMARY KEY (id)
+);
+
+CREATE TABLE public.special_collection_items (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  collection_id uuid NOT NULL REFERENCES public.special_collections(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  amount numeric NOT NULL,
+  paid_amount numeric NOT NULL DEFAULT 0.00,
+  payment_mode text CHECK (payment_mode = ANY (ARRAY['full'::text, 'installment'::text])),
+  chosen_installments integer DEFAULT 1,
+  status text NOT NULL DEFAULT 'unpaid'::text CHECK (status = ANY (ARRAY['unpaid'::text, 'partial'::text, 'pending'::text, 'approved'::text, 'rejected'::text])),
+  note text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT special_collection_items_pkey PRIMARY KEY (id),
+  CONSTRAINT special_collection_items_user_collection_unique UNIQUE (collection_id, user_id)
+);
+
+CREATE TABLE public.special_collection_slips (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  item_id uuid NOT NULL REFERENCES public.special_collection_items(id) ON DELETE CASCADE,
+  installment_no integer NOT NULL DEFAULT 1,
+  amount numeric NOT NULL,
+  is_payoff boolean NOT NULL DEFAULT false,
+  slip_url text NOT NULL,
+  trans_ref text,
+  file_hash text,
+  status text NOT NULL DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text])),
+  verified_by_api boolean DEFAULT true,
+  verified_at timestamp with time zone,
+  verified_by uuid REFERENCES public.users(id),
+  rejection_reason text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT special_collection_slips_pkey PRIMARY KEY (id)
+);

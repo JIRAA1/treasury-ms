@@ -29,6 +29,9 @@ type AuditAction =
   | 'students_cleared'
   | 'audit_deleted'
   | 'audit_cleared'
+  | 'special_collection_created'
+  | 'special_slip_approved'
+  | 'special_slip_rejected'
 
 interface LogParams {
   actorId: string | null
