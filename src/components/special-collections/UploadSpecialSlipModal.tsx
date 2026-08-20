@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Upload, Sparkles, AlertCircle, CheckCircle2, CreditCard, ChevronRight } from 'lucide-react'
+import { X, Upload, Sparkles, AlertCircle, CheckCircle2, CreditCard, ChevronRight, QrCode as QrIcon, Download, Copy, Check } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
+import { generatePromptPayPayload } from '@/lib/promptpay'
 import type { SpecialCollectionItem } from '@/types'
 
 export default function UploadSpecialSlipModal({
@@ -9,11 +11,13 @@ export default function UploadSpecialSlipModal({
   onClose,
   item,
   onUploaded,
+  promptPayConfig,
 }: {
   isOpen: boolean
   onClose: () => void
   item: SpecialCollectionItem
   onUploaded: () => void
+  promptPayConfig?: { promptpay_id: string; promptpay_name: string }
 }) {
   const collection = item.collection
   const totalAmount = Number(item.amount || 0)
@@ -34,6 +38,8 @@ export default function UploadSpecialSlipModal({
   const [manualConfirm, setManualConfirm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const [showQrCode, setShowQrCode] = useState(true)
 
   // Calculate installment amount
   const effectiveInstallments = isFirstTime
@@ -45,6 +51,58 @@ export default function UploadSpecialSlipModal({
   const currentExpectedAmount = isFirstTime
     ? (selectedMode === 'full' ? remainingAmount : perInstallmentPrice)
     : (isPayoff ? remainingAmount : Math.min(perInstallmentPrice, remainingAmount))
+
+  const promptPayId = promptPayConfig?.promptpay_id || ''
+  const promptPayName = promptPayConfig?.promptpay_name || 'เหรัญญิกห้อง'
+  const qrPayload = promptPayId ? generatePromptPayPayload(promptPayId, currentExpectedAmount) : ''
+
+  const handleCopyPromptPay = () => {
+    if (!promptPayId) return
+    navigator.clipboard.writeText(promptPayId)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const downloadQR = () => {
+    const svg = document.getElementById('special-promptpay-qr')
+    if (!svg) return
+    
+    const svgData = new XMLSerializer().serializeToString(svg)
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    const img = new Image()
+    
+    img.onload = () => {
+      canvas.width = img.width + 40
+      canvas.height = img.height + 140
+      if (ctx) {
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        ctx.drawImage(img, 20, 20)
+        
+        ctx.fillStyle = '#0f172a'
+        ctx.font = 'bold 20px sans-serif'
+        ctx.textAlign = 'center'
+        ctx.fillText(promptPayName, canvas.width / 2, img.height + 60)
+        
+        ctx.fillStyle = '#8e8e93'
+        ctx.font = '14px sans-serif'
+        ctx.fillText(collection?.title || 'การเก็บเงินพิเศษ', canvas.width / 2, img.height + 85)
+        
+        ctx.fillStyle = '#065f46'
+        ctx.font = 'bold 24px sans-serif'
+        ctx.fillText(`฿${currentExpectedAmount.toLocaleString()}`, canvas.width / 2, img.height + 120)
+      }
+      
+      const pngFile = canvas.toDataURL('image/png')
+      const downloadLink = document.createElement('a')
+      downloadLink.download = `QR-${collection?.title || 'SpecialPayment'}.png`
+      downloadLink.href = pngFile
+      downloadLink.click()
+    }
+    
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)))
+  }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
@@ -105,7 +163,7 @@ export default function UploadSpecialSlipModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
-      <div className="relative w-full max-w-lg bg-white border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="relative w-full max-w-lg bg-white border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="px-5 py-4 border-b border-border flex items-center justify-between bg-background-tertiary">
           <div>
@@ -219,20 +277,92 @@ export default function UploadSpecialSlipModal({
             </div>
           )}
 
-          {/* Amount to Transfer Banner */}
-          <div className="p-3.5 rounded-xl bg-background-tertiary border border-border flex items-center justify-between">
-            <div className="space-y-0.5">
-              <span className="text-xs font-medium text-text-secondary">ยอดที่ต้องโอนในสลิปนี้:</span>
-              <div className="text-[10px] text-text-muted">
-                {selectedMode === 'installment' && !isPayoff && (isFirstTime || item.payment_mode === 'installment')
-                  ? `(ยอดผ่อนงวดที่ ${isFirstTime ? 1 : (item.slips?.filter(s => s.status === 'approved').length || 0) + 1} จากทั้งหมด ${effectiveInstallments} งวด)`
-                  : '(ยอดชำระเต็มจำนวน / ปิดยอด)'}
+          {/* PromptPay QR Code Section */}
+          {promptPayId ? (
+            <div className="rounded-2xl border-2 border-brand/20 bg-brand/[0.02] p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-brand/10 text-brand flex items-center justify-center">
+                    <QrIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-text-primary">สแกน PromptPay เพื่อจ่าย</span>
+                    <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold">ระบุยอดอัตโนมัติ</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowQrCode(!showQrCode)}
+                  className="text-[11px] font-semibold text-brand hover:underline"
+                >
+                  {showQrCode ? 'ย่อ QR' : 'แสดง QR'}
+                </button>
               </div>
+
+              {showQrCode && (
+                <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-4 rounded-xl border border-border">
+                  <div className="p-2.5 rounded-xl border border-border bg-white shadow-sm flex-shrink-0">
+                    <QRCodeSVG
+                      id="special-promptpay-qr"
+                      value={qrPayload}
+                      size={140}
+                      level="M"
+                      includeMargin={false}
+                    />
+                  </div>
+
+                  <div className="flex-1 space-y-2 text-center sm:text-left">
+                    <div>
+                      <div className="text-[10px] uppercase font-bold text-text-muted tracking-wider">บัญชีผู้รับ</div>
+                      <div className="text-xs font-bold text-text-primary">{promptPayName}</div>
+                      <div className="flex items-center justify-center sm:justify-start gap-1.5 mt-0.5">
+                        <span className="text-[11px] font-mono font-bold text-text-secondary">{promptPayId}</span>
+                        <button
+                          type="button"
+                          onClick={handleCopyPromptPay}
+                          className="p-1 text-text-muted hover:text-brand transition-colors rounded"
+                          title="คัดลอกเบอร์พร้อมเพย์"
+                        >
+                          {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-[10px] uppercase font-bold text-text-muted tracking-wider">ยอดเงินที่ต้องโอน</div>
+                      <div className="text-xl font-black text-brand tabular-nums">
+                        ฿{currentExpectedAmount.toLocaleString()}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={downloadQR}
+                      className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-background-secondary border border-border text-[11px] font-bold text-text-secondary hover:text-brand hover:border-brand/30 transition-all shadow-xs"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      บันทึกรูป QR Code
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-            <span className="text-2xl font-black text-brand tabular-nums">
-              ฿{currentExpectedAmount.toLocaleString()}
-            </span>
-          </div>
+          ) : (
+            /* Amount to Transfer Banner Fallback */
+            <div className="p-3.5 rounded-xl bg-background-tertiary border border-border flex items-center justify-between">
+              <div className="space-y-0.5">
+                <span className="text-xs font-medium text-text-secondary">ยอดที่ต้องโอนในสลิปนี้:</span>
+                <div className="text-[10px] text-text-muted">
+                  {selectedMode === 'installment' && !isPayoff && (isFirstTime || item.payment_mode === 'installment')
+                    ? `(ยอดผ่อนงวดที่ ${isFirstTime ? 1 : (item.slips?.filter(s => s.status === 'approved').length || 0) + 1} จากทั้งหมด ${effectiveInstallments} งวด)`
+                    : '(ยอดชำระเต็มจำนวน / ปิดยอด)'}
+                </div>
+              </div>
+              <span className="text-2xl font-black text-brand tabular-nums">
+                ฿{currentExpectedAmount.toLocaleString()}
+              </span>
+            </div>
+          )}
 
           {/* File Upload Box */}
           <div>

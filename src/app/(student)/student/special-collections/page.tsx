@@ -10,9 +10,11 @@ import {
   Calendar,
   Eye,
   X,
+  QrCode as QrIcon,
 } from 'lucide-react'
 import Topbar from '@/components/layout/Topbar'
 import UploadSpecialSlipModal from '@/components/special-collections/UploadSpecialSlipModal'
+import QrModal from '@/components/payments/QrModal'
 import type { SpecialCollectionItem } from '@/types'
 
 export default function StudentSpecialCollectionsPage() {
@@ -20,6 +22,11 @@ export default function StudentSpecialCollectionsPage() {
   const [loading, setLoading] = useState(true)
   const [selectedItem, setSelectedItem] = useState<SpecialCollectionItem | null>(null)
   const [viewingSlipsItem, setViewingSlipsItem] = useState<SpecialCollectionItem | null>(null)
+  const [qrModalItem, setQrModalItem] = useState<SpecialCollectionItem | null>(null)
+  const [promptPayConfig, setPromptPayConfig] = useState<{ promptpay_id: string; promptpay_name: string }>({
+    promptpay_id: '',
+    promptpay_name: '',
+  })
 
   const fetchItems = async () => {
     setLoading(true)
@@ -27,6 +34,9 @@ export default function StudentSpecialCollectionsPage() {
       // view=student ทำให้ admin ได้รับข้อมูล items เหมือนนักเรียนเพื่อ preview
       const res = await fetch('/api/special-collections?view=student')
       const data = await res.json()
+      if (data.promptPayConfig) {
+        setPromptPayConfig(data.promptPayConfig)
+      }
       if (data.items) {
         if (data.isAdminPreview) {
           // Admin view: deduplicate โดย collection_id แสดง 1 การ์ดต่อโครงการเหมือนมุมมองนักศึกษา
@@ -159,7 +169,7 @@ export default function StudentSpecialCollectionsPage() {
                     <span />
                   )}
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap justify-end">
                     {slips.length > 0 && (
                       <button
                         onClick={() => setViewingSlipsItem(item)}
@@ -167,6 +177,16 @@ export default function StudentSpecialCollectionsPage() {
                       >
                         <Eye className="w-3.5 h-3.5" />
                         ดูสลิปที่ส่ง ({slips.length})
+                      </button>
+                    )}
+
+                    {item.status !== 'approved' && remainingAmount > 0 && promptPayConfig.promptpay_id && (
+                      <button
+                        onClick={() => setQrModalItem(item)}
+                        className="px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-700 hover:bg-emerald-100 transition-all flex items-center gap-1.5 shadow-xs"
+                      >
+                        <QrIcon className="w-3.5 h-3.5" />
+                        สแกน QR
                       </button>
                     )}
 
@@ -194,6 +214,23 @@ export default function StudentSpecialCollectionsPage() {
           onClose={() => setSelectedItem(null)}
           item={selectedItem}
           onUploaded={fetchItems}
+          promptPayConfig={promptPayConfig}
+        />
+      )}
+
+      {/* Quick QR Code Modal */}
+      {qrModalItem && promptPayConfig.promptpay_id && (
+        <QrModal
+          isOpen={!!qrModalItem}
+          onClose={() => setQrModalItem(null)}
+          promptPayId={promptPayConfig.promptpay_id}
+          promptPayName={promptPayConfig.promptpay_name || 'เหรัญญิก'}
+          title={qrModalItem.collection?.title || 'การเก็บเงินพิเศษ'}
+          amount={
+            qrModalItem.payment_mode === 'installment'
+              ? Math.ceil(Number(qrModalItem.amount) / (qrModalItem.chosen_installments || 2))
+              : Math.max(0, Number(qrModalItem.amount) - Number(qrModalItem.paid_amount || 0))
+          }
         />
       )}
 

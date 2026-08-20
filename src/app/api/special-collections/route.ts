@@ -77,7 +77,18 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ collections: processed })
+    // Fetch PromptPay settings
+    const { data: settings } = await adminClient
+      .from('system_settings')
+      .select('key, value')
+      .in('key', ['promptpay_id', 'promptpay_name'])
+
+    const promptPayConfig = {
+      promptpay_id: settings?.find((s: any) => s.key === 'promptpay_id')?.value || '',
+      promptpay_name: settings?.find((s: any) => s.key === 'promptpay_name')?.value || '',
+    }
+
+    return NextResponse.json({ collections: processed, promptPayConfig })
   } else {
     // Student View (also used for admin preview via ?view=student)
     // Admin preview sees ALL items; normal student sees only their own
@@ -91,17 +102,25 @@ export async function GET(request: NextRequest) {
       `)
       .order('created_at', { ascending: false })
 
-    const { data: items, error } = await (
-      forceStudentView
-        ? baseQuery
-        : baseQuery.eq('user_id', profile.id)
-    )
+    const [itemsResult, settingsResult] = await Promise.all([
+      forceStudentView ? baseQuery : baseQuery.eq('user_id', profile.id),
+      adminClient.from('system_settings').select('key, value').in('key', ['promptpay_id', 'promptpay_name']),
+    ])
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (itemsResult.error) {
+      return NextResponse.json({ error: itemsResult.error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ items, isAdminPreview: forceStudentView })
+    const promptPayConfig = {
+      promptpay_id: settingsResult.data?.find((s: any) => s.key === 'promptpay_id')?.value || '',
+      promptpay_name: settingsResult.data?.find((s: any) => s.key === 'promptpay_name')?.value || '',
+    }
+
+    return NextResponse.json({ 
+      items: itemsResult.data, 
+      isAdminPreview: forceStudentView,
+      promptPayConfig
+    })
   }
 }
 
