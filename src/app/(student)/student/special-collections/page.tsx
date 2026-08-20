@@ -10,7 +10,6 @@ import {
   Calendar,
   Eye,
   X,
-  Shield,
 } from 'lucide-react'
 import Topbar from '@/components/layout/Topbar'
 import UploadSpecialSlipModal from '@/components/special-collections/UploadSpecialSlipModal'
@@ -19,7 +18,6 @@ import type { SpecialCollectionItem } from '@/types'
 export default function StudentSpecialCollectionsPage() {
   const [items, setItems] = useState<SpecialCollectionItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [isAdminPreview, setIsAdminPreview] = useState(false)
   const [selectedItem, setSelectedItem] = useState<SpecialCollectionItem | null>(null)
   const [viewingSlipsItem, setViewingSlipsItem] = useState<SpecialCollectionItem | null>(null)
 
@@ -31,9 +29,7 @@ export default function StudentSpecialCollectionsPage() {
       const data = await res.json()
       if (data.items) {
         if (data.isAdminPreview) {
-          setIsAdminPreview(true)
-          // Admin preview: deduplicate โดย collection_id แสดง 1 การ์ดต่อโครงการ
-          // ใช้ items ตัวแรกของแต่ละ collection เป็น representative
+          // Admin view: deduplicate โดย collection_id แสดง 1 การ์ดต่อโครงการเหมือนมุมมองนักศึกษา
           const seen = new Set<string>()
           const deduplicated = (data.items as SpecialCollectionItem[]).filter((item) => {
             const colId = item.collection_id || (item.collection as any)?.id
@@ -61,16 +57,6 @@ export default function StudentSpecialCollectionsPage() {
     <div>
       <Topbar title="การเก็บเงินพิเศษ" subtitle="ค่าเสื้อ, ค่าอุปกรณ์ และค่ากิจกรรมพิเศษ" />
       <div className="p-3 sm:p-4 md:p-6 space-y-6">
-
-      {/* Admin Preview Banner */}
-      {isAdminPreview && (
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800">
-          <Shield className="w-4 h-4 flex-shrink-0 text-amber-600" />
-          <div className="text-xs font-semibold">
-            <span className="font-black">Admin Preview Mode</span> — กำลังดูในมุมมองนักเรียน (ปุ่มส่งสลิปถูกซ่อนสำหรับแอดมิน)
-          </div>
-        </div>
-      )}
 
       {/* Main List */}
       {loading ? (
@@ -184,7 +170,7 @@ export default function StudentSpecialCollectionsPage() {
                       </button>
                     )}
 
-                    {!isAdminPreview && item.status !== 'approved' && remainingAmount > 0 && (
+                    {item.status !== 'approved' && remainingAmount > 0 && (
                       <button
                         onClick={() => setSelectedItem(item)}
                         className="px-4 py-2 rounded-xl bg-brand text-white font-bold text-xs hover:bg-brand-hover transition-all flex items-center gap-1.5 shadow-sm press-down"
