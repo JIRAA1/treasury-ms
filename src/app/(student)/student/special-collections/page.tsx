@@ -30,9 +30,21 @@ export default function StudentSpecialCollectionsPage() {
       const res = await fetch('/api/special-collections?view=student')
       const data = await res.json()
       if (data.items) {
-        setItems(data.items)
-        // ถ้า API ส่ง isAdminPreview กลับมา แสดงว่าเป็น admin กำลัง preview
-        if (data.isAdminPreview) setIsAdminPreview(true)
+        if (data.isAdminPreview) {
+          setIsAdminPreview(true)
+          // Admin preview: deduplicate โดย collection_id แสดง 1 การ์ดต่อโครงการ
+          // ใช้ items ตัวแรกของแต่ละ collection เป็น representative
+          const seen = new Set<string>()
+          const deduplicated = (data.items as SpecialCollectionItem[]).filter((item) => {
+            const colId = item.collection_id || (item.collection as any)?.id
+            if (!colId || seen.has(colId)) return false
+            seen.add(colId)
+            return true
+          })
+          setItems(deduplicated)
+        } else {
+          setItems(data.items)
+        }
       }
     } catch (err) {
       console.error('Failed to fetch student special collections:', err)
