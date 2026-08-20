@@ -23,7 +23,11 @@ export async function GET(request: NextRequest) {
 
   const isAdmin = profile.role === 'admin' || profile.role === 'treasurer'
 
-  if (isAdmin) {
+  // view=student allows admin to preview the student-facing view (all items across all collections)
+  const viewParam = request.nextUrl.searchParams.get('view')
+  const forceStudentView = isAdmin && viewParam === 'student'
+
+  if (isAdmin && !forceStudentView) {
     // Admin View: Fetch all special collections with items and slips overview
     const { data: collections, error } = await adminClient
       .from('special_collections')
@@ -75,22 +79,29 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ collections: processed })
   } else {
-    // Student View: Fetch active collections assigned specifically to this student
-    const { data: items, error } = await adminClient
+    // Student View (also used for admin preview via ?view=student)
+    // Admin preview sees ALL items; normal student sees only their own
+    const baseQuery = adminClient
       .from('special_collection_items')
       .select(`
         *,
         collection:special_collections(*),
-        slips:special_collection_slips(*)
+        slips:special_collection_slips(*),
+        user:users(id, student_id, fullname)
       `)
-      .eq('user_id', profile.id)
       .order('created_at', { ascending: false })
+
+    const { data: items, error } = await (
+      forceStudentView
+        ? baseQuery
+        : baseQuery.eq('user_id', profile.id)
+    )
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ items })
+    return NextResponse.json({ items, isAdminPreview: forceStudentView })
   }
 }
 
