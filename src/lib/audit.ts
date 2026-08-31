@@ -32,6 +32,7 @@ type AuditAction =
   | 'special_collection_created'
   | 'special_slip_approved'
   | 'special_slip_rejected'
+  | 'payment_amount_edited'
 
 interface LogParams {
   actorId: string | null

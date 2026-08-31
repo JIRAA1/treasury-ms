@@ -39,6 +39,11 @@ export default function AdminPaymentsPage() {
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null)
   const [rejectReason, setRejectReason] = useState('')
   const [page, setPage] = useState(1)
+  // ── Edit Amount State ──
+  const [editingAmount, setEditingAmount] = useState(false)
+  const [editAmountValue, setEditAmountValue] = useState('')
+  const [editAmountNote, setEditAmountNote] = useState('')
+  const [editAmountLoading, setEditAmountLoading] = useState(false)
   const PER_PAGE = 20
 
   const fetchPayments = useCallback(async () => {
@@ -175,6 +180,45 @@ export default function AdminPaymentsPage() {
     })
   }
 
+  // ── Edit Amount ───────────────────────────────────────────────────────────
+  const doEditAmount = async () => {
+    if (!selectedPayment) return
+    const parsed = parseFloat(editAmountValue)
+    if (isNaN(parsed) || parsed <= 0) {
+      toast.error('กรุณาระบุยอดที่ถูกต้อง')
+      return
+    }
+    setEditAmountLoading(true)
+    try {
+      const res = await fetch('/api/payments/verify', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedPayment.id,
+          action: 'edit_amount',
+          new_amount: parsed,
+          edit_note: editAmountNote.trim() || undefined,
+        }),
+      })
+      if (res.ok) {
+        toast.success(`แก้ไขยอดเป็น ฿${parsed.toLocaleString()} เรียบร้อย`)
+        setEditingAmount(false)
+        setEditAmountValue('')
+        setEditAmountNote('')
+        // อัปเดตรายการใน detail sheet และ table
+        setSelectedPayment(prev => prev ? { ...prev, amount: parsed } : null)
+        fetchPayments()
+      } else {
+        const json = await res.json()
+        toast.error(json.error ?? 'แก้ไขยอดไม่สำเร็จ')
+      }
+    } catch {
+      toast.error('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้')
+    } finally {
+      setEditAmountLoading(false)
+    }
+  }
+
   return (
     <div className="flex h-full">
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -240,7 +284,7 @@ export default function AdminPaymentsPage() {
               ) : payments.map((p) => (
                 <tr
                   key={p.id}
-                  onClick={() => setSelectedPayment(p)}
+                  onClick={() => { setSelectedPayment(p); setEditingAmount(false); setEditAmountValue(''); setEditAmountNote('') }}
                   className={`hover:bg-background-secondary cursor-pointer transition-colors ${p.status === 'pending' ? 'border-l-2 border-l-amber-300' : ''}`}
                 >
                   <td className="px-4 py-3">
@@ -390,6 +434,59 @@ export default function AdminPaymentsPage() {
                 <div className="text-text-primary">{selectedPayment.note}</div>
               </div>
             )}
+
+            {/* ── Edit Amount Section ── */}
+            <div className="border border-border rounded-xl overflow-hidden">
+              <button
+                onClick={() => {
+                  setEditingAmount(v => !v)
+                  if (!editingAmount) {
+                    setEditAmountValue(String(selectedPayment.amount))
+                    setEditAmountNote('')
+                  }
+                }}
+                className="w-full flex items-center justify-between px-4 py-3 bg-background-tertiary/50 hover:bg-background-muted text-[12.5px] font-semibold text-text-primary transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <Banknote className="w-4 h-4 text-text-muted" />
+                  แก้ไขยอดชำระ
+                </span>
+                <span className="text-[11px] text-text-muted">{editingAmount ? '✕ ยกเลิก' : '→ แก้ไข'}</span>
+              </button>
+              {editingAmount && (
+                <div className="p-4 space-y-3 border-t border-border">
+                  <div>
+                    <label className="block text-[11.5px] font-medium text-text-secondary mb-1">ยอดเงินใหม่ (บาท)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="0.01"
+                      value={editAmountValue}
+                      onChange={e => setEditAmountValue(e.target.value)}
+                      placeholder={String(selectedPayment.amount)}
+                      className="w-full border border-border rounded-lg px-3 py-2 text-[13px] bg-background outline-none focus:ring-2 focus:ring-brand font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11.5px] font-medium text-text-secondary mb-1">หมายเหตุ (ไม่บังคับ)</label>
+                    <input
+                      type="text"
+                      value={editAmountNote}
+                      onChange={e => setEditAmountNote(e.target.value)}
+                      placeholder="เช่น จ่ายเต็มยอด แก้ไขยอดผิด..."                      className="w-full border border-border rounded-lg px-3 py-2 text-[12.5px] bg-background outline-none focus:ring-2 focus:ring-brand"
+                    />
+                  </div>
+                  <button
+                    onClick={doEditAmount}
+                    disabled={editAmountLoading || !editAmountValue}
+                    className="w-full bg-brand text-white text-[13px] font-semibold py-2.5 rounded-lg hover:bg-brand-hover transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
+                  >
+                    {editAmountLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    บันทึกยอดใหม่
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Reject Reason */}
             {selectedPayment.status === 'pending' && (

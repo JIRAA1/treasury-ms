@@ -133,6 +133,16 @@ export default function UploadClient({ profile, periods, payments, sysSettings, 
     return payableCycles.length > 1
   })
 
+  // toggle ระหว่างโหมดจ่ายรวม (accumulated) กับจ่ายทีละงวด (single)
+  // เมื่อสลับกลับเป็น single-period ให้ reset selectedPeriodId ไปที่งวดแรกที่ชำระได้
+  const handleToggleAccumulated = () => {
+    const next = !payAccumulated
+    if (!next && payableCycles.length > 0) {
+      setSelectedPeriodId(payableCycles[0].id)
+    }
+    setPayAccumulated(next)
+  }
+
   const selectedCycle = unpaidCycles.find(c => c.id === selectedPeriodId)
   const selectedWindowStatus = selectedCycle ? getWindowStatus(selectedCycle) : null
   const selectedIsUnpaidOrRejected = selectedCycle?.status === 'unpaid' || selectedCycle?.status === 'rejected'
@@ -322,6 +332,11 @@ export default function UploadClient({ profile, periods, payments, sysSettings, 
                       เปลี่ยนงวด
                     </button>
                   )}
+                  {payableCycles.length > 1 && payAccumulated && (
+                    <div className="text-[10px] text-amber-600 font-black bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
+                      รวม {payableCycles.length} งวด
+                    </div>
+                  )}
                 </div>
 
                 {/* Accumulated Banner */}
@@ -347,27 +362,21 @@ export default function UploadClient({ profile, periods, payments, sysSettings, 
                         <div className="text-[11px] text-text-muted">
                           {payAccumulated
                             ? `โอน ฿${totalAccumulatedAmount.toLocaleString()} ในสลิปเดียวเพื่อเคลียร์ยอดค้างทั้งหมด (${payableCycles.map(c => c.label).join(', ')})`
-                            : `ทำการโอนเงิน ฿${totalAccumulatedAmount.toLocaleString()} เพียงครั้งเดียวเพื่อเคลียร์ยอดค้างทั้ง ${payableCycles.length} งวดพร้อมกัน`
+                            : `จ่ายทีละงวด — ยอดที่ต้องโอนสำหรับงวดที่เลือกคือ ฿${selectedCycle?.amount.toLocaleString()} (หรือกดเปลี่ยนงวดเพื่อเลือกงวดอื่น)`
                           }
                         </div>
                       </div>
-                      {payableCycles.length > 1 ? (
-                        <div className="flex-shrink-0 px-2.5 py-1.5 bg-red-500 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-sm select-none">
-                          จำเป็นต้องจ่ายรวม
-                        </div>
-                      ) : (
-                        <button
-                          id="btn-toggle-accumulated"
-                          onClick={() => setPayAccumulated(v => !v)}
-                          className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-[11.5px] font-bold transition-all duration-200 ${
-                            payAccumulated
-                              ? 'bg-amber-500 text-white hover:bg-amber-600'
-                              : 'bg-brand text-white hover:bg-brand-hover'
-                          }`}
-                        >
-                          {payAccumulated ? 'ยกเลิก' : 'จ่ายรวม'}
-                        </button>
-                      )}
+                      <button
+                        id="btn-toggle-accumulated"
+                        onClick={handleToggleAccumulated}
+                        className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-[11.5px] font-bold transition-all duration-200 ${
+                          payAccumulated
+                            ? 'bg-amber-500 text-white hover:bg-amber-600'
+                            : 'bg-brand text-white hover:bg-brand-hover'
+                        }`}
+                      >
+                        {payAccumulated ? 'ยกเลิก (จ่ายทีละงวด)' : 'จ่ายรวม'}
+                      </button>
                     </div>
                     {payAccumulated && (
                       <div className="mt-3 pt-3 border-t border-amber-200 dark:border-amber-800/50 space-y-1.5">

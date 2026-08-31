@@ -18,10 +18,12 @@ export async function POST(request: NextRequest) {
 
   interface VerifyBody {
     id: string
-    action: 'approve' | 'reject' | 'notify_only'
+    action: 'approve' | 'reject' | 'notify_only' | 'edit_amount'
     status?: string
     type?: 'cash_success' | 'manual_change'
     reason?: string // Custom rejection reason from admin
+    new_amount?: number // ใช้กับ edit_amount
+    edit_note?: string  // หมายเหตุการแก้ไข
   }
   let body: VerifyBody = { id: '', action: 'approve' }
   const contentType = request.headers.get('content-type') || ''
@@ -89,8 +91,38 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── edit_amount: แก้ไขยอดเงินโดย admin ──────────────────────────────────
+  const { new_amount, edit_note } = body
+  if (action === 'edit_amount') {
+    if (!new_amount || new_amount <= 0) {
+      return NextResponse.json({ error: 'ยอดเงินต้องมากกว่า 0' }, { status: 400 })
+    }
+    const oldAmount = payment.amount
+    const { error: updateErr } = await adminClient
+      .from('payments')
+      .update({ amount: new_amount })
+      .eq('id', id)
+    if (updateErr) return NextResponse.json({ error: 'แก้ไขยอดไม่สำเร็จ' }, { status: 500 })
 
-  const student = payment.user as any
+    // audit log
+    await logAction({
+      actorId: (profile?.['id'] as string) || user.id,
+      action: 'payment_amount_edited',
+      targetId: id,
+      newValue: { old_amount: oldAmount, new_amount, note: edit_note || '' },
+    })
+
+    // in-app notification
+    await adminClient.from('notifications').insert({
+      user_id: payment.user_id,
+      title: 'ยอดชำระถูกแก้ไข',
+      message: `เหรัญญิกแก้ไขยอดชำระของคุณจาก ฿${oldAmount} เป็น ฿${new_amount}${edit_note ? ` (เหตุผล: ${edit_note})` : ''}`,
+      type: 'info',
+    })
+
+    return NextResponse.json({ success: true, old_amount: oldAmount, new_amount })
+  }
+
   const cycleTitle = (payment as any).period?.label || `งวดที่ ${(payment as any).period?.period_order || '—'}`
   const finalStatus = action === 'notify_only' ? (status || payment.status) : (action === 'approve' ? 'approved' : 'rejected')
   const thaiDate = new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
