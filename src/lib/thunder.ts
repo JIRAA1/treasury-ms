@@ -100,6 +100,7 @@ export async function verifySlipByPayload(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000),
     })
 
     // Detect quota exceeded
@@ -118,7 +119,6 @@ export async function verifySlipByPayload(
     }
 
     const result = (await response.json()) as ThunderResponse
-    console.log('[Thunder V2 Payload] Result:', JSON.stringify(result))
 
     // Detect quota errors and service expiry from response body
     const errorCode = result.error?.code?.toLowerCase() ?? ''
@@ -168,7 +168,7 @@ export async function verifySlipByPayload(
 
     return {
       amount: data.amountInSlip ?? null,
-      trans_ref: data.rawSlip?.transRef ?? null,
+      trans_ref: data.rawSlip?.transRef ?? data.transRef ?? null,
       date: data.rawSlip?.date ?? data.rawSlip?.transDate ?? null,
       bank: data.rawSlip?.sender?.bank?.id ?? data.rawSlip?.sendingBank ?? null,
       is_valid: result.success ?? false,
@@ -206,6 +206,7 @@ export async function verifySlip(file: File): Promise<ThunderResult> {
         Authorization: `Bearer ${process.env.THUNDER_API_KEY}`,
       },
       body: formData,
+      signal: AbortSignal.timeout(15000),
     })
 
     // Detect quota exceeded (429 Too Many Requests or quota-related error codes)
@@ -224,7 +225,6 @@ export async function verifySlip(file: File): Promise<ThunderResult> {
     }
 
     const result = (await response.json()) as ThunderResponse
-    console.log('[Thunder V2] Result:', JSON.stringify(result))
 
     // Also detect quota errors and service expiry from response body
     const errorCode = result.error?.code?.toLowerCase() ?? ''

@@ -1,3 +1,5 @@
+import { readAll } from '@/lib/read-all'
+import { isUuid } from '@/lib/payment-service'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { resolveAdminProfile } from '@/lib/supabase/resolve-profile'
@@ -15,6 +17,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { searchParams } = new URL(request.url)
+  const semesterId = searchParams.get('semester_id')
+  if (semesterId && !isUuid(semesterId)) return NextResponse.json({ error: 'Invalid semester' }, { status: 400 })
   const type = searchParams.get('type') // 'income' | 'audit' | 'credits' | default (students)
 
 
@@ -22,9 +26,21 @@ export async function GET(request: NextRequest) {
   let filename: string
 
   if (type === 'income') {
-    const { data: payments } = await adminClient.from('payments').select('*, user:user_id(fullname, student_id)').eq('status', 'approved')
-    const { data: incomes } = await adminClient.from('incomes').select('*, approver:approved_by(fullname)').not('approved_by', 'is', null)
-    const { data: settings } = await adminClient.from('periods').select('*').order('period_order', { ascending: true })
+    const { data: payments } = await readAll((from, to) => {
+      let query = adminClient.from('payments').select('*, user:user_id(fullname, student_id), period:period_id!inner(semester_id)').eq('status', 'approved')
+      if (semesterId) query = query.eq('period.semester_id', semesterId)
+      return query.order('id').range(from, to)
+    })
+    const { data: incomes } = await readAll((from, to) => {
+      let query = adminClient.from('incomes').select('*, approver:approved_by(fullname)').not('approved_by', 'is', null)
+      if (semesterId) query = query.eq('semester_id', semesterId)
+      return query.order('id').range(from, to)
+    })
+    const { data: settings } = await readAll((from, to) => {
+      let query = adminClient.from('periods').select('*')
+      if (semesterId) query = query.eq('semester_id', semesterId)
+      return query.order('period_order').order('id').range(from, to)
+    })
     
     const combinedList: any[] = []
     
@@ -32,7 +48,7 @@ export async function GET(request: NextRequest) {
       const u = p.user as any
       const s = settings?.find(x => x.id === p.period_id)
       combinedList.push({
-        created_at: new Date(p.created_at),
+        created_at: new Date(p.verified_at || p.created_at),
         type: 'เงินค่าห้องนักศึกษา',
         title: s?.label || `งวดที่ ${p.period_id}`,
         payer: u ? `${u.fullname} (${u.student_id})` : 'ไม่ระบุตัวตน',
@@ -111,7 +127,7 @@ export async function GET(request: NextRequest) {
 
   } else if (type === 'credits') {
     // Credit Report — รายชื่อนักศึกษาที่มียอดค้างชำระ
-    const { data: credits } = await adminClient
+    let creditsQuery = adminClient
       .from('payment_credits')
       .select(`
         id,
@@ -121,10 +137,13 @@ export async function GET(request: NextRequest) {
         created_at,
         repaid_at,
         user:user_id ( fullname, student_id, tier ),
-        period_info:period_id ( label, deadline )
+        period_info:period_id!inner ( label, deadline, semester_id )
       `)
       .order('status', { ascending: true })  // pending ก่อน, repaid/forgiven ทีหลัง
       .order('created_at', { ascending: false })
+
+    if (semesterId) creditsQuery = creditsQuery.eq('period_info.semester_id', semesterId)
+    const { data: credits } = await readAll((from, to) => creditsQuery.order('id').range(from, to))
 
     const statusLabel: Record<string, string> = {
       pending: 'ค้างชำระ',
@@ -163,8 +182,16 @@ export async function GET(request: NextRequest) {
   } else {
     // Student summary
     const { data: students } = await adminClient.from('users').select('id, fullname, student_id').eq('role', 'student').order('student_id')
-    const { data: payments } = await adminClient.from('payments').select('*, user:user_id(fullname, student_id)').eq('status', 'approved')
-    const { data: settings } = await adminClient.from('periods').select('*').order('period_order', { ascending: true })
+    const { data: payments } = await readAll((from, to) => {
+      let query = adminClient.from('payments').select('*, user:user_id(fullname, student_id), period:period_id!inner(semester_id)').eq('status', 'approved')
+      if (semesterId) query = query.eq('period.semester_id', semesterId)
+      return query.order('id').range(from, to)
+    })
+    const { data: settings } = await readAll((from, to) => {
+      let query = adminClient.from('periods').select('*')
+      if (semesterId) query = query.eq('semester_id', semesterId)
+      return query.order('period_order').order('id').range(from, to)
+    })
 
     const data = (students || []).map((student) => {
       const row: any = {

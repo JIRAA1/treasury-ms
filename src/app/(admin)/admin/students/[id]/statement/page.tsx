@@ -1,3 +1,4 @@
+import { tierBaseAmount, roundMoney } from '@/lib/money'
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -96,9 +97,8 @@ export default async function StudentStatementPage({ params }: { params: Promise
     const hasPendingCredit = credits?.some(c => c.period_id === p.id && c.status === 'pending') ?? false
     const fine = payment?.status === 'approved' ? 0 : calculateLateFine(p, now, hasPendingCredit)
     const standardAmount = tierAmounts.B || 50
-    const ratio = tierAmount / standardAmount
-    const expectedBaseAmount = p.amount * ratio
-    const expectedAmount = expectedBaseAmount + fine
+    const expectedBaseAmount = tierBaseAmount(p.amount, tierAmount, standardAmount)
+    const expectedAmount = roundMoney(expectedBaseAmount + fine)
     const status = payment?.status === 'approved' ? 'paid'
       : payment?.status === 'pending' ? 'pending'
       : payment?.status === 'rejected' ? 'rejected'

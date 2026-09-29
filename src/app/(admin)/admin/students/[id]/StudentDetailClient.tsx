@@ -106,7 +106,7 @@ export default function StudentDetailClient({ student, periodStatuses, actorRole
           const res = await fetch('/api/payments/verify', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: ps.payment!.id, action: newStatus === 'approved' ? 'approve' : 'reject' }),
+            body: JSON.stringify({ id: ps.payment!.id, action: newStatus === 'approved' ? 'approve' : newStatus === 'pending' ? 'pending' : 'reject' }),
           })
           if (!res.ok) throw new Error((await res.json()).error)
           toast.success(`อัปเดตสถานะเป็น "${label}" เรียบร้อย`)

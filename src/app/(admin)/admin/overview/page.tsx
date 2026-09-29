@@ -1,3 +1,6 @@
+import { recentThaiMonths, thaiMonthKey } from '@/lib/report-dates'
+import { readAll } from '@/lib/read-all'
+import { sumMoney, tierBaseAmount } from '@/lib/money'
 import { createAdminClient } from '@/lib/supabase/admin'
 import Topbar from '@/components/layout/Topbar'
 import KpiCard from '@/components/shared/KpiCard'
@@ -37,11 +40,11 @@ export default async function AdminOverviewPage() {
     supabase.rpc('get_treasury_balance'),
     supabase.from('payments').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
     supabase.from('audit_logs').select('*, actor:actor_id(fullname)').order('created_at', { ascending: false }).limit(10),
-    supabase.from('expenses').select('amount').not('approved_by', 'is', null)
-      .gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
+    readAll((from, to) => supabase.from('expenses').select('amount').not('approved_by', 'is', null)
+      .gte('created_at', recentThaiMonths(new Date(), 1)[0].start).order('id').range(from, to)),
     supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student'),
-    supabase.from('users').select('tier').eq('role', 'student'),
-    supabase.from('payment_credits').select('amount').eq('status', 'pending'),
+    readAll((from, to) => supabase.from('users').select('tier').eq('role', 'student').order('id').range(from, to)),
+    readAll((from, to) => supabase.from('payment_credits').select('amount').eq('status', 'pending').order('id').range(from, to)),
     supabase.from('system_settings').select('key, value').in('key', ['reserve_fund_monthly_target', 'tier_c_max_quota', 'tier_a_amount', 'tier_b_amount', 'tier_c_amount']),
   ])
 
@@ -79,30 +82,20 @@ export default async function AdminOverviewPage() {
     C: parseFloat(sysSettings?.find((s: { key: string; value: string }) => s.key === 'tier_c_amount')?.value || '30'),
   }
   const standardAmount = tierAmounts.B || 50
-  const expectedPerPeriodBase = 
-    (tierBreakdown.A * (tierAmounts.A / standardAmount)) +
-    (tierBreakdown.B * (tierAmounts.B / standardAmount)) +
-    (tierBreakdown.C * (tierAmounts.C / standardAmount))
 
-  const expectedActualData = await Promise.all(
-    [...(recentPeriods ?? [])].reverse().map(async (p) => {
-      const expected = p.amount * expectedPerPeriodBase;
-      const { data: paymentsForPeriod } = await supabase
-        .from('payments')
-        .select('amount')
-        .eq('period_id', p.id)
-        .eq('status', 'approved')
-      const actual = (paymentsForPeriod ?? []).reduce((sum, curr) => sum + curr.amount, 0)
-      return { label: p.label, expected, actual }
-    })
-  )
-
-  // Calculate Payment Rate by Tier
-  const { data: activeSemesterPayments } = await supabase
-    .from('payments')
-    .select('user_id, status, user:user_id(tier)')
-    .in('period_id', recentPeriods?.map(p => p.id) ?? [])
-    .eq('status', 'approved')
+  const { data: activeSemesterPayments } = await readAll((from, to) => supabase
+    .from('payments').select('id, period_id, amount, user_id, status, user:user_id(tier)')
+    .in('period_id', recentPeriods?.map(p => p.id) ?? []).eq('status', 'approved')
+    .order('id').range(from, to))
+  const expectedActualData = [...(recentPeriods ?? [])].reverse().map(p => ({
+    label: p.label,
+    expected: sumMoney([
+      tierBreakdown.A * tierBaseAmount(p.amount, tierAmounts.A, standardAmount),
+      tierBreakdown.B * tierBaseAmount(p.amount, tierAmounts.B, standardAmount),
+      tierBreakdown.C * tierBaseAmount(p.amount, tierAmounts.C, standardAmount),
+    ]),
+    actual: sumMoney(activeSemesterPayments.filter(payment => payment.period_id === p.id).map(payment => payment.amount)),
+  }))
 
   const paidCounts = { A: 0, B: 0, C: 0 }
   for (const p of activeSemesterPayments ?? []) {
@@ -120,10 +113,8 @@ export default async function AdminOverviewPage() {
   const monthlyExpenseTotal = (monthExpenses ?? []).reduce((s, e) => s + e.amount, 0)
 
   // ── Chart data: Expense breakdown by category ──────────────────────────
-  const { data: allExpenses } = await supabase
-    .from('expenses')
-    .select('amount, category')
-    .not('approved_by', 'is', null)
+  const { data: allExpenses } = await readAll((from, to) => supabase
+    .from('expenses').select('amount, category').not('approved_by', 'is', null).order('id').range(from, to))
 
   const EXPENSE_CATS: ExpenseCategory[] = ['activity', 'supplies', 'food', 'transport', 'other']
   const categoryTotals = EXPENSE_CATS.map((cat) => ({
@@ -133,30 +124,16 @@ export default async function AdminOverviewPage() {
   const expenseTotalAll = categoryTotals.reduce((s, c) => s + c.amount, 0)
 
   // ── Chart data: Monthly cash flow (last 6 months) ──────────────────────
-  const sixMonthsAgo = new Date()
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5)
-  sixMonthsAgo.setDate(1)
-  sixMonthsAgo.setHours(0, 0, 0, 0)
-
+  const months = recentThaiMonths()
+  const since = months[0].start
   const [{ data: monthPayments }, { data: monthIncomes }, { data: monthExpensesAll }] = await Promise.all([
-    supabase.from('payments').select('amount, verified_at, created_at').eq('status', 'approved').gte('created_at', sixMonthsAgo.toISOString()),
-    supabase.from('incomes').select('amount, created_at').not('approved_by', 'is', null).gte('created_at', sixMonthsAgo.toISOString()),
-    supabase.from('expenses').select('amount, created_at').not('approved_by', 'is', null).gte('created_at', sixMonthsAgo.toISOString()),
+    readAll((from, to) => supabase.from('payments').select('amount, verified_at, created_at').eq('status', 'approved')
+      .or(`verified_at.gte.${since},and(verified_at.is.null,created_at.gte.${since})`).order('id').range(from, to)),
+    readAll((from, to) => supabase.from('incomes').select('amount, created_at').not('approved_by', 'is', null).gte('created_at', since).order('id').range(from, to)),
+    readAll((from, to) => supabase.from('expenses').select('amount, created_at').not('approved_by', 'is', null).gte('created_at', since).order('id').range(from, to)),
   ])
-
-  const thaiShortMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
-  const monthlyTrend = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date()
-    d.setMonth(d.getMonth() - (5 - i))
-    const y = d.getFullYear()
-    const m = d.getMonth()
-    const label = `${thaiShortMonths[m]} ${String(y + 543).slice(-2)}`
-
-    const matchMonth = (dateStr: string) => {
-      const dt = new Date(dateStr)
-      return dt.getFullYear() === y && dt.getMonth() === m
-    }
-
+  const monthlyTrend = months.map(({ key, label }) => {
+    const matchMonth = (dateStr: string) => thaiMonthKey(dateStr) === key
     const income = [
       ...(monthPayments ?? []).filter((p: any) => matchMonth(p.verified_at || p.created_at)).map((p: any) => p.amount),
       ...(monthIncomes ?? []).filter((inc: any) => matchMonth(inc.created_at)).map((inc: any) => inc.amount),

@@ -1,4 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
+import { readAll } from '@/lib/read-all'
+import { sumMoney, tierBaseAmount } from '@/lib/money'
 import { createAdminClient } from '@/lib/supabase/admin'
 import Topbar from '@/components/layout/Topbar'
 import KpiCard from '@/components/shared/KpiCard'
@@ -33,23 +34,27 @@ export default async function AdminReportsPage({
     { data: expenses },
     { data: incomes },
     { data: periods },
-    { data: sysSettings }
+    { data: sysSettings },
+    { count: unassignedIncomeCount },
+    { count: unassignedExpenseCount }
   ] = await Promise.all([
-    adminClient.from('users').select('id, fullname, student_id, tier').eq('role', 'student'),
-    adminClient.from('payments').select('id, user_id, period_id, amount, status'),
-    adminClient.from('expenses').select('id, title, amount, approved_by, created_at'),
-    adminClient.from('incomes').select('id, title, amount, approved_by, source, created_at'),
+    readAll((from, to) => adminClient.from('users').select('id, fullname, student_id, tier').eq('role', 'student').order('id').range(from, to)),
+    readAll((from, to) => adminClient.from('payments').select('id, user_id, period_id, amount, status, period:period_id!inner(semester_id)').eq('period.semester_id', selectedSemesterId).order('id').range(from, to)),
+    readAll((from, to) => adminClient.from('expenses').select('id, title, amount, approved_by, created_at').eq('semester_id', selectedSemesterId).order('id').range(from, to)),
+    readAll((from, to) => adminClient.from('incomes').select('id, title, amount, approved_by, source, created_at').eq('semester_id', selectedSemesterId).order('id').range(from, to)),
     adminClient.from('periods').select('id, label, period_order, amount').eq('semester_id', selectedSemesterId).order('period_order', { ascending: true }),
-    adminClient.from('system_settings').select('key, value')
+    adminClient.from('system_settings').select('key, value'),
+    adminClient.from('incomes').select('id', { count: 'exact', head: true }).is('semester_id', null),
+    adminClient.from('expenses').select('id', { count: 'exact', head: true }).is('semester_id', null)
   ])
 
   const selectedPeriodIds = new Set(periods?.map(p => p.id) || [])
   const semesterPayments = payments?.filter(p => selectedPeriodIds.has(p.period_id)) || []
 
-  const totalPayments = semesterPayments.filter(p => p.status === 'approved').reduce((s, p) => s + (p.amount || 0), 0) || 0
-  const totalOtherIncomes = incomes?.filter(i => i.approved_by).reduce((s, i) => s + (i.amount || 0), 0) || 0
+  const totalPayments = sumMoney(semesterPayments.filter(p => p.status === 'approved').map(p => p.amount || 0))
+  const totalOtherIncomes = sumMoney(incomes.filter(i => i.approved_by).map(i => i.amount || 0))
   const totalIncome = totalPayments + totalOtherIncomes
-  const totalExpense = expenses?.filter(e => e.approved_by).reduce((s, e) => s + (e.amount || 0), 0) || 0
+  const totalExpense = sumMoney(expenses.filter(e => e.approved_by).map(e => e.amount || 0))
   const balance = totalIncome - totalExpense
 
   const reserveTarget = parseInt(sysSettings?.find((s: any) => s.key === 'reserve_fund_monthly_target')?.value ?? '200', 10)
@@ -60,9 +65,9 @@ export default async function AdminReportsPage({
   const tierBCount = students?.filter((s: any) => s.tier === 'B').length || 0
   const tierCCount = students?.filter((s: any) => s.tier === 'C').length || 0
   const tierSettings = {
-    A: parseInt(sysSettings?.find((s: any) => s.key === 'tier_a_amount')?.value ?? '0', 10),
-    B: parseInt(sysSettings?.find((s: any) => s.key === 'tier_b_amount')?.value ?? '0', 10),
-    C: parseInt(sysSettings?.find((s: any) => s.key === 'tier_c_amount')?.value ?? '0', 10),
+    A: Number(sysSettings?.find(s => s.key === 'tier_a_amount')?.value ?? 60),
+    B: Number(sysSettings?.find(s => s.key === 'tier_b_amount')?.value ?? 50),
+    C: Number(sysSettings?.find(s => s.key === 'tier_c_amount')?.value ?? 30),
   }
 
   // Cycle summary
@@ -72,13 +77,13 @@ export default async function AdminReportsPage({
     const paidCount = cyclePayments.length
     const pendingCount = semesterPayments.filter(p => p.period_id === s.id && p.status === 'pending').length
     const rate = students?.length ? Math.round((paidCount / students.length) * 100) : 0
-    
+
     const standardAmount = tierSettings.B || 50
-    const targetAmount = 
-      (tierACount * (s.amount * (tierSettings.A / standardAmount))) + 
-      (tierBCount * (s.amount * (tierSettings.B / standardAmount))) + 
-      (tierCCount * (s.amount * (tierSettings.C / standardAmount)))
-      
+    const targetAmount =
+      (tierACount * tierBaseAmount(s.amount, tierSettings.A, standardAmount)) +
+      (tierBCount * tierBaseAmount(s.amount, tierSettings.B, standardAmount)) +
+      (tierCCount * tierBaseAmount(s.amount, tierSettings.C, standardAmount))
+
     return { ...s, collected, paidCount, pendingCount, rate, targetAmount }
   }) || []
 
@@ -92,15 +97,15 @@ export default async function AdminReportsPage({
         subtitle={`ภาพรวมรายรับ-รายจ่าย · เทอม ${selectedSemester?.name || '—'}`}
         actions={
           <div className="flex flex-wrap gap-2">
-            <a href="/api/reports/export?type=credits" className="flex items-center gap-1.5 border border-amber-200 bg-amber-50 text-amber-700 text-[11px] font-medium px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors">
+            <a href={`/api/reports/export?type=credits&semester_id=${selectedSemesterId}`} className="flex items-center gap-1.5 border border-amber-200 bg-amber-50 text-amber-700 text-[11px] font-medium px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors">
               <Download className="w-3.5 h-3.5" />
               Credit Report
             </a>
-            <a href="/api/reports/export?type=income" className="flex items-center gap-1.5 border border-border-strong bg-background text-[11px] font-medium px-3 py-1.5 rounded-lg hover:bg-background-secondary transition-colors">
+            <a href={`/api/reports/export?type=income&semester_id=${selectedSemesterId}`} className="flex items-center gap-1.5 border border-border-strong bg-background text-[11px] font-medium px-3 py-1.5 rounded-lg hover:bg-background-secondary transition-colors">
               <Download className="w-3.5 h-3.5" />
               ส่งออกรายรับ
             </a>
-            <a href="/api/reports/export?type=students" className="flex items-center gap-1.5 border border-border-strong bg-background text-[11px] font-medium px-3 py-1.5 rounded-lg hover:bg-background-secondary transition-colors">
+            <a href={`/api/reports/export?type=students&semester_id=${selectedSemesterId}`} className="flex items-center gap-1.5 border border-border-strong bg-background text-[11px] font-medium px-3 py-1.5 rounded-lg hover:bg-background-secondary transition-colors">
               <Download className="w-3.5 h-3.5" />
               สรุปรายคน
             </a>
@@ -109,6 +114,12 @@ export default async function AdminReportsPage({
       />
 
       <div className="p-4 md:p-6 space-y-6">
+        {((unassignedIncomeCount || 0) + (unassignedExpenseCount || 0)) > 0 && (
+          <p role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+            มีรายรับ/รายจ่ายเก่า {(unassignedIncomeCount || 0) + (unassignedExpenseCount || 0)} รายการที่ยังไม่ได้ระบุเทอม ยอดเหล่านี้ยังไม่รวมในรายงานเทอมนี้ กรุณาจัดเทอมให้รายการก่อนใช้สรุปปิดบัญชี
+          </p>
+        )}
+        <p className="text-xs text-text-muted">เป้าหมายและอัตราผู้ชำระอ้างอิงรายชื่อนักศึกษาและ Tier ปัจจุบัน</p>
         {/* Semester Selector */}
         {allSemesters && allSemesters.length > 1 && (
           <div className="flex items-center gap-3 p-3 bg-background-secondary border border-border rounded-xl">

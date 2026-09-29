@@ -1,82 +1,25 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { NextRequest, NextResponse } from 'next/server'
-import { logAction } from '@/lib/audit'
+import { resolveAdminProfile } from '@/lib/supabase/resolve-profile'
+import { isPositiveMoney } from '@/lib/money'
+import { PaymentError, paymentFailure, isUuid, checkDatabaseError } from '@/lib/payment-service'
 
-export async function POST(request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const adminClient = createAdminClient()
-  const { data: profile } = await createAdminClient().from('users').select('id, role').or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`).maybeSingle()
-  if (!profile || !['admin', 'treasurer'].includes(profile.role)) {
-    return NextResponse.json({ error: 'Forbidden — admin/treasurer only' }, { status: 403 })
-  }
-
-  const body = await request.json() as {
-    user_id: string
-    period_id: string
-    amount: number
-    note?: string
-    verified_at?: string
-  }
-
-  if (!body.user_id || !body.period_id || !body.amount) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
-  }
-
-  // Check if payment already exists for this period
-  const { data: existing } = await adminClient
-    .from('payments')
-    .select('id, status')
-    .eq('user_id', body.user_id)
-    .eq('period_id', body.period_id)
-    .maybeSingle()
-
-  if (existing && existing.status === 'approved') {
-    return NextResponse.json({ error: 'งวดนี้ชำระแล้ว ไม่สามารถบันทึกซ้ำได้' }, { status: 409 })
-  }
-
-  const paymentData = {
-    user_id: body.user_id,
-    period_id: body.period_id,
-    amount: body.amount,
-    status: 'approved' as const,
-    note: body.note || 'ชำระด้วยเงินสด (บันทึกโดยเหรัญญิก)',
-    verified_at: body.verified_at || new Date().toISOString(),
-    trans_ref: null,
-    slip_url: null,
-  }
-
-  let payment
-  if (existing) {
-    // Update existing rejected/pending payment
-    const { data, error } = await adminClient
-      .from('payments')
-      .update(paymentData)
-      .eq('id', existing.id)
-      .select()
-      .single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    payment = data
-  } else {
-    // Insert new cash payment
-    const { data, error } = await adminClient
-      .from('payments')
-      .insert(paymentData)
-      .select()
-      .single()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    payment = data
-  }
-
-  await logAction({
-    actorId: profile?.id || user.id,
-    action: 'payment_approved',
-    targetId: payment.id,
-    newValue: { ...paymentData, method: 'cash', recorded_by: profile?.id || user.id },
-  })
-
-  return NextResponse.json({ success: true, payment })
+export async function POST(request: Request) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new PaymentError('Unauthorized', 401)
+    const admin = createAdminClient()
+    const profile = await resolveAdminProfile(admin, user)
+    if (!profile) throw new PaymentError('Forbidden', 403)
+    const body = await request.json()
+    if (!isUuid(body.user_id) || !isUuid(body.period_id) || !isPositiveMoney(body.amount)) throw new PaymentError('รหัสรายการหรือยอดเงินไม่ถูกต้อง')
+    if (body.verified_at && (!Number.isFinite(Date.parse(body.verified_at)) || Date.parse(body.verified_at) > Date.now())) throw new PaymentError('วันที่รับเงินไม่ถูกต้อง')
+    const { data, error } = await admin.rpc('save_regular_payments', {
+      p_user_id: body.user_id, p_actor_id: profile.id,
+      p_rows: [{ period_id: body.period_id, amount: body.amount, status: 'approved', verified_at: body.verified_at || new Date().toISOString(), verified_by_api: false, note: body.note || 'ชำระด้วยเงินสด (บันทึกโดยเหรัญญิก)' }],
+    })
+    checkDatabaseError(error)
+    return Response.json({ success: true, payment: data[0] })
+  } catch (error) { return paymentFailure(error) }
 }

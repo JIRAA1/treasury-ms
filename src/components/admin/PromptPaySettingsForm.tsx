@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Save, Loader2, CreditCard, User } from 'lucide-react'
 import { toast } from 'sonner'
+import { normalizePromptPayId } from '@/lib/promptpay'
 
 export default function PromptPaySettingsForm() {
   const [loading, setLoading] = useState(true)
@@ -37,7 +38,7 @@ export default function PromptPaySettingsForm() {
     setSaving(true)
     try {
       const updates = [
-        { key: 'promptpay_id', value: config.promptpay_id },
+        { key: 'promptpay_id', value: normalizePromptPayId(config.promptpay_id) },
         { key: 'promptpay_name', value: config.promptpay_name }
       ]
       const { error } = await supabase.from('system_settings').upsert(updates)

@@ -1,10 +1,8 @@
 'use client'
 
-import { useState } from 'react'
 import { X, Download, QrCode as QrIcon, User, ShieldCheck } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { generatePromptPayPayload } from '@/lib/promptpay'
-import { cn } from '@/lib/utils'
 
 interface QrModalProps {
   isOpen: boolean
@@ -18,7 +16,17 @@ interface QrModalProps {
 export default function QrModal({ isOpen, onClose, promptPayId, promptPayName, title, amount }: QrModalProps) {
   if (!isOpen) return null
 
-  const payload = generatePromptPayPayload(promptPayId, amount)
+  let payload: string
+  try {
+    payload = generatePromptPayPayload(promptPayId, amount)
+  } catch {
+    return <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="rounded-xl bg-white p-6 text-slate-900">
+        <p>ไม่สามารถสร้าง QR ได้ กรุณาติดต่อเหรัญญิกเพื่อตรวจข้อมูลพร้อมเพย์และยอดชำระ</p>
+        <button onClick={onClose} className="mt-4 rounded bg-slate-900 px-4 py-2 text-white">ปิด</button>
+      </div>
+    </div>
+  }
 
   const downloadQR = () => {
     const svg = document.getElementById('promptpay-qr')

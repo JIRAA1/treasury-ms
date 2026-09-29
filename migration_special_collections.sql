@@ -57,11 +57,5 @@ ALTER TABLE public.special_collections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.special_collection_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.special_collection_slips ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow all access to authenticated users for special_collections"
-  ON public.special_collections FOR ALL TO authenticated USING (true) WITH CHECK (true);
-
-CREATE POLICY "Allow all access to authenticated users for special_collection_items"
-  ON public.special_collection_items FOR ALL TO authenticated USING (true) WITH CHECK (true);
-
-CREATE POLICY "Allow all access to authenticated users for special_collection_slips"
-  ON public.special_collection_slips FOR ALL TO authenticated USING (true) WITH CHECK (true);
+-- Apply migration_payment_integrity.sql next to install scoped read policies
+-- and service-only transactional writes. Do not grant blanket client writes.
