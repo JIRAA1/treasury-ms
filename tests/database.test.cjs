@@ -17,6 +17,9 @@ before(async () => {
   const migration = fs.readFileSync('migration_payment_integrity.sql','utf8')
   try { await db.exec(migration) } catch (e) { console.error('Migration SQL error', e.message, e.position, e.internalPosition, e.internalQuery); throw e }
   await db.exec(migration) // deployment retry must be safe
+  const corrections = fs.readFileSync('migration_special_corrections.sql','utf8')
+  await db.exec(corrections)
+  await db.exec(corrections)
   await db.query("insert into users(id,student_id,fullname,role) values($1,'00000001','Student','student'),($2,'00000002','Admin','admin'),($3,'00000003','Other','student')",[student,admin,other])
   await db.query("insert into semesters(id,name,is_active) values($1,'Test',true)",[semester])
   for(let i=100;i<120;i++) await db.query("insert into periods(id,semester_id,label,period_order,deadline,amount) values($1,$2,$3,$4,now()+interval '1 day',50)",[uid(i),semester,'Period '+i,i])
@@ -24,6 +27,57 @@ before(async () => {
   await db.query("insert into special_collection_items(id,collection_id,user_id,amount) values($1,$2,$3,100),($4,$2,$5,100)",[uid(30),collection,student,uid(31),other])
 })
 after(async()=>db.close())
+async function correctionSnapshot(itemId) {
+  const item = await scalar('select * from special_collection_items where id=$1',[itemId])
+  const slips = (await db.query('select id,amount,status from special_collection_slips where item_id=$1 order by id',[itemId])).rows
+  return { payment_mode:item.payment_mode, chosen_installments:item.chosen_installments, amount:Number(item.amount), paid_amount:Number(item.paid_amount), slips:slips.map(s=>({...s,amount:Number(s.amount)})) }
+}
+
+test('manual correction changes installment to full, adjusts income, reverses approval and rejects stale writes',async()=>{
+  await db.exec('BEGIN')
+  try {
+    const slip=await rpc('save_special_slip',[other,collection,uid(31),'installment',2,JSON.stringify({amount:50,slip_url:'correction'})])
+    await rpc('review_special_slip',[slip.id,admin,'approve',null])
+    const expected=await correctionSnapshot(uid(31))
+    const changed=[{id:slip.id,amount:100,status:'approved'}]
+    const args=[uid(31),admin,'full',1,JSON.stringify(changed),JSON.stringify(expected),'Actually paid in full']
+    await rpc('correct_special_item',args)
+    const item=await scalar('select * from special_collection_items where id=$1',[uid(31)])
+    assert.equal(item.payment_mode,'full'); assert.equal(item.chosen_installments,1)
+    assert.equal(Number(item.paid_amount),100); assert.equal(item.status,'approved')
+    assert.equal(Number((await scalar('select amount from incomes where special_slip_id=$1',[slip.id])).amount),100)
+    assert.equal((await scalar('select verified_by_api from special_collection_slips where id=$1',[slip.id])).verified_by_api,false)
+    await db.exec('SAVEPOINT stale')
+    await assert.rejects(rpc('correct_special_item',args),/STALE_DATA/)
+    await db.exec('ROLLBACK TO SAVEPOINT stale')
+    await rpc('correct_special_item',[uid(31),admin,'full',1,JSON.stringify([{...changed[0],status:'pending'}]),JSON.stringify(await correctionSnapshot(uid(31))),'Mistaken approval'])
+    assert.equal((await scalar('select status from special_collection_items where id=$1',[uid(31)])).status,'pending')
+    assert.equal(Number((await scalar('select paid_amount from special_collection_items where id=$1',[uid(31)])).paid_amount),0)
+    assert.equal((await scalar('select count(*)::int as n from incomes where special_slip_id=$1',[slip.id])).n,0)
+    const audit=await scalar("select old_value from audit_logs where action='special_item_corrected' and old_value->'item'->>'payment_mode'='full'")
+    assert.equal(audit.old_value.incomes.length,1)
+    assert.equal(audit.old_value.slips[0].slip_url,'correction')
+    await rpc('review_special_slip',[slip.id,admin,'approve',null])
+    assert.equal((await scalar('select count(*)::int as n from incomes where special_slip_id=$1',[slip.id])).n,1)
+  } finally { await db.exec('ROLLBACK') }
+})
+
+test('manual correction enforces permissions, reason, amount, and atomic rollback',async()=>{
+  await db.exec('BEGIN')
+  try {
+    const slip=await rpc('save_special_slip',[other,collection,uid(31),'full',1,JSON.stringify({amount:100,slip_url:'validation'})])
+    const expected=JSON.stringify(await correctionSnapshot(uid(31)))
+    const args=[uid(31),admin,'full',1,JSON.stringify([{id:slip.id,amount:100,status:'approved'}]),expected,'Fix']
+    for (const [changes,pattern] of [[{1:other},/ADMIN_REQUIRED/],[{6:' '},/REASON_REQUIRED/],[{4:JSON.stringify([{id:slip.id,amount:101,status:'approved'}])},/OVERPAYMENT/],[{4:JSON.stringify([{id:slip.id,amount:-1,status:'approved'}])},/INVALID_AMOUNT/],[{4:'[]'},/INVALID_SLIPS/],[{2:'installment',3:3},/INVALID_INSTALLMENTS/]]) {
+      await db.exec('SAVEPOINT validation')
+      await assert.rejects(rpc('correct_special_item',Object.assign([...args],changes)),pattern)
+      await db.exec('ROLLBACK TO SAVEPOINT validation')
+      assert.equal((await scalar('select status from special_collection_slips where id=$1',[slip.id])).status,'pending')
+      assert.equal((await scalar('select count(*)::int as n from incomes where special_slip_id=$1',[slip.id])).n,0)
+    }
+    assert.equal((await scalar("select has_function_privilege('authenticated','correct_special_item(uuid,uuid,text,integer,jsonb,jsonb,text)','EXECUTE') as allowed")).allowed,false)
+  } finally { await db.exec('ROLLBACK') }
+})
 test('batch payment rolls back all rows when any selected period conflicts', async()=>{
   await rpc('save_regular_payments',[student,JSON.stringify([row(100)]),null])
   await assert.rejects(rpc('save_regular_payments',[student,JSON.stringify([row(101),row(100)]),null]),/PAYMENT_EXISTS/)

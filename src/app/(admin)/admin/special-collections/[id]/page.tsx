@@ -17,7 +17,8 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import Topbar from '@/components/layout/Topbar'
-import type { SpecialCollection } from '@/types'
+import type { SpecialCollection, SpecialCollectionItem } from '@/types'
+import EditSpecialPaymentModal from '@/components/special-collections/EditSpecialPaymentModal'
 
 export default function AdminSpecialCollectionDetailPage({
   params,
@@ -32,6 +33,7 @@ export default function AdminSpecialCollectionDetailPage({
   const [selectedSlip, setSelectedSlip] = useState<any | null>(null)
   const [rejectReason, setRejectReason] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const [editingItem, setEditingItem] = useState<SpecialCollectionItem | null>(null)
 
   // Edit state
   const [isEditOpen, setIsEditOpen] = useState(false)
@@ -358,6 +360,9 @@ export default function AdminSpecialCollectionDetailPage({
                       <td className="p-3.5">
                         <div className="font-bold text-text-primary">{student?.fullname || 'ไม่ทราบชื่อ'}</div>
                         <div className="text-[10px] font-mono text-text-muted">{student?.student_id}</div>
+                        <button onClick={() => setEditingItem(item)} className="inline-flex items-center gap-1 mt-2 text-brand hover:underline font-semibold">
+                          <Pencil className="w-3 h-3" /> แก้ไขการชำระ
+                        </button>
                       </td>
 
                       <td className="p-3.5 text-text-secondary">
@@ -527,6 +532,9 @@ export default function AdminSpecialCollectionDetailPage({
         </div>
       )}
       </div>
+
+      {editingItem && <EditSpecialPaymentModal item={editingItem} collection={collection}
+        onClose={() => setEditingItem(null)} onSaved={() => { setEditingItem(null); void fetchDetail() }} />}
 
       {/* ── Edit Modal ───────────────────────────────────── */}
       {isEditOpen && (
