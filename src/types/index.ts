@@ -199,7 +199,9 @@ export interface SpecialCollectionSlip {
   installment_no: number
   amount: number
   is_payoff: boolean
-  slip_url: string
+  slip_url: string | null
+  payment_method?: 'transfer' | 'cash'
+  payment_note?: string | null
   trans_ref: string | null
   file_hash: string | null
   status: 'pending' | 'approved' | 'rejected'

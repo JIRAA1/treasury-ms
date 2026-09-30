@@ -20,6 +20,9 @@ before(async () => {
   const corrections = fs.readFileSync('migration_special_corrections.sql','utf8')
   await db.exec(corrections)
   await db.exec(corrections)
+  const cash = fs.readFileSync('migration_special_cash.sql','utf8')
+  await db.exec(cash)
+  await db.exec(cash)
   await db.query("insert into users(id,student_id,fullname,role) values($1,'00000001','Student','student'),($2,'00000002','Admin','admin'),($3,'00000003','Other','student')",[student,admin,other])
   await db.query("insert into semesters(id,name,is_active) values($1,'Test',true)",[semester])
   for(let i=100;i<120;i++) await db.query("insert into periods(id,semester_id,label,period_order,deadline,amount) values($1,$2,$3,$4,now()+interval '1 day',50)",[uid(i),semester,'Period '+i,i])
@@ -27,6 +30,70 @@ before(async () => {
   await db.query("insert into special_collection_items(id,collection_id,user_id,amount) values($1,$2,$3,100),($4,$2,$5,100)",[uid(30),collection,student,uid(31),other])
 })
 after(async()=>db.close())
+test('cash full payment writes one income and retries never double count',async()=>{
+  await db.exec('BEGIN')
+  try {
+    const args=[uid(31),admin,uid(901),100,'full',1,0,'Paid in class']
+    await rpc('record_special_cash',args)
+    assert.equal((await rpc('record_special_cash',args)).unchanged,true)
+    const item=await scalar('select * from special_collection_items where id=$1',[uid(31)])
+    assert.equal(item.status,'approved'); assert.equal(Number(item.paid_amount),100)
+    assert.equal(item.payment_mode,'full'); assert.equal(item.chosen_installments,1)
+    const receipt=await scalar('select * from special_collection_slips where id=$1',[uid(901)])
+    assert.equal(receipt.payment_method,'cash'); assert.equal(receipt.slip_url,null)
+    assert.equal(receipt.verified_by,admin); assert.equal(receipt.payment_note,'Paid in class')
+    const income=await scalar('select count(*)::int as n,sum(amount) as total from incomes where special_slip_id=$1',[uid(901)])
+    assert.equal(income.n,1); assert.equal(Number(income.total),100)
+    await rpc('correct_special_item',[uid(31),admin,'full',1,JSON.stringify([{id:uid(901),amount:100,status:'rejected'}]),JSON.stringify(await correctionSnapshot(uid(31))),'Entered cash for wrong student'])
+    assert.equal((await scalar('select status from special_collection_items where id=$1',[uid(31)])).status,'unpaid')
+    assert.equal((await scalar('select count(*)::int as n from incomes where special_slip_id=$1',[uid(901)])).n,0)
+  } finally { await db.exec('ROLLBACK') }
+})
+
+test('cash installments allow actual partial amounts and later transfer payoff',async()=>{
+  await db.exec('BEGIN')
+  try {
+    await rpc('record_special_cash',[uid(31),admin,uid(902),30,'installment',2,0,null])
+    let item=await scalar('select * from special_collection_items where id=$1',[uid(31)])
+    assert.equal(item.status,'partial'); assert.equal(item.payment_mode,'installment')
+    assert.equal(Number(item.paid_amount),30)
+    await rpc('record_special_cash',[uid(31),admin,uid(903),20,'installment',2,30,null])
+    const slip=await rpc('save_special_slip',[other,collection,uid(31),'installment',2,JSON.stringify({amount:50,is_payoff:true,slip_url:'transfer-payoff'})])
+    await rpc('review_special_slip',[slip.id,admin,'approve',null])
+    item=await scalar('select * from special_collection_items where id=$1',[uid(31)])
+    assert.equal(item.status,'approved'); assert.equal(Number(item.paid_amount),100)
+    assert.equal((await scalar('select payment_method from special_collection_slips where id=$1',[slip.id])).payment_method,'transfer')
+    assert.equal(Number((await scalar('select sum(amount) as total from incomes where special_slip_id in (select id from special_collection_slips where item_id=$1)',[uid(31)])).total),100)
+  } finally { await db.exec('ROLLBACK') }
+})
+
+test('cash rejects invalid, stale or pending payments and rolls back on income failure',async()=>{
+  await db.exec('BEGIN')
+  try {
+    const args=[uid(31),admin,uid(904),100,'full',1,0,null]
+    for (const [changes,pattern] of [[{1:other},/ADMIN_REQUIRED/],[{3:0},/INVALID_AMOUNT/],[{3:1.111},/INVALID_AMOUNT/],[{3:101},/OVERPAYMENT/],[{3:50},/FULL_AMOUNT_REQUIRED/],[{4:'installment',5:3},/INVALID_INSTALLMENTS/],[{6:50},/STALE_DATA/]]) {
+      await db.exec('SAVEPOINT cash_validation')
+      await assert.rejects(rpc('record_special_cash',Object.assign([...args],changes)),pattern)
+      await db.exec('ROLLBACK TO SAVEPOINT cash_validation')
+      assert.equal((await scalar('select count(*)::int as n from special_collection_slips where item_id=$1',[uid(31)])).n,0)
+    }
+    await db.exec("CREATE FUNCTION fail_cash_income() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'CASH_INCOME_FAILURE'; END $$; CREATE TRIGGER fail_cash_income BEFORE INSERT ON incomes FOR EACH ROW EXECUTE FUNCTION fail_cash_income(); SAVEPOINT cash_failure;")
+    await assert.rejects(rpc('record_special_cash',args),/CASH_INCOME_FAILURE/)
+    await db.exec('ROLLBACK TO SAVEPOINT cash_failure; DROP TRIGGER fail_cash_income ON incomes')
+    assert.equal((await scalar('select count(*)::int as n from special_collection_slips where item_id=$1',[uid(31)])).n,0)
+    assert.equal((await scalar('select payment_mode from special_collection_items where id=$1',[uid(31)])).payment_mode,null)
+    await db.query('update special_collections set allow_installments=false where id=$1',[collection])
+    await db.exec('SAVEPOINT disabled_installments')
+    await assert.rejects(rpc('record_special_cash',[uid(31),admin,uid(904),50,'installment',2,0,null]),/INVALID_INSTALLMENTS/)
+    await db.exec('ROLLBACK TO SAVEPOINT disabled_installments')
+    await rpc('save_special_slip',[other,collection,uid(31),'full',1,JSON.stringify({amount:100,slip_url:'pending-transfer'})])
+    await db.exec('SAVEPOINT pending')
+    await assert.rejects(rpc('record_special_cash',args),/PENDING_SLIP/)
+    await db.exec('ROLLBACK TO SAVEPOINT pending')
+    assert.equal((await scalar("select has_function_privilege('authenticated','record_special_cash(uuid,uuid,uuid,numeric,text,integer,numeric,text)','EXECUTE') as allowed")).allowed,false)
+  } finally { await db.exec('ROLLBACK') }
+})
+
 async function correctionSnapshot(itemId) {
   const item = await scalar('select * from special_collection_items where id=$1',[itemId])
   const slips = (await db.query('select id,amount,status from special_collection_slips where item_id=$1 order by id',[itemId])).rows
