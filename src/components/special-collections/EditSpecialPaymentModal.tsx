@@ -43,7 +43,7 @@ export default function EditSpecialPaymentModal({ item, collection, onClose, onS
   return <Dialog open onOpenChange={open => { if (!open && !saving) onClose() }}>
     <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-white">
       <DialogTitle>แก้ไขการชำระเงิน — {item.user?.fullname}</DialogTitle>
-      <DialogDescription>แก้ยอดตามสลิปจริง หรือคืนรายการที่อนุมัติผิดเป็นรอตรวจสอบ ยอดรับเงินจะปรับตามสลิปที่อนุมัติ และบันทึกประวัติการแก้ไข</DialogDescription>
+      <DialogDescription>แก้ยอดรับเงินหรือคืนรายการที่อนุมัติผิดเป็นรอตรวจสอบ ยอดรับเงินจะปรับตามรายการที่อนุมัติ และบันทึกประวัติการแก้ไข</DialogDescription>
       <form onSubmit={save} className="space-y-4">
         <fieldset disabled={saving} className="space-y-4 disabled:opacity-60">
           <label className="block text-sm">รูปแบบการจ่าย
@@ -58,12 +58,12 @@ export default function EditSpecialPaymentModal({ item, collection, onClose, onS
           <p className="text-xs text-text-secondary">หากจ่ายเต็มแต่เลือกผ่อน ให้เลือก “จ่ายเต็ม” และแก้ยอดสลิปเป็นยอดที่ได้รับจริงก่อนอนุมัติ</p>
           {slips.length === 0 && <p className="text-sm">ยังไม่มีสลิป สามารถแก้รูปแบบการจ่ายได้</p>}
           {slips.map((slip, index) => <div key={slip.id} className="rounded-xl border border-border p-3 space-y-2">
-            <a href={slip.slip_url} target="_blank" rel="noreferrer" className="text-sm text-brand underline">ดูสลิปครั้งที่ {slip.installment_no}</a>
+            {slip.payment_method === 'cash' ? <p className="text-sm font-semibold text-emerald-700">เงินสด ครั้งที่ {slip.installment_no}</p> : slip.slip_url && <a href={slip.slip_url} target="_blank" rel="noreferrer" className="text-sm text-brand underline">ดูสลิปครั้งที่ {slip.installment_no}</a>}
             <div className="grid grid-cols-2 gap-3">
-              <label className="text-sm">ยอดในสลิป (บาท)
+              <label className="text-sm">ยอดรับเงิน (บาท)
                 <input required type="number" min="0.01" max="999999999.99" step="0.01" className={inputClass} value={slip.inputAmount} onChange={e => setSlips(current => current.map((s, i) => i === index ? { ...s, inputAmount: e.target.value } : s))} />
               </label>
-              <label className="text-sm">สถานะสลิป
+              <label className="text-sm">สถานะรายการ
                 <select className={inputClass} value={slip.status} onChange={e => setSlips(current => current.map((s, i) => i === index ? { ...s, status: e.target.value as SpecialCollectionSlip['status'] } : s))}>
                   <option value="pending">รอตรวจสอบ</option><option value="approved">อนุมัติ</option><option value="rejected">ปฏิเสธ</option>
                 </select>

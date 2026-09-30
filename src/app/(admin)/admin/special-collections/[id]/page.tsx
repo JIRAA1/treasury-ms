@@ -19,6 +19,7 @@ import {
 import Topbar from '@/components/layout/Topbar'
 import type { SpecialCollection, SpecialCollectionItem } from '@/types'
 import EditSpecialPaymentModal from '@/components/special-collections/EditSpecialPaymentModal'
+import ReceiveSpecialCashModal from '@/components/special-collections/ReceiveSpecialCashModal'
 
 export default function AdminSpecialCollectionDetailPage({
   params,
@@ -34,6 +35,7 @@ export default function AdminSpecialCollectionDetailPage({
   const [rejectReason, setRejectReason] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
   const [editingItem, setEditingItem] = useState<SpecialCollectionItem | null>(null)
+  const [cashItem, setCashItem] = useState<SpecialCollectionItem | null>(null)
 
   // Edit state
   const [isEditOpen, setIsEditOpen] = useState(false)
@@ -339,7 +341,7 @@ export default function AdminSpecialCollectionDetailPage({
                 <th className="p-3.5 text-right">ยอดรวม</th>
                 <th className="p-3.5 text-right">จ่ายแล้ว</th>
                 <th className="p-3.5 text-center">สถานะ</th>
-                <th className="p-3.5 text-center">สลิปที่ส่ง</th>
+                <th className="p-3.5 text-center">ประวัติการชำระ / ช่องทาง</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -363,6 +365,7 @@ export default function AdminSpecialCollectionDetailPage({
                         <button onClick={() => setEditingItem(item)} className="inline-flex items-center gap-1 mt-2 text-brand hover:underline font-semibold">
                           <Pencil className="w-3 h-3" /> แก้ไขการชำระ
                         </button>
+                        {collection.is_active && Number(item.paid_amount) < Number(item.amount) && <button onClick={() => setCashItem(item)} className="block mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 font-semibold text-emerald-700 hover:bg-emerald-100">รับเงินสด</button>}
                       </td>
 
                       <td className="p-3.5 text-text-secondary">
@@ -433,7 +436,7 @@ export default function AdminSpecialCollectionDetailPage({
                                 }`}
                               >
                                 <Eye className="w-3 h-3" />
-                                {slip.is_payoff ? 'ปิดยอด' : `งวด ${slip.installment_no}`}
+                                {slip.payment_method === 'cash' ? 'เงินสด' : 'โอน'} · {slip.is_payoff ? 'ปิดยอด' : `ครั้งที่ ${slip.installment_no}`}
                               </button>
                             ))}
                           </div>
@@ -457,10 +460,10 @@ export default function AdminSpecialCollectionDetailPage({
             <div className="flex items-center justify-between border-b border-border pb-3">
               <div>
                 <h3 className="text-sm font-bold text-text-primary">
-                  ตรวจสอบสลิป: {selectedSlip.studentName}
+                  {selectedSlip.payment_method === 'cash' ? 'รายการรับเงินสด' : 'ตรวจสอบสลิป'}: {selectedSlip.studentName}
                 </h3>
                 <p className="text-[11px] text-text-muted">
-                  {selectedSlip.is_payoff ? 'สลิปปิดยอดล่วงหน้า' : `สลิปงวดที่ ${selectedSlip.installment_no}`} &bull; ยอดในสลิป ฿{Number(selectedSlip.amount).toLocaleString()}
+                  ครั้งที่ {selectedSlip.installment_no} &bull; ยอดชำระ ฿{Number(selectedSlip.amount).toLocaleString()}
                 </p>
               </div>
               <button onClick={() => setSelectedSlip(null)} className="text-text-muted hover:text-text-primary">
@@ -469,16 +472,22 @@ export default function AdminSpecialCollectionDetailPage({
             </div>
 
             {/* Image Preview */}
-            <div className="relative rounded-xl overflow-hidden bg-background-tertiary max-h-80 flex items-center justify-center border border-border">
+            {selectedSlip.payment_method === 'cash' ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm space-y-1">
+              <p className="font-semibold text-emerald-700">รับชำระด้วยเงินสด</p>
+              <p>ผู้บันทึก: {selectedSlip.verifier?.fullname || 'ผู้ดูแลระบบ'}</p>
+              <p>{new Date(selectedSlip.created_at).toLocaleString('th-TH')}</p>
+              {selectedSlip.payment_note && <p>หมายเหตุ: {selectedSlip.payment_note}</p>}
+              <button onClick={() => { setEditingItem(selectedSlip.item); setSelectedSlip(null) }} className="text-brand underline">แก้ไขรายการรับเงินสด</button>
+            </div> : <div className="relative rounded-xl overflow-hidden bg-background-tertiary max-h-80 flex items-center justify-center border border-border">
               <img
                 src={selectedSlip.slip_url}
                 alt="Slip"
                 className="max-h-80 object-contain"
               />
-            </div>
+            </div>}
 
             {/* Slip details */}
-            <div className="p-3 rounded-xl bg-background-tertiary border border-border text-xs space-y-1">
+            {selectedSlip.payment_method !== 'cash' && <div className="p-3 rounded-xl bg-background-tertiary border border-border text-xs space-y-1">
               <div className="flex justify-between text-text-secondary">
                 <span>รหัสอ้างอิง (TransRef):</span>
                 <span className="font-mono text-text-primary">{selectedSlip.trans_ref || 'ไม่ระบุ/ไม่มี QR'}</span>
@@ -491,6 +500,7 @@ export default function AdminSpecialCollectionDetailPage({
               </div>
             </div>
 
+            }
             {/* Verification actions */}
             {selectedSlip.status === 'pending' ? (
               <div className="space-y-3 pt-2">
@@ -525,7 +535,7 @@ export default function AdminSpecialCollectionDetailPage({
               </div>
             ) : (
               <div className="p-3 rounded-xl bg-background-tertiary text-center text-xs font-semibold text-text-muted">
-                สลิปนี้ถูก {selectedSlip.status === 'approved' ? 'อนุมัติเรียบร้อยแล้ว' : 'ปฏิเสธไปแล้ว'}
+                รายการนี้ถูก {selectedSlip.status === 'approved' ? 'อนุมัติเรียบร้อยแล้ว' : 'ปฏิเสธไปแล้ว'}
               </div>
             )}
           </div>
@@ -535,6 +545,8 @@ export default function AdminSpecialCollectionDetailPage({
 
       {editingItem && <EditSpecialPaymentModal item={editingItem} collection={collection}
         onClose={() => setEditingItem(null)} onSaved={() => { setEditingItem(null); void fetchDetail() }} />}
+      {cashItem && <ReceiveSpecialCashModal item={cashItem} collection={collection}
+        onClose={() => setCashItem(null)} onSaved={() => { setCashItem(null); void fetchDetail() }} />}
 
       {/* ── Edit Modal ───────────────────────────────────── */}
       {isEditOpen && (

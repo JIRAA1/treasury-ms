@@ -176,7 +176,7 @@ export default function StudentSpecialCollectionsPage() {
                         className="px-3 py-2 rounded-xl bg-white border border-border text-xs font-semibold text-text-secondary hover:text-brand hover:border-brand/30 transition-all flex items-center gap-1.5"
                       >
                         <Eye className="w-3.5 h-3.5" />
-                        ดูสลิปที่ส่ง ({slips.length})
+                        ประวัติการชำระ ({slips.length})
                       </button>
                     )}
 
@@ -239,7 +239,7 @@ export default function StudentSpecialCollectionsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
           <div className="relative w-full max-w-md bg-white border border-border rounded-2xl p-5 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-border pb-3">
-              <h3 className="text-sm font-bold text-text-primary">ประวัติสลิปชำระเงิน</h3>
+              <h3 className="text-sm font-bold text-text-primary">ประวัติการชำระเงิน</h3>
               <button onClick={() => setViewingSlipsItem(null)} className="text-text-muted hover:text-text-primary">
                 <X className="w-5 h-5" />
               </button>
@@ -250,7 +250,7 @@ export default function StudentSpecialCollectionsPage() {
                 <div key={slip.id} className="p-3 rounded-xl bg-background-tertiary border border-border flex items-center justify-between text-xs">
                   <div>
                     <div className="font-bold text-text-primary">
-                      {slip.is_payoff ? 'สลิปปิดยอดล่วงหน้า' : `สลิปงวดที่ ${slip.installment_no}`}
+                      {slip.payment_method === 'cash' ? 'เงินสด' : 'โอนเงิน'} · {slip.is_payoff ? 'ปิดยอด' : `ครั้งที่ ${slip.installment_no}`}
                     </div>
                     <div className="text-[11px] text-accent-emerald font-semibold mt-0.5">
                       ฿{Number(slip.amount).toLocaleString()}
