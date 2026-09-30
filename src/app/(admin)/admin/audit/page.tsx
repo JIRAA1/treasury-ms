@@ -26,6 +26,7 @@ const actionCategory = (action: string) => {
 const actionLabel: Record<string, string> = {
   special_item_corrected: 'แก้ไขการชำระเงินพิเศษ',
   special_cash_received: 'รับเงินสดเก็บเงินพิเศษ',
+  accounting_semester_assigned: 'จัดเทอมรายรับ/รายจ่ายเก่า',
   payment_uploaded: 'อัปโหลดสลิป',
   payment_approved: 'อนุมัติการชำระ',
   payment_rejected: 'ปฏิเสธสลิป',

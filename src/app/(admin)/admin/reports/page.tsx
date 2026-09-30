@@ -7,6 +7,7 @@ import { formatCurrency, cn } from '@/lib/utils'
 import { FileText, Download, Users, CreditCard, ArrowRight, TrendingUp, Receipt, CheckCircle, AlertCircle, Clock } from 'lucide-react'
 import Link from 'next/link'
 import ReportCharts from '@/components/admin/ReportCharts'
+import AssignAccountingSemester from '@/components/admin/AssignAccountingSemester'
 
 export const metadata = { title: 'รายงาน — TreasuryMS' }
 
@@ -115,9 +116,10 @@ export default async function AdminReportsPage({
 
       <div className="p-4 md:p-6 space-y-6">
         {((unassignedIncomeCount || 0) + (unassignedExpenseCount || 0)) > 0 && (
-          <p role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-            มีรายรับ/รายจ่ายเก่า {(unassignedIncomeCount || 0) + (unassignedExpenseCount || 0)} รายการที่ยังไม่ได้ระบุเทอม ยอดเหล่านี้ยังไม่รวมในรายงานเทอมนี้ กรุณาจัดเทอมให้รายการก่อนใช้สรุปปิดบัญชี
-          </p>
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+            <p role="status">มีรายรับ/รายจ่ายเก่า {(unassignedIncomeCount || 0) + (unassignedExpenseCount || 0)} รายการที่ยังไม่ได้ระบุเทอม ยอดเหล่านี้ยังไม่รวมในรายงานเทอมนี้ กรุณาจัดเทอมให้รายการก่อนใช้สรุปปิดบัญชี</p>
+            <AssignAccountingSemester />
+          </div>
         )}
         <p className="text-xs text-text-muted">เป้าหมายและอัตราผู้ชำระอ้างอิงรายชื่อนักศึกษาและ Tier ปัจจุบัน</p>
         {/* Semester Selector */}
