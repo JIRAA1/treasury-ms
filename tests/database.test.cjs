@@ -23,6 +23,9 @@ before(async () => {
   const cash = fs.readFileSync('migration_special_cash.sql','utf8')
   await db.exec(cash)
   await db.exec(cash)
+  const assignment = fs.readFileSync('migration_assign_accounting_semester.sql','utf8')
+  await db.exec(assignment)
+  await db.exec(assignment)
   await db.query("insert into users(id,student_id,fullname,role) values($1,'00000001','Student','student'),($2,'00000002','Admin','admin'),($3,'00000003','Other','student')",[student,admin,other])
   await db.query("insert into semesters(id,name,is_active) values($1,'Test',true)",[semester])
   for(let i=100;i<120;i++) await db.query("insert into periods(id,semester_id,label,period_order,deadline,amount) values($1,$2,$3,$4,now()+interval '1 day',50)",[uid(i),semester,'Period '+i,i])
@@ -30,6 +33,52 @@ before(async () => {
   await db.query("insert into special_collection_items(id,collection_id,user_id,amount) values($1,$2,$3,100),($4,$2,$5,100)",[uid(30),collection,student,uid(31),other])
 })
 after(async()=>db.close())
+test('semester assignment handles mixed income/expense batches, preserves money and approval, audits and retries',async()=>{
+  await db.exec('BEGIN')
+  try {
+    await db.query("insert into incomes(id,title,amount,approved_by) values($1,'Historical income',123.45,$2)",[uid(950),admin])
+    await db.query("insert into expenses(id,title,amount) values($1,'Historical expense',25.5)",[uid(951)])
+    await db.query('update incomes set semester_id=null where id=$1',[uid(950)])
+    await db.query('update expenses set semester_id=null where id=$1',[uid(951)])
+    const records=JSON.stringify([{type:'income',id:uid(950)},{type:'expense',id:uid(951)}])
+    assert.equal((await rpc('assign_accounting_semester',[admin,semester,records])).changed,2)
+    assert.equal((await rpc('assign_accounting_semester',[admin,semester,records])).unchanged,2)
+    const income=await scalar('select * from incomes where id=$1',[uid(950)])
+    const expense=await scalar('select * from expenses where id=$1',[uid(951)])
+    assert.equal(income.semester_id,semester); assert.equal(expense.semester_id,semester)
+    assert.equal(Number(income.amount),123.45); assert.equal(income.approved_by,admin)
+    assert.equal(Number(expense.amount),25.5); assert.equal(expense.approved_by,null)
+    const logs=(await db.query("select old_value,new_value from audit_logs where action='accounting_semester_assigned'")).rows
+    assert.equal(logs.length,2)
+    assert.ok(logs.every(log=>log.old_value.semester_id===null && log.new_value.semester_id===semester))
+  } finally { await db.exec('ROLLBACK') }
+})
+
+test('semester assignment enforces privileges and rolls back the whole selection on conflict',async()=>{
+  await db.exec('BEGIN')
+  try {
+    await db.query("insert into semesters(id,name) values($1,'Older term')",[uid(952)])
+    await db.query("insert into incomes(id,title,amount) values($1,'Unassigned',20),($2,'Already assigned',30)",[uid(953),uid(954)])
+    await db.query('update incomes set semester_id=null where id=$1',[uid(953)])
+    await db.query('update incomes set semester_id=$1 where id=$2',[uid(952),uid(954)])
+    const record={type:'income',id:uid(953)}
+    const args=[admin,semester,JSON.stringify([record])]
+    for (const [changes,pattern] of [
+      [{0:student},/ADMIN_REQUIRED/], [{1:uid(999)},/SEMESTER_NOT_FOUND/], [{2:'[]'},/INVALID_RECORDS/],
+      [{2:JSON.stringify([record,record])},/INVALID_RECORDS/], [{2:JSON.stringify([{type:'users',id:uid(953)}])},/INVALID_RECORDS/],
+      [{2:JSON.stringify([record,{type:'expense',id:uid(999)}])},/RECORD_NOT_FOUND/],
+      [{2:JSON.stringify([record,{type:'income',id:uid(954)}])},/SEMESTER_ALREADY_ASSIGNED/],
+    ]) {
+      await db.exec('SAVEPOINT assignment_validation')
+      await assert.rejects(rpc('assign_accounting_semester',Object.assign([...args],changes)),pattern)
+      await db.exec('ROLLBACK TO SAVEPOINT assignment_validation')
+      assert.equal((await scalar('select semester_id from incomes where id=$1',[uid(953)])).semester_id,null)
+      assert.equal((await scalar("select count(*)::int as n from audit_logs where action='accounting_semester_assigned'")).n,0)
+    }
+    assert.equal((await scalar("select has_function_privilege('authenticated','assign_accounting_semester(uuid,uuid,jsonb)','EXECUTE') as allowed")).allowed,false)
+  } finally { await db.exec('ROLLBACK') }
+})
+
 test('cash full payment writes one income and retries never double count',async()=>{
   await db.exec('BEGIN')
   try {
