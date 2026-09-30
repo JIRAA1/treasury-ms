@@ -1,5 +1,7 @@
 'use client'
 
+import { tierBaseAmount } from '@/lib/money'
+
 import { useState, useRef, useEffect } from 'react'
 import { formatCurrency } from '@/lib/utils'
 import { TrendingUp, Percent, Info, Calendar, AlertTriangle } from 'lucide-react'
@@ -83,13 +85,10 @@ export default function ReportCharts({ cycleData, studentCount, tierBreakdown, t
   const calcPeriodTarget = (periodBaseAmount: number): number => {
     if (tierBreakdown && tierAmounts) {
       const standardAmount = tierAmounts.B || 50
-      const ratioA = tierAmounts.A / standardAmount
-      const ratioB = tierAmounts.B / standardAmount
-      const ratioC = tierAmounts.C / standardAmount
       return (
-        tierBreakdown.A * (periodBaseAmount * ratioA) +
-        tierBreakdown.B * (periodBaseAmount * ratioB) +
-        tierBreakdown.C * (periodBaseAmount * ratioC)
+        tierBreakdown.A * tierBaseAmount(periodBaseAmount, tierAmounts.A, standardAmount) +
+        tierBreakdown.B * tierBaseAmount(periodBaseAmount, tierAmounts.B, standardAmount) +
+        tierBreakdown.C * tierBaseAmount(periodBaseAmount, tierAmounts.C, standardAmount)
       )
     }
     return studentCount * periodBaseAmount

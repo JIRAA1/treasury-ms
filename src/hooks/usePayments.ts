@@ -60,15 +60,11 @@ export function usePayments(userId?: string) {
 
   const verifyPayment = async (id: string, action: 'approved' | 'rejected', reason?: string) => {
     try {
-      const { error } = await supabase
-        .from('payments')
-        .update({ 
-          status: action,
-          verified_at: action === 'approved' ? new Date().toISOString() : null
-        })
-        .eq('id', id)
-
-      if (error) throw error
+      const response = await fetch('/api/payments/verify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action: action === 'approved' ? 'approve' : 'reject', reason }),
+      })
+      if (!response.ok) throw new Error((await response.json()).error)
 
       setPayments(prev => prev.map(p => p.id === id ? { ...p, status: action } : p))
       toast.success(action === 'approved' ? 'อนุมัติการชำระเงินแล้ว' : 'ปฏิเสธการชำระเงินแล้ว')

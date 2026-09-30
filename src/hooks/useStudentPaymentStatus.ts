@@ -49,7 +49,6 @@ export function useStudentPaymentStatus(userId: string | null | undefined, initi
         return
       }
 
-      const periodIds = new Set(periods.map(p => p.id))
       const now = new Date()
 
       // check if any payable period (not upcoming) is unpaid
@@ -74,7 +73,7 @@ export function useStudentPaymentStatus(userId: string | null | undefined, initi
     if (!userId) return
 
     // Run initial check
-    checkUnpaidStatus()
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined = setTimeout(checkUnpaidStatus, 0)
 
     // Subscribe to student's payments
     const channel = supabase
@@ -87,16 +86,19 @@ export function useStudentPaymentStatus(userId: string | null | undefined, initi
           table: 'payments',
           filter: `user_id=eq.${userId}`
         },
-        (payload) => {
+        () => {
           // Trigger check update
-          checkUnpaidStatus()
-          // Refresh route data so page content updates (e.g. Dashboard/Upload)
-          router.refresh()
+          clearTimeout(refreshTimer)
+          refreshTimer = setTimeout(() => {
+            checkUnpaidStatus()
+            router.refresh()
+          }, 400)
         }
       )
       .subscribe()
 
     return () => {
+      clearTimeout(refreshTimer)
       supabase.removeChannel(channel)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

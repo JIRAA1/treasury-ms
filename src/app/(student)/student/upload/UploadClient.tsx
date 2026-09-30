@@ -1,5 +1,7 @@
 'use client'
 
+import { roundMoney, tierBaseAmount, sumMoney } from '@/lib/money'
+
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Topbar from '@/components/layout/Topbar'
@@ -53,7 +55,7 @@ interface UploadClientProps {
 
 export default function UploadClient({ profile, periods, payments, sysSettings, pendingCredits }: UploadClientProps) {
   const router = useRouter()
-  
+
   // Calculate unpaid cycles directly using useMemo instead of client-side useEffect fetch!
   const unpaidCycles = useMemo(() => {
     const tierAmounts = {
@@ -63,11 +65,11 @@ export default function UploadClient({ profile, periods, payments, sysSettings, 
     }
     const tierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
     const standardAmount = tierAmounts.B || 50
-    const tierRatio = tierAmount / standardAmount
+
     const pendingCreditPeriodIds = new Set(pendingCredits?.map(c => c.period_id) || [])
 
     const unpaid: PaymentPeriod[] = []
-    
+
     periods?.forEach(s => {
       const p = payments?.find(pay => pay.period_id === s.id)
       if (!p || p.status === 'rejected') {
@@ -84,8 +86,8 @@ export default function UploadClient({ profile, periods, payments, sysSettings, 
           new Date(),
           hasPendingCredit
         )
-        const expectedBaseAmount = s.amount * tierRatio
-        const expectedAmount = expectedBaseAmount + lateFine
+        const expectedBaseAmount = tierBaseAmount(s.amount, tierAmount, standardAmount)
+        const expectedAmount = roundMoney(expectedBaseAmount + lateFine)
         const fineDescription = lateFine > 0
           ? formatFineDescription({
               deadline: s.deadline,
@@ -146,7 +148,7 @@ export default function UploadClient({ profile, periods, payments, sysSettings, 
   const selectedCycle = unpaidCycles.find(c => c.id === selectedPeriodId)
   const selectedWindowStatus = selectedCycle ? getWindowStatus(selectedCycle) : null
   const selectedIsUnpaidOrRejected = selectedCycle?.status === 'unpaid' || selectedCycle?.status === 'rejected'
-  
+
   const isWindowLocked = selectedWindowStatus === 'upcoming' ||
     (selectedWindowStatus === 'closed' && !selectedIsUnpaidOrRejected)
 
@@ -155,7 +157,7 @@ export default function UploadClient({ profile, periods, payments, sysSettings, 
   }, [payableCycles])
 
   const totalAccumulatedAmount = useMemo(() => {
-    return payableCycles.reduce((sum, c) => sum + c.amount, 0)
+    return sumMoney(payableCycles.map(c => c.amount))
   }, [payableCycles])
 
   const step = selectedPeriodId === null ? 1 : 2

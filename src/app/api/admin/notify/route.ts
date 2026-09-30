@@ -1,3 +1,4 @@
+import { tierBaseAmount } from '@/lib/money'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
@@ -164,8 +165,7 @@ export async function POST(request: NextRequest) {
     const results = await sendBulkReminder(lineTargets.map((s) => {
       const tierAmount = tierAmounts[s.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
       const standardAmount = tierAmounts.B || 50
-      const ratio = tierAmount / standardAmount
-      const studentAmount = (cycleSetting.amount ?? 0) * ratio
+      const studentAmount = tierBaseAmount(cycleSetting.amount ?? 0, tierAmount, standardAmount)
       // คำนวณค่าปรับรายบุคคล — ถ้ามี pending credit → exempt (ไม่ปรับ)
       const hasPendingCredit = pendingCreditUserIds.has(s.id)
       const fineAmount = calculateLateFine(

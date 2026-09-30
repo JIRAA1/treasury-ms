@@ -7,6 +7,8 @@ interface UserMeta {
     student_id?: string
   }
   email?: string
+  email_confirmed_at?: string
+  app_metadata?: Record<string, unknown>
 }
 
 /**
@@ -21,14 +23,18 @@ export async function resolveProfile(
   user: UserMeta,
   select = 'id, role, fullname, student_id, line_user_id, tier'
 ): Promise<Record<string, unknown> | null> {
-  const fallbackUuid = user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'
-  const fallbackStudentId = user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'
-
-  const { data, error } = await adminClient
-    .from('users')
-    .select(select)
-    .or(`id.eq.${user.id},id.eq.${fallbackUuid},student_id.eq.${fallbackStudentId}`)
-    .maybeSingle()
+  // Never authorize a financial operation with user-editable metadata.
+  let result = await adminClient.from('users').select(select).eq('id', user.id).maybeSingle()
+  if (!result.data && !result.error && user.app_metadata?.treasury_user_id) {
+    result = await adminClient.from('users').select(select).eq('id', user.app_metadata.treasury_user_id).maybeSingle()
+  }
+  if (!result.data && !result.error && user.email && user.email_confirmed_at) {
+    const localStudent = /^(\d{8})@treasury\.local$/i.exec(user.email)
+    result = localStudent
+      ? await adminClient.from('users').select(select).eq('student_id', localStudent[1]).maybeSingle()
+      : await adminClient.from('users').select(select).eq('email', user.email).maybeSingle()
+  }
+  const { data, error } = result
 
   if (error) {
     console.error('[resolveProfile] Query error:', error.message)

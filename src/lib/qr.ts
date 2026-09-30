@@ -7,6 +7,7 @@ import { createCanvas, loadImage } from 'canvas'
 export async function extractQRCode(buffer: Buffer): Promise<string | null> {
   try {
     const image = await loadImage(buffer)
+    if (image.width * image.height > 20000000) return null
     const canvas = createCanvas(image.width, image.height)
     const ctx = canvas.getContext('2d')
     ctx.drawImage(image, 0, 0)

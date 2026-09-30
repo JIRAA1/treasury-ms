@@ -1,5 +1,7 @@
 'use client'
 
+import { roundMoney, tierBaseAmount, sumMoney } from '@/lib/money'
+
 import { useState } from 'react'
 import Topbar from '@/components/layout/Topbar'
 import KpiCard from '@/components/shared/KpiCard'
@@ -27,18 +29,18 @@ function getWindowStatus(p: Period) {
   return 'open'
 }
 
-export default function StudentDashboard({ 
-  profile, 
-  payments, 
-  periods, 
+export default function StudentDashboard({
+  profile,
+  payments,
+  periods,
   expenses,
   promptPayConfig,
   pendingCredits = [],
   tierAmounts,
-}: { 
-  profile: any, 
-  payments: any[], 
-  periods: Period[], 
+}: {
+  profile: any,
+  payments: any[],
+  periods: Period[],
   expenses: any[],
   promptPayConfig: { promptpay_id: string, promptpay_name: string },
   pendingCredits?: PaymentCredit[],
@@ -72,9 +74,9 @@ export default function StudentDashboard({
     // สูตร: period.amount × (tierAmount / Tier B standard)
     // เช่น Tier C (30) / Tier B (50) = 60% → งวด ฿50 จ่าย ฿30, งวด ฿30 จ่าย ฿18
     const standardAmount = tierAmounts.B || 50
-    const tierRatio = tierAmount / standardAmount
-    const expectedBaseAmount = period.amount * tierRatio
-    const expectedAmount = expectedBaseAmount + lateFine
+
+    const expectedBaseAmount = tierBaseAmount(period.amount, tierAmount, standardAmount)
+    const expectedAmount = roundMoney(expectedBaseAmount + lateFine)
 
     // ถ้า payment มียอดเป็น 0 (สลิปเดิมส่งตอน API ล่ม) ให้ใช้ expectedAmount แทน
     if (payment && (!payment.amount || payment.amount <= 0)) {
@@ -120,7 +122,7 @@ export default function StudentDashboard({
     return ws !== 'upcoming'
   })
   const hasAccumulatedUnpaid = unpaidPeriods.length > 1
-  const totalUnpaidAmount = unpaidPeriods.reduce((sum, p) => sum + p.amount, 0)
+  const totalUnpaidAmount = sumMoney(unpaidPeriods.map(p => p.amount))
 
   const allPayablePaid = unpaidPeriods.length === 0
   const displayAmount = allPayablePaid ? 0 : (hasAccumulatedUnpaid ? totalUnpaidAmount : (currentPeriodStatus?.amount ?? 0))
@@ -257,8 +259,7 @@ export default function StudentDashboard({
                           const totalBaseAmount = unpaidPeriods.reduce((sum, p) => {
                             const tierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
                             const standardAmount = tierAmounts.B || 50
-                            const ratio = tierAmount / standardAmount
-                            return sum + (p.period.amount * ratio)
+                            return roundMoney(sum + tierBaseAmount(p.period.amount, tierAmount, standardAmount))
                           }, 0)
                           const totalFine = totalUnpaidAmount - totalBaseAmount
                           if (totalFine > 0) {
@@ -273,8 +274,7 @@ export default function StudentDashboard({
 
                         const baseTierAmount = tierAmounts[profile?.tier as 'A' | 'B' | 'C'] ?? tierAmounts.B
                         const standardAmount = tierAmounts.B || 50
-                        const ratio = baseTierAmount / standardAmount
-                        const expectedBaseAmount = (currentPeriod?.amount ?? 0) * ratio
+                        const expectedBaseAmount = tierBaseAmount(currentPeriod?.amount ?? 0, baseTierAmount, standardAmount)
                         const finePaid = currentPeriodStatus.amount - expectedBaseAmount
                         if (finePaid > 0 && currentPeriodStatus.status !== 'paid') {
                           const fineDesc = formatFineDescription({
@@ -296,14 +296,14 @@ export default function StudentDashboard({
                     </div>
 
                     {/* Status pill */}
-                    <StatusPill 
+                    <StatusPill
                       status={
                         allPayablePaid ? 'paid'
                         : (currentPeriodStatus.status === 'paid' ? 'paid'
                            : currentPeriodStatus.status === 'pending' ? 'pending'
                            : currentPeriodStatus.status === 'rejected' ? 'rejected'
                            : 'unpaid')
-                      } 
+                      }
                       note={allPayablePaid ? undefined : currentPeriodStatus.payment?.note}
                       size="lg"
                       className="md:text-[13px] md:px-3.5 md:py-1.5 text-[10.5px] px-2.5 py-0.5"
@@ -475,7 +475,7 @@ export default function StudentDashboard({
       </div>
 
       {isQrModalOpen && (
-        <QrModal 
+        <QrModal
           isOpen={isQrModalOpen}
           onClose={() => setIsQrModalOpen(false)}
           promptPayId={promptPayConfig.promptpay_id}

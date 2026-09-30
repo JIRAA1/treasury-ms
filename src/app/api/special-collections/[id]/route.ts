@@ -1,3 +1,4 @@
+import { resolveAdminProfile } from '@/lib/supabase/resolve-profile'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
@@ -13,6 +14,7 @@ export async function GET(
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const adminClient = createAdminClient()
+  if (!await resolveAdminProfile(adminClient, user)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { data: collection, error } = await adminClient
     .from('special_collections')
@@ -72,11 +74,7 @@ export async function PATCH(
 
   const adminClient = createAdminClient()
 
-  const { data: profile } = await adminClient
-    .from('users')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle()
+  const profile = await resolveAdminProfile(adminClient, user)
 
   if (!profile || (profile.role !== 'admin' && profile.role !== 'treasurer')) {
     return NextResponse.json({ error: 'Admin permissions required' }, { status: 403 })
@@ -128,11 +126,7 @@ export async function DELETE(
 
   const adminClient = createAdminClient()
 
-  const { data: profile } = await adminClient
-    .from('users')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle()
+  const profile = await resolveAdminProfile(adminClient, user)
 
   if (!profile || (profile.role !== 'admin' && profile.role !== 'treasurer')) {
     return NextResponse.json({ error: 'Admin permissions required' }, { status: 403 })

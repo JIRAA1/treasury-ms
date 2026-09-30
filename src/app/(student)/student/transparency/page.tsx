@@ -1,3 +1,5 @@
+import { readAll } from '@/lib/read-all'
+import { recentThaiMonths, thaiMonthKey } from '@/lib/report-dates'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -54,25 +56,12 @@ export default async function TransparencyPage() {
 
     const periods = periodsRes.data || []
     const sysSettings = sysSettingsRes.data || []
-    const periodIds = periods.map((p) => p.id)
 
-    const { data: payments } = await adminClient
-      .from('payments')
-      .select('amount, status, period_id')
-      .eq('status', 'approved')
-      .in('period_id', periodIds.length > 0 ? periodIds : ['00000000-0000-0000-0000-000000000000'])
-
-    const { data: incomes } = await adminClient
-      .from('incomes')
-      .select('*')
-      .not('approved_by', 'is', null)
-      .order('created_at', { ascending: false })
-
-    const { data: expenses } = await adminClient
-      .from('expenses')
-      .select('*')
-      .not('approved_by', 'is', null)
-      .order('created_at', { ascending: false })
+    const [{ data: payments }, { data: incomes }, { data: expenses }] = await Promise.all([
+      readAll((from, to) => adminClient.from('payments').select('amount, status, period_id, verified_at, created_at').eq('status', 'approved').order('id').range(from, to)),
+      readAll((from, to) => adminClient.from('incomes').select('*').not('approved_by', 'is', null).order('created_at', { ascending: false }).order('id').range(from, to)),
+      readAll((from, to) => adminClient.from('expenses').select('*').not('approved_by', 'is', null).order('created_at', { ascending: false }).order('id').range(from, to)),
+    ])
 
     const { count: studentCount } = await adminClient
       .from('users')
@@ -99,10 +88,7 @@ export default async function TransparencyPage() {
     })
 
     // ── Chart data: Expense by category ──────────────────────────────────
-    const { data: allExpensesWithCat } = await adminClient
-      .from('expenses')
-      .select('amount, category')
-      .not('approved_by', 'is', null)
+    const allExpensesWithCat = expenses
 
     const EXPENSE_CATS: ExpenseCategory[] = ['activity', 'supplies', 'food', 'transport', 'other']
     const categoryTotals = EXPENSE_CATS.map((cat) => ({
@@ -112,29 +98,11 @@ export default async function TransparencyPage() {
     const expenseTotalAll = categoryTotals.reduce((s, c) => s + c.amount, 0)
 
     // ── Chart data: Monthly cash flow (last 6 months) ────────────────────
-    const sixMonthsAgo = new Date()
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5)
-    sixMonthsAgo.setDate(1)
-    sixMonthsAgo.setHours(0, 0, 0, 0)
-
-    const [{ data: monthPayments }, { data: monthIncomes }, { data: monthExpensesAll }] = await Promise.all([
-      adminClient.from('payments').select('amount, verified_at, created_at').eq('status', 'approved').gte('created_at', sixMonthsAgo.toISOString()),
-      adminClient.from('incomes').select('amount, created_at').not('approved_by', 'is', null).gte('created_at', sixMonthsAgo.toISOString()),
-      adminClient.from('expenses').select('amount, created_at').not('approved_by', 'is', null).gte('created_at', sixMonthsAgo.toISOString()),
-    ])
-
-    const thaiShortMonths = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
-    const monthlyTrend = Array.from({ length: 6 }, (_, i) => {
-      const d = new Date()
-      d.setMonth(d.getMonth() - (5 - i))
-      const y = d.getFullYear()
-      const m = d.getMonth()
-      const label = `${thaiShortMonths[m]} ${String(y + 543).slice(-2)}`
-
-      const matchMonth = (dateStr: string) => {
-        const dt = new Date(dateStr)
-        return dt.getFullYear() === y && dt.getMonth() === m
-      }
+    const monthPayments = payments
+    const monthIncomes = incomes
+    const monthExpensesAll = expenses
+    const monthlyTrend = recentThaiMonths().map(({ key, label }) => {
+      const matchMonth = (dateStr: string) => thaiMonthKey(dateStr) === key
 
       const income = [
         ...(monthPayments ?? []).filter((p: any) => matchMonth(p.verified_at || p.created_at)).map((p: any) => p.amount),

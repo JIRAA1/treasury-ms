@@ -1,3 +1,4 @@
+import { resolveProfile } from '@/lib/supabase/resolve-profile'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
@@ -11,11 +12,7 @@ export async function GET(request: NextRequest) {
   const adminClient = createAdminClient()
 
   // Get current user profile
-  const { data: profile } = await adminClient
-    .from('users')
-    .select('*')
-    .or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`)
-    .maybeSingle()
+  const profile = await resolveProfile(adminClient, user)
 
   if (!profile) {
     return NextResponse.json({ error: 'User profile not found' }, { status: 404 })
@@ -132,11 +129,7 @@ export async function POST(request: NextRequest) {
 
   const adminClient = createAdminClient()
 
-  const { data: profile } = await adminClient
-    .from('users')
-    .select('*')
-    .or(`id.eq.${user.id},id.eq.${user.user_metadata?.treasury_user_id || '00000000-0000-0000-0000-000000000000'},student_id.eq.${user.user_metadata?.student_id || user.email?.split('@')[0] || 'NONE'}`)
-    .maybeSingle()
+  const profile = await resolveProfile(adminClient, user)
 
   if (!profile || (profile.role !== 'admin' && profile.role !== 'treasurer')) {
     return NextResponse.json({ error: 'Admin permissions required' }, { status: 403 })

@@ -55,6 +55,7 @@ async function postToLinePush(to: string, messages: object[]): Promise<Response>
     method: 'POST',
     headers: getHeaders(),
     body: JSON.stringify({ to, messages }),
+    signal: AbortSignal.timeout(10000),
   })
   if (!res.ok) {
     try {

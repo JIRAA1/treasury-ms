@@ -9,6 +9,8 @@
  * ใช้ได้ทั้งฝั่ง client (browser) และ server (API routes)
  */
 
+import { roundMoney } from './money'
+
 export type FineType = 'flat' | 'daily' | 'per_period'
 
 export interface FineConfig {
@@ -49,7 +51,7 @@ export function calculateLateFine(
   // คำนวณสิ้นสุด grace period
   const graceDays = period.fine_grace_days ?? 0
   const graceEnd = new Date(deadline)
-  graceEnd.setDate(graceEnd.getDate() + graceDays)
+  graceEnd.setTime(graceEnd.getTime() + graceDays * 86400000)
   if (now <= graceEnd) return 0
 
   const fineType = period.fine_type ?? 'flat'
@@ -81,7 +83,7 @@ export function calculateLateFine(
     fine = Math.min(fine, period.fine_cap)
   }
 
-  return Math.max(0, fine)
+  return roundMoney(Math.max(0, fine))
 }
 
 /**
@@ -90,7 +92,9 @@ export function calculateLateFine(
  */
 export function formatFineDescription(period: FineConfig): string {
   const fineType = period.fine_type ?? 'flat'
-  const rate = period.fine_rate ?? period.late_fine_amount ?? 0
+  const rate = fineType === 'flat'
+    ? period.late_fine_amount ?? period.fine_rate ?? 0
+    : period.fine_rate ?? period.late_fine_amount ?? 0
   const cap = period.fine_cap
   const grace = period.fine_grace_days ?? 0
 
@@ -105,7 +109,7 @@ export function formatFineDescription(period: FineConfig): string {
       desc = `ปรับวันละ ฿${rate.toLocaleString()}`
       break
     case 'per_period':
-      desc = `ปรับ ฿${rate.toLocaleString()} ต่องวด`
+      desc = `ปรับ ฿${rate.toLocaleString()} ครั้งเดียวสำหรับงวดนี้`
       break
   }
 
@@ -130,5 +134,5 @@ export function calculateExpectedAmount(
   hasPendingCredit = false
 ): number {
   const fine = calculateLateFine(period, now, hasPendingCredit)
-  return tierAmount + fine
+  return roundMoney(tierAmount + fine)
 }

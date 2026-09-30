@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { Check, Banknote, Loader2, X, Trash2, Edit } from 'lucide-react'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
@@ -11,6 +10,7 @@ import { useDialog } from '@/components/shared/GlobalDialog'
 interface StudentManagementActionsProps {
   studentId: string
   week: number
+  periodId?: string
   amount: number
   existingPayment?: any
   isProfileActions?: boolean
@@ -19,7 +19,8 @@ interface StudentManagementActionsProps {
 
 export default function StudentManagementActions({ 
   studentId, 
-  week, 
+  week,
+  periodId,
   amount, 
   existingPayment,
   isProfileActions = false,
@@ -27,7 +28,6 @@ export default function StudentManagementActions({
 }: StudentManagementActionsProps) {
   const [loading, setLoading] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
-  const supabase = createClient()
   const router = useRouter()
   const dialog = useDialog()
 
@@ -43,19 +43,21 @@ export default function StudentManagementActions({
         try {
           const paymentData = {
             user_id: studentId,
-            week,
+            period_id: periodId || existingPayment?.period_id,
             amount,
             status: 'approved',
             note: 'ชำระด้วยเงินสด (บันทึกโดยเหรัญญิก)',
             verified_at: new Date().toISOString(),
           }
 
-          const { data: updatedPayment, error } = existingPayment?.id
-            ? await supabase.from('payments').update(paymentData).eq('id', existingPayment.id).select().single()
-            : await supabase.from('payments').insert(paymentData).select().single()
+          if (!paymentData.period_id) throw new Error('ไม่พบรหัสงวด กรุณาโหลดข้อมูลใหม่')
+          const response = await fetch('/api/payments/cash', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(paymentData),
+          })
+          const result = await response.json()
+          if (!response.ok) throw new Error(result.error)
+          const updatedPayment = result.payment
 
-          if (error) throw error
-          
           await fetch('/api/payments/verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -83,21 +85,11 @@ export default function StudentManagementActions({
       onConfirm: async () => {
         dialog.setLoading(true)
         try {
-          const { error } = await supabase
-            .from('payments')
-            .update({ 
-              status: newStatus,
-              verified_at: newStatus === 'approved' ? new Date().toISOString() : null 
-            })
-            .eq('id', existingPayment.id)
-
-          if (error) throw error
-
-          await fetch('/api/payments/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: existingPayment.id, action: 'notify_only', status: newStatus })
+          const response = await fetch('/api/payments/verify', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: existingPayment.id, action: newStatus === 'approved' ? 'approve' : newStatus === 'pending' ? 'pending' : 'reject' }),
           })
+          if (!response.ok) throw new Error((await response.json()).error)
 
           toast.success(`อัปเดตสถานะเป็น ${statusText} เรียบร้อยแล้ว`)
           dialog.hide()
